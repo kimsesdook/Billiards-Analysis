@@ -1,0 +1,5 @@
+{
+  "name": "Billiards Analytics",
+  "description": "A comprehensive tool for recording and analyzing billiards game performance, featuring stats tracking and progress visualization.",
+  "requestFramePermissions": []
+}
