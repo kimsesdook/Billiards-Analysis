@@ -1,0 +1,56 @@
+# =========================
+# ▶ IDE/Editor
+# =========================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+
+# =========================
+# ▶ Java/Spring Boot Build
+# =========================
+target/
+build/
+out/
+
+# =========================
+# ▶ Logs
+# =========================
+*.log
+logs/
+*.pid
+hs_err_pid*
+replay_pid*
+
+# =========================
+# ▶ OS Files
+# =========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# =========================
+# ▶ Application Settings (보안상 제외)
+# =========================
+application.properties
+application.yml
+application-*.properties
+application-*.yml
+
+# =========================
+# ▶ Archive / Package Files
+# =========================
+*.jar
+*.war
+*.zip
+*.tar.gz
+
+# =========================
+# ▶ 기타 툴
+# =========================
+node_modules/
+.env
+.mtj.tmp/
