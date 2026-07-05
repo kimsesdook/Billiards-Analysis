@@ -1,3 +1,19 @@
 spring:
   application:
     name: billiards
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+
+app:
+  cors:
+    allowed-origins:
+      - ${FRONTEND_URL:http://localhost:3000}
