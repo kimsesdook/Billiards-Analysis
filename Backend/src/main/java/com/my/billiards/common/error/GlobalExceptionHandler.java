@@ -3,6 +3,7 @@ package com.my.billiards.common.error;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -44,6 +45,13 @@ public class GlobalExceptionHandler {
 		return ResponseEntity
 			.status(ErrorCode.INVALID_INPUT_VALUE.getStatus())
 			.body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE, errors));
+	}
+
+	@ExceptionHandler(HttpMessageNotReadableException.class)
+	public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(HttpMessageNotReadableException exception) {
+		return ResponseEntity
+			.status(ErrorCode.INVALID_INPUT_VALUE.getStatus())
+			.body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
 	}
 
 	@ExceptionHandler(Exception.class)
