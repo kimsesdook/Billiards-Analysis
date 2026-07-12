@@ -22,6 +22,10 @@ export interface GameRecord {
   opponentCushionScore?: number;
 }
 
+export type GameRecordDraft = Omit<GameRecord, 'id' | 'average' | 'win' | 'mode'> & {
+  mode?: GameMode;
+};
+
 export interface PlayerStats {
   totalGames: number;
   wins: number;

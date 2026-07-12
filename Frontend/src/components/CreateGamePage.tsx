@@ -5,12 +5,12 @@ import {
   Settings, AlertCircle, ArrowLeft, ArrowRight, Trophy, Timer, Volume2, VolumeX, Eye, HelpCircle, RefreshCw, CheckCircle2, Award,
   Copy, Users, MessageSquare, Hourglass, Activity, Check, Info
 } from 'lucide-react';
-import { GameRecord, GameType, GameMode } from '../types';
+import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CreateGamePageProps {
-  onAdd: (record: Omit<GameRecord, 'id' | 'average' | 'win'>) => void;
+  onAdd: (record: GameRecordDraft) => Promise<GameRecord | void> | GameRecord | void;
 }
 
 interface ActivePlayer {
@@ -61,6 +61,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // --- Form Setup States ---
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isSavingRecord, setIsSavingRecord] = useState(false);
 
   useEffect(() => {
     window.dispatchEvent(
@@ -823,7 +824,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   };
 
   // Finish active game and convert parameters to system persistent record list
-  const handleFinalizeAndSaveRecord = () => {
+  const handleFinalizeAndSaveRecord = async () => {
+    if (isSavingRecord) return;
+
     // Player 1 (user) statistics computed
     const p1 = players[0];
     const p2 = players[1];
@@ -854,14 +857,20 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       opponentCushionScore: (type === '4-Ball' && p2) ? (p2.cushionScore || 0) : undefined,
     };
 
-    // Callback to persist
-    onAdd(finishedMatchData);
-    
-    // Empty cache and navigate
-    localStorage.removeItem('billiards_active_room_state');
-    setIsPlaying(false);
-    setShowFinishedModal(false);
-    navigate('/records');
+    try {
+      setIsSavingRecord(true);
+      await onAdd(finishedMatchData);
+
+      // Empty cache and navigate
+      localStorage.removeItem('billiards_active_room_state');
+      setIsPlaying(false);
+      setShowFinishedModal(false);
+      navigate('/records');
+    } catch {
+      // The parent API handler owns the user-facing error message.
+    } finally {
+      setIsSavingRecord(false);
+    }
   };
 
   // Terminate without saving
@@ -2020,9 +2029,10 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 </button>
                 <button
                   onClick={handleFinalizeAndSaveRecord}
-                  className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 text-[#07241c] font-black rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-1.5"
+                  disabled={isSavingRecord}
+                  className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-[#07241c] font-black rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-1.5"
                 >
-                  <CheckCircle2 size={16} />
+                  {isSavingRecord ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
                   최종 결과 전송 및 기록 저장
                 </button>
               </div>

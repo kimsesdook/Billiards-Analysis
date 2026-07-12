@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   BrowserRouter as Router,
   Routes,
@@ -46,7 +46,7 @@ import {
   Globe,
   Key
 } from 'lucide-react';
-import { GameRecord, PlayerStats, GameType } from './types';
+import { GameRecord, GameRecordDraft, PlayerStats, GameType } from './types';
 import { StatsChart } from './components/StatsChart';
 import { GuidePage } from './components/GuidePage';
 import { LoginPage } from './components/LoginPage';
@@ -62,7 +62,8 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import { sampleRecords } from './sampleData';
+import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRecords';
+import { getApiErrorMessage } from './api/client';
 
 function BilliardsLogo() {
   return (
@@ -90,6 +91,8 @@ function AppContent() {
   const [incomingInvitation, setIncomingInvitation] = useState<any | null>(null);
   const [invitedAutoTriggered, setInvitedAutoTriggered] = useState(false);
   const [records, setRecords] = useState<GameRecord[]>([]);
+  const [isRecordsLoading, setIsRecordsLoading] = useState(false);
+  const [recordsError, setRecordsError] = useState<string | null>(null);
   const [filter, setFilter] = useState<GameType>('3-Cushion');
   const [isLoggedIn, setIsLoggedIn] = useState(true);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -651,44 +654,38 @@ function AppContent() {
   // Mock visitor counts
   const [visitors] = useState({ today: 124, total: 15420, active: 42 });
 
-  // Load records from localStorage with migration
-  useEffect(() => {
-    const migrateRecords = (data: GameRecord[]) => {
-      return data.map(r => {
-        if (!r.inningScores || r.inningScores.length === 0) {
-          const simulatedScores = Array.from({ length: r.innings }, (_, idx) => {
-            // Distribute score: highRun at a random inning, others random
-            if (r.innings === 0) return 0;
-            return Math.floor(Math.random() * (r.highRun + 1));
-          });
-          // Adjust to match total score roughly (optional but better)
-          return { ...r, inningScores: simulatedScores };
-        }
-        return r;
-      });
-    };
+  const fillMissingInningScores = <T extends { innings: number; highRun: number; inningScores?: number[] }>(record: T): T => {
+    if (record.inningScores && record.inningScores.length > 0) {
+      return record;
+    }
 
-    const saved = localStorage.getItem('billiards_records');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.length > 0) {
-          setRecords(migrateRecords(parsed));
-        } else {
-          setRecords(migrateRecords(sampleRecords));
-        }
-      } catch (e) {
-        setRecords(migrateRecords(sampleRecords));
-      }
-    } else {
-      setRecords(migrateRecords(sampleRecords));
+    return {
+      ...record,
+      inningScores: Array.from({ length: record.innings }, () => {
+        if (record.innings === 0) return 0;
+        return Math.floor(Math.random() * (record.highRun + 1));
+      }),
+    };
+  };
+
+  const loadRecords = useCallback(async () => {
+    setIsRecordsLoading(true);
+    setRecordsError(null);
+
+    try {
+      const fetchedRecords = await getGameRecords();
+      setRecords(fetchedRecords.map(fillMissingInningScores));
+    } catch (error) {
+      setRecords([]);
+      setRecordsError(getApiErrorMessage(error));
+    } finally {
+      setIsRecordsLoading(false);
     }
   }, []);
 
-  // Save records to localStorage
   useEffect(() => {
-    localStorage.setItem('billiards_records', JSON.stringify(records));
-  }, [records]);
+    void loadRecords();
+  }, [loadRecords]);
 
   // Robust real-time search logic
   const performSearch = (queryStr: string) => {
@@ -829,24 +826,33 @@ function AppContent() {
     });
   };
 
-  const addRecord = (newRecord: Omit<GameRecord, 'id' | 'average' | 'win'>) => {
-    const average = Number((newRecord.myScore / newRecord.innings).toFixed(3));
-    const win = newRecord.myScore > newRecord.opponentScore;
-    
-    // Generate simulated inning scores if not provided
-    const inningScores = (newRecord as any).inningScores || Array.from({ length: newRecord.innings }, () => {
-      return Math.floor(Math.random() * (newRecord.highRun + 1));
-    });
+  const addRecord = async (newRecord: GameRecordDraft) => {
+    const payload = fillMissingInningScores(newRecord);
 
-    const record: GameRecord = {
-      ...newRecord,
-      id: crypto.randomUUID(),
-      average,
-      win,
-      inningScores
-    } as GameRecord;
-    
-    setRecords([record, ...records]);
+    try {
+      const savedRecord = await createGameRecord(payload);
+      setRecords(prevRecords => [fillMissingInningScores(savedRecord), ...prevRecords]);
+      setRecordsError(null);
+      return savedRecord;
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setRecordsError(message);
+      alert(`경기 기록 저장에 실패했습니다.\n${message}`);
+      throw error;
+    }
+  };
+
+  const removeRecord = async (recordId: string) => {
+    try {
+      await deleteGameRecord(recordId);
+      setRecords(prevRecords => prevRecords.filter(record => record.id !== recordId));
+      setRecordsError(null);
+    } catch (error) {
+      const message = getApiErrorMessage(error);
+      setRecordsError(message);
+      alert(`경기 기록 삭제에 실패했습니다.\n${message}`);
+      throw error;
+    }
   };
 
   const filteredRecords = useMemo(() => {
@@ -1569,7 +1575,18 @@ function AppContent() {
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/dashboard" element={<DashboardPage records={records} stats={stats} filter={filter} setFilter={(f) => setFilter(f as GameType)} />} />
           <Route path="/create-game" element={<CreateGamePage onAdd={addRecord} />} />
-          <Route path="/records" element={<GameRecordsPage records={records} />} />
+          <Route
+            path="/records"
+            element={
+              <GameRecordsPage
+                records={records}
+                isLoading={isRecordsLoading}
+                errorMessage={recordsError}
+                onRetry={loadRecords}
+                onDelete={removeRecord}
+              />
+            }
+          />
           <Route path="/analysis" element={<AnalysisPage records={records} />} />
           <Route path="/friends" element={<FriendsPage />} />
           <Route path="/" element={

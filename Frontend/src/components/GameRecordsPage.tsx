@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { History, Search, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon } from 'lucide-react';
+import { AlertCircle, History, Search, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2 } from 'lucide-react';
 import { GameRecord } from '../types';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -45,14 +45,34 @@ function calculatePattern(scores: number[]) {
 
 interface GameRecordsPageProps {
   records: GameRecord[];
+  isLoading?: boolean;
+  errorMessage?: string | null;
+  onRetry?: () => void | Promise<void>;
+  onDelete?: (recordId: string) => void | Promise<void>;
 }
 
-export function GameRecordsPage({ records }: GameRecordsPageProps) {
+export function GameRecordsPage({ records, isLoading = false, errorMessage = null, onRetry, onDelete }: GameRecordsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [modeFilter, setModeFilter] = useState<'all' | 'Individual' | 'Team'>('all');
   const [playerFilter, setPlayerFilter] = useState<'all' | 2 | 3 | 4>('all');
   const [gameTypeFilter, setGameTypeFilter] = useState<'all' | '3-Cushion' | '4-Ball'>('all');
   const [selectedRecord, setSelectedRecord] = useState<GameRecord | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeleteSelectedRecord = async () => {
+    if (!selectedRecord || !onDelete) return;
+    if (!window.confirm('선택한 경기 기록을 삭제할까요?')) return;
+
+    try {
+      setIsDeleting(true);
+      await onDelete(selectedRecord.id);
+      setSelectedRecord(null);
+    } catch {
+      // The parent API handler owns the user-facing error message.
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   const filteredRecords = useMemo(() => {
     return records.filter(record => {
@@ -160,6 +180,28 @@ export function GameRecordsPage({ records }: GameRecordsPageProps) {
         </div>
       </div>
 
+      {errorMessage && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-red-500/30 bg-red-500/10 px-5 py-4 text-red-100">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={20} className="mt-0.5 text-red-300" />
+            <div>
+              <p className="text-sm font-black">경기 기록 API 연결 실패</p>
+              <p className="text-xs text-red-100/70 mt-1">{errorMessage}</p>
+            </div>
+          </div>
+          {onRetry && (
+            <button
+              type="button"
+              onClick={() => void onRetry()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-400/20 px-4 py-2 text-xs font-black text-red-50 hover:bg-red-400/30 transition-colors"
+            >
+              <RefreshCw size={14} />
+              다시 시도
+            </button>
+          )}
+        </div>
+      )}
+
       <div className="bg-[#0d4d3b] rounded-[2.5rem] border border-[#1a5d4e] overflow-hidden shadow-2xl shadow-black/20">
         <div className="p-8 border-b border-[#1a5d4e] flex items-center justify-between bg-[#1a5d4e]/10">
           <h2 className="text-xl font-bold text-emerald-50 flex items-center gap-2">
@@ -172,7 +214,12 @@ export function GameRecordsPage({ records }: GameRecordsPageProps) {
         </div>
 
         <div className="divide-y divide-[#1a5d4e]">
-          {filteredRecords.map((record) => (
+          {isLoading ? (
+            <div className="py-24 text-center">
+              <Loader2 size={32} className="mx-auto mb-4 animate-spin text-emerald-400" />
+              <p className="text-sm font-bold text-emerald-100/60">서버에서 경기 기록을 불러오는 중입니다.</p>
+            </div>
+          ) : filteredRecords.map((record) => (
             <div 
               key={record.id} 
               onClick={() => setSelectedRecord(record)}
@@ -239,7 +286,7 @@ export function GameRecordsPage({ records }: GameRecordsPageProps) {
             </div>
           ))}
 
-          {filteredRecords.length === 0 && (
+          {!isLoading && filteredRecords.length === 0 && (
             <div className="py-32 text-center">
               <div className="w-20 h-20 bg-[#1a5d4e]/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
                 <History size={32} className="text-emerald-500/20" />
@@ -282,12 +329,24 @@ export function GameRecordsPage({ records }: GameRecordsPageProps) {
                     </p>
                   </div>
                 </div>
-                <button 
-                  onClick={() => setSelectedRecord(null)}
-                  className="p-3 bg-[#1a5d4e] hover:bg-emerald-900 text-emerald-100 rounded-xl transition-all"
-                >
-                  <X size={20} />
-                </button>
+                <div className="flex items-center gap-2">
+                  {onDelete && (
+                    <button
+                      onClick={handleDeleteSelectedRecord}
+                      disabled={isDeleting}
+                      className="p-3 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-red-200 rounded-xl transition-all"
+                      title="경기 기록 삭제"
+                    >
+                      {isDeleting ? <RefreshCw size={20} className="animate-spin" /> : <Trash2 size={20} />}
+                    </button>
+                  )}
+                  <button 
+                    onClick={() => setSelectedRecord(null)}
+                    className="p-3 bg-[#1a5d4e] hover:bg-emerald-900 text-emerald-100 rounded-xl transition-all"
+                  >
+                    <X size={20} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-10 space-y-12 custom-scrollbar">

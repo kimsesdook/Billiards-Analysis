@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
 import { Plus, X } from 'lucide-react';
-import { GameRecord, GameType } from '../types';
+import { GameRecordDraft, GameType } from '../types';
 import { cn } from '../lib/utils';
 
 interface GameFormProps {
-  onAdd: (record: Omit<GameRecord, 'id' | 'average' | 'win'>) => void;
+  onAdd: (record: GameRecordDraft) => void | Promise<void>;
   onClose: () => void;
 }
 
@@ -21,25 +21,36 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
   const [opponentName, setOpponentName] = useState<string>('');
   const [myCushionScore, setMyCushionScore] = useState<number>(0);
   const [opponentCushionScore, setOpponentCushionScore] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onAdd({
-      date: new Date().toISOString(),
-      type,
-      myScore,
-      opponentScore,
-      innings,
-      highRun,
-      playerCount,
-      rank: playerCount > 2 ? rank : undefined,
-      lastThreeCushions: type === '4-Ball' ? lastThreeCushions : undefined,
-      notes,
-      opponentName,
-      myCushionScore: type === '4-Ball' ? myCushionScore : undefined,
-      opponentCushionScore: type === '4-Ball' ? opponentCushionScore : undefined,
-    });
-    onClose();
+    if (isSubmitting) return;
+
+    try {
+      setIsSubmitting(true);
+      await onAdd({
+        date: new Date().toISOString(),
+        type,
+        mode: 'Individual',
+        myScore,
+        opponentScore,
+        innings,
+        highRun,
+        playerCount,
+        rank: playerCount > 2 ? rank : undefined,
+        lastThreeCushions: type === '4-Ball' ? lastThreeCushions : undefined,
+        notes,
+        opponentName,
+        myCushionScore: type === '4-Ball' ? myCushionScore : undefined,
+        opponentCushionScore: type === '4-Ball' ? opponentCushionScore : undefined,
+      });
+      onClose();
+    } catch {
+      // The parent API handler owns the user-facing error message.
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -229,7 +240,8 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
 
           <button
             type="submit"
-            className="w-full bg-emerald-500 hover:bg-emerald-400 text-[#0a3d2e] font-black py-4 rounded-2xl transition-all shadow-lg shadow-black/20 flex items-center justify-center gap-2 mt-4"
+            disabled={isSubmitting}
+            className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-[#0a3d2e] font-black py-4 rounded-2xl transition-all shadow-lg shadow-black/20 flex items-center justify-center gap-2 mt-4"
           >
             <Plus size={20} />
             기록 저장하기
