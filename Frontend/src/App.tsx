@@ -63,7 +63,8 @@ import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRecords';
-import { getApiErrorMessage } from './api/client';
+import { ApiClientError, getApiErrorMessage } from './api/client';
+import { AuthSession, clearAuthSession, getStoredAuthSession, saveAuthSession } from './api/authStorage';
 
 function BilliardsLogo() {
   return (
@@ -94,15 +95,16 @@ function AppContent() {
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [filter, setFilter] = useState<GameType>('3-Cushion');
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
+  const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
+  const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(getStoredAuthSession()));
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userName, setUserName] = useState(() => localStorage.getItem('billiards_name') || '사용자');
-  const [userNickname, setUserNickname] = useState(() => localStorage.getItem('billiards_nickname') || '사용자');
+  const [userName, setUserName] = useState(() => getStoredAuthSession()?.member.nickname || localStorage.getItem('billiards_name') || '사용자');
+  const [userNickname, setUserNickname] = useState(() => getStoredAuthSession()?.member.nickname || localStorage.getItem('billiards_nickname') || '사용자');
   
   const [userCushionCount, setUserCushionCount] = useState<number>(() => {
     const saved = localStorage.getItem('billiards_cushion_count');
@@ -438,6 +440,7 @@ function AppContent() {
     localStorage.removeItem('billiards_password');
     localStorage.removeItem('billiards_records');
     localStorage.removeItem('billiards_friends');
+    clearAuthSession();
     
     alert('회원 탈퇴가 완료되었습니다. 그동안 Billiards Analytics를 이용해 주셔서 감사합니다.');
     setIsLoggedIn(false);
@@ -668,7 +671,44 @@ function AppContent() {
     };
   };
 
+  const handleAuthenticated = useCallback((session: AuthSession) => {
+    saveAuthSession(session);
+    setAuthSession(session);
+    setIsLoggedIn(true);
+    setUserName(session.member.nickname);
+    setUserNickname(session.member.nickname);
+    setRecordsError(null);
+  }, []);
+
+  const handleLogout = useCallback(() => {
+    clearAuthSession();
+    setAuthSession(null);
+    setAuthSession(null);
+    setIsLoggedIn(false);
+    setRecords([]);
+    setIsUserMenuOpen(false);
+    setRecords([]);
+    setRecordsError(null);
+    navigate('/login');
+  }, [navigate]);
+
+  const handleAuthExpired = useCallback(() => {
+    clearAuthSession();
+    setAuthSession(null);
+    setIsLoggedIn(false);
+    setRecords([]);
+    setRecordsError('로그인이 만료되었습니다. 다시 로그인해 주세요.');
+    navigate('/login');
+  }, [navigate]);
+
   const loadRecords = useCallback(async () => {
+    if (!isLoggedIn) {
+      setRecords([]);
+      setRecordsError(null);
+      setIsRecordsLoading(false);
+      return;
+    }
+
     setIsRecordsLoading(true);
     setRecordsError(null);
 
@@ -676,12 +716,17 @@ function AppContent() {
       const fetchedRecords = await getGameRecords();
       setRecords(fetchedRecords.map(fillMissingInningScores));
     } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
       setRecords([]);
       setRecordsError(getApiErrorMessage(error));
     } finally {
       setIsRecordsLoading(false);
     }
-  }, []);
+  }, [handleAuthExpired, isLoggedIn]);
 
   useEffect(() => {
     void loadRecords();
@@ -835,6 +880,11 @@ function AppContent() {
       setRecordsError(null);
       return savedRecord;
     } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        throw error;
+      }
+
       const message = getApiErrorMessage(error);
       setRecordsError(message);
       alert(`경기 기록 저장에 실패했습니다.\n${message}`);
@@ -848,6 +898,11 @@ function AppContent() {
       setRecords(prevRecords => prevRecords.filter(record => record.id !== recordId));
       setRecordsError(null);
     } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        throw error;
+      }
+
       const message = getApiErrorMessage(error);
       setRecordsError(message);
       alert(`경기 기록 삭제에 실패했습니다.\n${message}`);
@@ -931,6 +986,10 @@ function AppContent() {
       changeRate: Number(changeRate.toFixed(1)),
     };
   }, [filteredRecords, filter]);
+
+  const requireAuth = (element: React.ReactElement) => (
+    isLoggedIn ? element : <Navigate to="/login" replace />
+  );
 
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
@@ -1434,10 +1493,7 @@ function AppContent() {
                               <div className="h-px bg-[#1a5d4e]/40 my-1 mx-2" />
 
                               <button 
-                                onClick={() => {
-                                  setIsLoggedIn(false);
-                                  setIsUserMenuOpen(false);
-                                }}
+                                onClick={handleLogout}
                                 className="w-full flex items-center gap-2 px-3 py-2.5 text-xs font-black text-orange-400 hover:text-white hover:bg-orange-500/10 rounded-xl transition-all text-left"
                               >
                                 <LogOut size={14} />
@@ -1569,15 +1625,15 @@ function AppContent() {
         )}>
         <Routes>
           <Route path="/guide" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <GuidePage />} />
-          <Route path="/login" element={<LoginPage onLogin={() => setIsLoggedIn(true)} />} />
+          <Route path="/login" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <LoginPage onLogin={handleAuthenticated} />} />
           <Route path="/contact" element={<ContactPage isLoggedIn={isLoggedIn} />} />
           <Route path="/notice" element={<NoticePage />} />
-          <Route path="/signup" element={<SignupPage />} />
-          <Route path="/dashboard" element={<DashboardPage records={records} stats={stats} filter={filter} setFilter={(f) => setFilter(f as GameType)} />} />
-          <Route path="/create-game" element={<CreateGamePage onAdd={addRecord} />} />
+          <Route path="/signup" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <SignupPage onAuthenticated={handleAuthenticated} />} />
+          <Route path="/dashboard" element={requireAuth(<DashboardPage records={records} stats={stats} filter={filter} setFilter={(f) => setFilter(f as GameType)} />)} />
+          <Route path="/create-game" element={requireAuth(<CreateGamePage onAdd={addRecord} />)} />
           <Route
             path="/records"
-            element={
+            element={requireAuth(
               <GameRecordsPage
                 records={records}
                 isLoading={isRecordsLoading}
@@ -1585,10 +1641,10 @@ function AppContent() {
                 onRetry={loadRecords}
                 onDelete={removeRecord}
               />
-            }
+            )}
           />
-          <Route path="/analysis" element={<AnalysisPage records={records} />} />
-          <Route path="/friends" element={<FriendsPage />} />
+          <Route path="/analysis" element={requireAuth(<AnalysisPage records={records} />)} />
+          <Route path="/friends" element={requireAuth(<FriendsPage />)} />
           <Route path="/" element={
             isLoggedIn ? (
               <Navigate to="/dashboard" replace />
