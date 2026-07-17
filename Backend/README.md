@@ -19,9 +19,59 @@ This backend is designed as a modular monolith first. The package boundaries are
 - `local`: MySQL-based local development profile
 - `test`: H2-based test profile for fast context and repository tests
 
+## Database Migration
+
+The backend uses Flyway to manage database schema changes.
+
+- Migration files live in `src/main/resources/db/migration`
+- `V1__create_game_record_tables.sql` creates the first game record tables
+- JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
+- Flyway records applied migrations in the `flyway_schema_history` table
+
+This keeps DDL changes reviewable in Git and repeatable across local, test, and future deployment environments.
+
+## Local MySQL Setup
+
+Create the local database and user before running the `local` profile:
+
+```sql
+CREATE DATABASE billiards CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'billiards'@'localhost' IDENTIFIED BY 'billiards';
+GRANT ALL PRIVILEGES ON billiards.* TO 'billiards'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+If you already have a MySQL user, set these environment variables instead of using the default account:
+
+```powershell
+$env:DB_URL="jdbc:mysql://localhost:3306/billiards?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
+$env:DB_USERNAME="your_username"
+$env:DB_PASSWORD="your_password"
+```
+
+Run the backend locally:
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+## H2 Test Run
+
+Use the `test` profile when you want to run the server without MySQL. This uses an in-memory H2 database and still applies Flyway migrations.
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=test"
+```
+
+Run automated tests:
+
+```powershell
+.\gradlew.bat test
+```
+
 ## Current Stage
 
-Stage 1 focuses on the foundation only:
+The backend currently includes:
 
 - Spring Boot backend package structure
 - Common API response wrapper
@@ -30,3 +80,6 @@ Stage 1 focuses on the foundation only:
 - CORS configuration for the React frontend
 - JPA auditing base entity
 - Local/test profile split
+- Game record CRUD API
+- Frontend API integration support
+- Flyway-managed game record schema
