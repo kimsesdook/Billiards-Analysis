@@ -1,5 +1,6 @@
 package com.my.billiards.auth.controller;
 
+import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -29,10 +30,14 @@ class AuthControllerTest {
 	private MemberRepository memberRepository;
 
 	@Autowired
+	private GameRecordRepository gameRecordRepository;
+
+	@Autowired
 	private PasswordEncoder passwordEncoder;
 
 	@BeforeEach
 	void setUp() {
+		gameRecordRepository.deleteAll();
 		memberRepository.deleteAll();
 	}
 
