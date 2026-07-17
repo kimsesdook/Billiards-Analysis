@@ -4,10 +4,12 @@ import com.my.billiards.common.api.ApiResponse;
 import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.service.GameRecordService;
+import com.my.billiards.security.AuthenticatedMember;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,23 +28,32 @@ public class GameRecordController {
 
 	@PostMapping
 	@ResponseStatus(HttpStatus.CREATED)
-	public ApiResponse<GameRecordResponse> create(@Valid @RequestBody GameRecordCreateRequest request) {
-		return ApiResponse.success(gameRecordService.create(request));
+	public ApiResponse<GameRecordResponse> create(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@Valid @RequestBody GameRecordCreateRequest request
+	) {
+		return ApiResponse.success(gameRecordService.create(member.id(), request));
 	}
 
 	@GetMapping
-	public ApiResponse<List<GameRecordResponse>> findAll() {
-		return ApiResponse.success(gameRecordService.findAll());
+	public ApiResponse<List<GameRecordResponse>> findAll(@AuthenticationPrincipal AuthenticatedMember member) {
+		return ApiResponse.success(gameRecordService.findAll(member.id()));
 	}
 
 	@GetMapping("/{id}")
-	public ApiResponse<GameRecordResponse> findById(@PathVariable Long id) {
-		return ApiResponse.success(gameRecordService.findById(id));
+	public ApiResponse<GameRecordResponse> findById(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@PathVariable Long id
+	) {
+		return ApiResponse.success(gameRecordService.findById(member.id(), id));
 	}
 
 	@DeleteMapping("/{id}")
-	public ApiResponse<Void> delete(@PathVariable Long id) {
-		gameRecordService.delete(id);
+	public ApiResponse<Void> delete(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@PathVariable Long id
+	) {
+		gameRecordService.delete(member.id(), id);
 		return ApiResponse.ok();
 	}
 }

@@ -1,11 +1,13 @@
 package com.my.billiards.game.controller;
 
 import com.my.billiards.game.repository.GameRecordRepository;
+import com.my.billiards.member.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
@@ -22,20 +24,39 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @ActiveProfiles("test")
 class GameRecordControllerTest {
 
+	private static final String PASSWORD = "password123";
+
 	@Autowired
 	private MockMvc mockMvc;
 
 	@Autowired
 	private GameRecordRepository gameRecordRepository;
 
+	@Autowired
+	private MemberRepository memberRepository;
+
 	@BeforeEach
 	void setUp() {
 		gameRecordRepository.deleteAll();
+		memberRepository.deleteAll();
+	}
+
+	@Test
+	void rejectCreateGameRecordWithoutToken() throws Exception {
+		mockMvc.perform(post("/api/game-records")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(gameRecordJson("Opponent")))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
 	}
 
 	@Test
 	void createGameRecordCalculatesAverageAndWin() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
 		mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -47,7 +68,7 @@ class GameRecordControllerTest {
 					  "innings": 18,
 					  "highRun": 4,
 					  "playerCount": 2,
-					  "opponentName": "김당구",
+					  "opponentName": "Opponent",
 					  "inningScores": [0, 2, 1, 4]
 					}
 					"""))
@@ -62,33 +83,62 @@ class GameRecordControllerTest {
 	}
 
 	@Test
-	void findAllGameRecords() throws Exception {
-		createSampleRecord();
+	void findAllGameRecordsReturnsOnlyMine() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		createSampleRecord(myToken, "Visible Opponent");
+		createSampleRecord(otherToken, "Hidden Opponent");
 
-		mockMvc.perform(get("/api/game-records"))
+		mockMvc.perform(get("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
 			.andExpect(jsonPath("$.data", hasSize(1)))
-			.andExpect(jsonPath("$.data[0].opponentName").value("김당구"));
+			.andExpect(jsonPath("$.data[0].opponentName").value("Visible Opponent"));
 	}
 
 	@Test
 	void deleteGameRecord() throws Exception {
-		Long id = createSampleRecord();
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+		Long id = createSampleRecord(token, "Opponent");
 
-		mockMvc.perform(delete("/api/game-records/{id}", id))
+		mockMvc.perform(delete("/api/game-records/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true));
 
-		mockMvc.perform(get("/api/game-records/{id}", id))
+		mockMvc.perform(get("/api/game-records/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.success").value(false))
 			.andExpect(jsonPath("$.code").value("COMMON_002"));
 	}
 
 	@Test
+	void rejectDeletingOtherMembersRecordAsNotFound() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		Long otherRecordId = createSampleRecord(otherToken, "Other Record");
+
+		mockMvc.perform(delete("/api/game-records/{id}", otherRecordId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+
+		mockMvc.perform(get("/api/game-records/{id}", otherRecordId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(otherToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.opponentName").value("Other Record"));
+	}
+
+	@Test
 	void rejectInvalidGameRecordRequest() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
 		mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -108,30 +158,81 @@ class GameRecordControllerTest {
 			.andExpect(jsonPath("$.errors[0].field").value("innings"));
 	}
 
-	private Long createSampleRecord() throws Exception {
-		String location = mockMvc.perform(post("/api/game-records")
+	private Long createSampleRecord(String token, String opponentName) throws Exception {
+		String response = mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "date": "2026-07-11T10:00:00Z",
-					  "type": "3-Cushion",
-					  "mode": "Individual",
-					  "myScore": 15,
-					  "opponentScore": 12,
-					  "innings": 18,
-					  "highRun": 4,
-					  "playerCount": 2,
-					  "opponentName": "김당구"
-					}
-					"""))
+				.content(gameRecordJson(opponentName)))
 			.andExpect(status().isCreated())
 			.andReturn()
 			.getResponse()
 			.getContentAsString();
 
-		String marker = "\"id\":";
-		int idStart = location.indexOf(marker) + marker.length();
-		int idEnd = location.indexOf(",", idStart);
-		return Long.parseLong(location.substring(idStart, idEnd).trim());
+		return extractLong(response, "id");
+	}
+
+	private String signUpAndLogin(String email, String nickname) throws Exception {
+		mockMvc.perform(post("/api/auth/signup")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "%s",
+					  "password": "%s",
+					  "nickname": "%s"
+					}
+					""".formatted(email, PASSWORD, nickname)))
+			.andExpect(status().isCreated());
+
+		String response = mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "%s",
+					  "password": "%s"
+					}
+					""".formatted(email.toUpperCase(), PASSWORD)))
+			.andExpect(status().isOk())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractString(response, "accessToken");
+	}
+
+	private String gameRecordJson(String opponentName) {
+		return """
+			{
+			  "date": "2026-07-11T10:00:00Z",
+			  "type": "3-Cushion",
+			  "mode": "Individual",
+			  "myScore": 15,
+			  "opponentScore": 12,
+			  "innings": 18,
+			  "highRun": 4,
+			  "playerCount": 2,
+			  "opponentName": "%s"
+			}
+			""".formatted(opponentName);
+	}
+
+	private String bearer(String token) {
+		return "Bearer " + token;
+	}
+
+	private Long extractLong(String content, String fieldName) {
+		String marker = "\"" + fieldName + "\":";
+		int valueStart = content.indexOf(marker) + marker.length();
+		int valueEnd = content.indexOf(",", valueStart);
+		if (valueEnd == -1) {
+			valueEnd = content.indexOf("}", valueStart);
+		}
+		return Long.parseLong(content.substring(valueStart, valueEnd).trim());
+	}
+
+	private String extractString(String content, String fieldName) {
+		String marker = "\"" + fieldName + "\":\"";
+		int valueStart = content.indexOf(marker) + marker.length();
+		int valueEnd = content.indexOf("\"", valueStart);
+		return content.substring(valueStart, valueEnd);
 	}
 }
