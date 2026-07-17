@@ -17,3 +17,6 @@ app:
   cors:
     allowed-origins:
       - ${FRONTEND_URL:http://localhost:3000}
+  jwt:
+    secret: ${JWT_SECRET:local-development-jwt-secret-change-me-please-32bytes}
+    access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:60}

@@ -1,5 +1,7 @@
 package com.my.billiards.auth.controller;
 
+import com.my.billiards.auth.dto.LoginRequest;
+import com.my.billiards.auth.dto.LoginResponse;
 import com.my.billiards.auth.dto.SignUpRequest;
 import com.my.billiards.auth.dto.SignUpResponse;
 import com.my.billiards.auth.service.AuthService;
@@ -24,5 +26,10 @@ public class AuthController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public ApiResponse<SignUpResponse> signUp(@Valid @RequestBody SignUpRequest request) {
 		return ApiResponse.success(authService.signUp(request));
+	}
+
+	@PostMapping("/login")
+	public ApiResponse<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
+		return ApiResponse.success(authService.login(request));
 	}
 }

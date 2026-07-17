@@ -48,6 +48,7 @@ If you already have a MySQL user, set these environment variables instead of usi
 $env:DB_URL="jdbc:mysql://localhost:3306/billiards?serverTimezone=Asia/Seoul&characterEncoding=UTF-8"
 $env:DB_USERNAME="your_username"
 $env:DB_PASSWORD="your_password"
+$env:JWT_SECRET="change-this-to-a-long-random-secret-value"
 ```
 
 Run the backend locally:
@@ -85,3 +86,4 @@ The backend currently includes:
 - Frontend API integration support
 - Flyway-managed game record schema
 - Member signup foundation with BCrypt password hashing
+- Login API with JWT access token issuance
