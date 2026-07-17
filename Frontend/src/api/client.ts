@@ -1,3 +1,5 @@
+import { getStoredAccessToken } from './authStorage';
+
 type ApiResponse<T> = {
   success: boolean;
   data: T;
@@ -15,6 +17,10 @@ type ApiErrorBody = {
 };
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+
+type ApiRequestInit = RequestInit & {
+  skipAuth?: boolean;
+};
 
 const getApiBaseUrl = () => {
   const meta = import.meta as ImportMeta & {
@@ -53,12 +59,16 @@ export const getApiErrorMessage = (error: unknown) => {
   return '알 수 없는 오류가 발생했습니다.';
 };
 
-export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Promise<T> {
+  const { skipAuth, headers, ...requestInit } = init;
+  const accessToken = skipAuth ? null : getStoredAccessToken();
+
   const response = await fetch(`${getApiBaseUrl()}${path}`, {
-    ...init,
+    ...requestInit,
     headers: {
       'Content-Type': 'application/json',
-      ...init?.headers,
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+      ...headers,
     },
   });
 
