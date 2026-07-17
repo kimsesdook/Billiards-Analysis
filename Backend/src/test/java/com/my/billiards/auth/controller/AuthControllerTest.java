@@ -94,6 +94,74 @@ class AuthControllerTest {
 			.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
+	@Test
+	void loginIssuesJwtAccessToken() throws Exception {
+		signUp("player@example.com");
+
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "PLAYER@example.com",
+					  "password": "password123"
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.accessToken").isString())
+			.andExpect(jsonPath("$.data.tokenType").value("Bearer"))
+			.andExpect(jsonPath("$.data.expiresInSeconds").value(3600))
+			.andExpect(jsonPath("$.data.member.email").value("player@example.com"))
+			.andExpect(jsonPath("$.data.member.role").value("USER"));
+	}
+
+	@Test
+	void rejectLoginWithWrongPassword() throws Exception {
+		signUp("player@example.com");
+
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "player@example.com",
+					  "password": "wrongPassword"
+					}
+					"""))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+	}
+
+	@Test
+	void rejectLoginWithUnknownEmail() throws Exception {
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "unknown@example.com",
+					  "password": "password123"
+					}
+					"""))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+	}
+
+	@Test
+	void rejectInvalidLoginRequest() throws Exception {
+		mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "not-email",
+					  "password": ""
+					}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
 	private void signUp(String email) throws Exception {
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
