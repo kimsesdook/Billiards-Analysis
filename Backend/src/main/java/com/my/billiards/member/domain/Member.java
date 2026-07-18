@@ -29,6 +29,18 @@ public class Member extends BaseTimeEntity {
 	@Column(nullable = false, length = 30)
 	private String nickname;
 
+	@Column(name = "display_name", nullable = false, length = 30)
+	private String displayName;
+
+	@Column(name = "target_cushion_count", nullable = false)
+	private int targetCushionCount;
+
+	@Column(name = "three_ball_handicap", nullable = false)
+	private int threeBallHandicap;
+
+	@Column(name = "four_ball_handicap", nullable = false)
+	private int fourBallHandicap;
+
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 30)
 	private MemberRole role;
@@ -44,11 +56,33 @@ public class Member extends BaseTimeEntity {
 		this.email = email;
 		this.passwordHash = passwordHash;
 		this.nickname = nickname;
+		this.displayName = nickname;
+		this.targetCushionCount = 1;
+		this.threeBallHandicap = 200;
+		this.fourBallHandicap = 250;
 		this.role = MemberRole.USER;
 		this.status = MemberStatus.ACTIVE;
 	}
 
 	public static Member create(String email, String passwordHash, String nickname) {
 		return new Member(email, passwordHash, nickname);
+	}
+
+	public void updateProfile(
+		String displayName,
+		String nickname,
+		int targetCushionCount,
+		int threeBallHandicap,
+		int fourBallHandicap
+	) {
+		this.displayName = displayName;
+		this.nickname = nickname;
+		this.targetCushionCount = targetCushionCount;
+		this.threeBallHandicap = threeBallHandicap;
+		this.fourBallHandicap = fourBallHandicap;
+	}
+
+	public void changePassword(String passwordHash) {
+		this.passwordHash = passwordHash;
 	}
 }

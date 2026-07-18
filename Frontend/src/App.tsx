@@ -63,6 +63,7 @@ import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRecords';
+import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
 import {
   AuthSession,
@@ -71,6 +72,7 @@ import {
   getAuthSessionRemainingMs,
   getStoredAuthSession,
   saveAuthSession,
+  updateStoredAuthMember,
 } from './api/authStorage';
 
 function BilliardsLogo() {
@@ -139,6 +141,32 @@ function AppContent() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [withdrawReason, setWithdrawReason] = useState('');
   const [withdrawConfirmed, setWithdrawConfirmed] = useState(false);
+  const [isProfileSaving, setIsProfileSaving] = useState(false);
+  const [isPasswordChanging, setIsPasswordChanging] = useState(false);
+
+  const applyMemberProfile = useCallback((profile: MemberProfile) => {
+    setUserName(profile.name);
+    setUserNickname(profile.nickname);
+    setUserCushionCount(profile.targetCushionCount);
+    setUserDama3(profile.threeBallHandicap);
+    setUserDama4(profile.fourBallHandicap);
+    setSettingsName(profile.name);
+    setSettingsNickname(profile.nickname);
+    setSettingsCushionCount(profile.targetCushionCount);
+    setSettingsDama3(profile.threeBallHandicap);
+    setSettingsDama4(profile.fourBallHandicap);
+    setSettingsNicknameChecked(true);
+    localStorage.setItem('billiards_name', profile.name);
+    localStorage.setItem('billiards_nickname', profile.nickname);
+    localStorage.setItem('billiards_cushion_count', profile.targetCushionCount.toString());
+    localStorage.setItem('billiards_dama3', profile.threeBallHandicap.toString());
+    localStorage.setItem('billiards_dama4', profile.fourBallHandicap.toString());
+
+    const updatedSession = updateStoredAuthMember({ nickname: profile.nickname });
+    if (updatedSession) {
+      setAuthSession(updatedSession);
+    }
+  }, []);
 
   // My Page related states: Registration date, last login level, login history, toggles, devices
   const [joinDate] = useState(() => {
@@ -362,7 +390,7 @@ function AppContent() {
     }
   }, [settingsCushionCount, isSettingsOpen, records]);
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfileWithApi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!settingsName.trim()) {
       alert('이름을 입력해 주세요.');
@@ -372,39 +400,47 @@ function AppContent() {
       alert('닉네임을 입력해 주세요.');
       return;
     }
+
     const originalNickname = localStorage.getItem('billiards_nickname') || '사용자';
     if (settingsNickname.trim() !== originalNickname && !settingsNicknameChecked) {
       alert('닉네임 중복 확인을 해주세요.');
       return;
     }
-    localStorage.setItem('billiards_name', settingsName.trim());
-    localStorage.setItem('billiards_nickname', settingsNickname.trim());
-    localStorage.setItem('billiards_cushion_count', settingsCushionCount.toString());
-    
-    setUserName(settingsName.trim());
-    setUserNickname(settingsNickname.trim());
-    setUserCushionCount(settingsCushionCount);
 
     const { dama3, dama4 } = calculateAutoHandicaps(records, settingsCushionCount);
-    setUserDama3(dama3);
-    setUserDama4(dama4);
-    localStorage.setItem('billiards_dama3', dama3.toString());
-    localStorage.setItem('billiards_dama4', dama4.toString());
-    
-    const newNotif = {
-      id: `notif-${Date.now()}`,
-      title: 'AI 수지 및 프로필 설정 완료',
-      message: `회원 정보가 반영되었습니다. 4구 수지 표시 기준이 마무리 3쿠션 ${settingsCushionCount}개로 지정되었으며, AI가 경기 기록을 분석하여 4구 수지를 ${dama4}점으로 자동 반영하였습니다.`,
-      time: '방금 전',
-      isNew: true,
-      type: 'system'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-    setIsSettingsOpen(false);
-    alert(`회원 정보가 수정되었습니다.\n\n[자동 AI 분석 수지 갱신 결과]\n- 3구 수지: ${dama3}점\n- 4구 수지: ${dama4}점 (마무리 3쿠션 ${settingsCushionCount}개 기준)`);
+    setIsProfileSaving(true);
+
+    try {
+      const profile = await updateMyProfile({
+        name: settingsName.trim(),
+        nickname: settingsNickname.trim(),
+        targetCushionCount: settingsCushionCount,
+        threeBallHandicap: dama3,
+        fourBallHandicap: dama4,
+      });
+
+      applyMemberProfile(profile);
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: '프로필 설정 완료',
+          message: `회원 정보가 서버에 저장되었습니다. 3구 수지 ${profile.threeBallHandicap}점, 4구 수지 ${profile.fourBallHandicap}점으로 반영했습니다.`,
+          time: '방금 전',
+          isNew: true,
+          type: 'system',
+        },
+        ...prev,
+      ]);
+      setIsSettingsOpen(false);
+      alert(`회원 정보가 수정되었습니다.\n\n- 3구 수지: ${profile.threeBallHandicap}점\n- 4구 수지: ${profile.fourBallHandicap}점`);
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+    } finally {
+      setIsProfileSaving(false);
+    }
   };
 
-  const handleChangePassword = (e: React.FormEvent) => {
+  const handleChangePasswordWithApi = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentPassword) {
       alert('현재 비밀번호를 입력해 주세요.');
@@ -414,24 +450,41 @@ function AppContent() {
       alert('새 비밀번호를 입력해 주세요.');
       return;
     }
+    if (newPassword.length < 8) {
+      alert('새 비밀번호는 8자 이상이어야 합니다.');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       alert('새 비밀번호가 일치하지 않습니다.');
       return;
     }
-    
-    localStorage.setItem('billiards_password', newPassword);
-    
-    const newNotif = {
-      id: `notif-${Date.now()}`,
-      title: '비밀번호 변경 완료',
-      message: '계정 보안 비밀번호가 정상적으로 변경되었습니다.',
-      time: '방금 전',
-      isNew: true,
-      type: 'system'
-    };
-    setNotifications(prev => [newNotif, ...prev]);
-    setIsSettingsOpen(false);
-    alert('비밀번호가 성공적으로 변경되었습니다!');
+
+    setIsPasswordChanging(true);
+    try {
+      await changeMyPassword({
+        currentPassword,
+        newPassword,
+      });
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setNotifications((prev) => [
+        {
+          id: `notif-${Date.now()}`,
+          title: '비밀번호 변경 완료',
+          message: '계정 비밀번호가 서버에 안전하게 반영되었습니다.',
+          time: '방금 전',
+          isNew: true,
+          type: 'system',
+        },
+        ...prev,
+      ]);
+      alert('비밀번호가 성공적으로 변경되었습니다.');
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+    } finally {
+      setIsPasswordChanging(false);
+    }
   };
 
   const handleWithdraw = (e: React.FormEvent) => {
@@ -444,7 +497,6 @@ function AppContent() {
     localStorage.removeItem('billiards_nickname');
     localStorage.removeItem('billiards_dama3');
     localStorage.removeItem('billiards_dama4');
-    localStorage.removeItem('billiards_password');
     localStorage.removeItem('billiards_records');
     localStorage.removeItem('billiards_friends');
     clearAuthSession();
@@ -740,6 +792,23 @@ function AppContent() {
   useEffect(() => {
     void loadRecords();
   }, [loadRecords]);
+
+  const loadMemberProfile = useCallback(async () => {
+    if (!isLoggedIn) return;
+
+    try {
+      const profile = await getMyProfile();
+      applyMemberProfile(profile);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [applyMemberProfile, handleAuthExpired, isLoggedIn]);
+
+  useEffect(() => {
+    void loadMemberProfile();
+  }, [loadMemberProfile]);
 
   useEffect(() => addUnauthorizedListener(handleAuthExpired), [handleAuthExpired]);
 
@@ -2070,7 +2139,7 @@ function AppContent() {
               {/* Content Panels */}
               <div className="p-6">
                 {settingsTab === 'profile' && (
-                  <form onSubmit={handleSaveProfile} className="space-y-4">
+                  <form onSubmit={handleSaveProfileWithApi} className="space-y-4">
                     {/* Name Input */}
                     <div className="space-y-1 text-left">
                       <label className="text-[10px] font-black uppercase text-emerald-400">이름</label>
@@ -2215,9 +2284,10 @@ function AppContent() {
                     <div className="pt-4">
                       <button
                         type="submit"
-                        className="w-full py-3.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-xs uppercase tracking-wider"
+                        disabled={isProfileSaving}
+                        className="w-full py-3.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all text-xs uppercase tracking-wider"
                       >
-                        프로필 저장하기 (AI 자동 수지 적용)
+                        {isProfileSaving ? '프로필 저장 중...' : '프로필 저장하기 (AI 자동 수지 적용)'}
                       </button>
                     </div>
                   </form>
@@ -2400,7 +2470,7 @@ function AppContent() {
                         <p className="text-[10px] text-emerald-100/60 font-semibold mb-2">원활한 대국 관리를 위해 주기적으로 비밀번호를 변경해 주세요.</p>
                       </div>
 
-                      <form onSubmit={handleChangePassword} className="space-y-3">
+                      <form onSubmit={handleChangePasswordWithApi} className="space-y-3">
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="space-y-1 text-left">
                             <label className="text-[9px] font-black uppercase text-emerald-400/80">현재 비밀번호</label>
@@ -2436,9 +2506,10 @@ function AppContent() {
 
                         <button
                           type="submit"
-                          className="w-full py-2.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-[11px] uppercase tracking-wider"
+                          disabled={isPasswordChanging}
+                          className="w-full py-2.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all text-[11px] uppercase tracking-wider"
                         >
-                          비밀번호 업데이트 적용
+                          {isPasswordChanging ? '비밀번호 변경 중...' : '비밀번호 업데이트 적용'}
                         </button>
                       </form>
                     </div>

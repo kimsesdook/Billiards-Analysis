@@ -85,6 +85,24 @@ export const saveAuthSession = (session: AuthSessionPayload): AuthSession => {
   return authSession;
 };
 
+export const updateStoredAuthMember = (member: Partial<AuthMember>): AuthSession | null => {
+  const currentSession = getStoredAuthSession();
+  if (!currentSession) return null;
+
+  const nextSession: AuthSession = {
+    ...currentSession,
+    member: {
+      ...currentSession.member,
+      ...member,
+    },
+  };
+
+  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
+  localStorage.setItem('billiards_nickname', nextSession.member.nickname);
+
+  return nextSession;
+};
+
 export const clearAuthSession = () => {
   localStorage.removeItem(AUTH_STORAGE_KEY);
   localStorage.removeItem('billiards_name');

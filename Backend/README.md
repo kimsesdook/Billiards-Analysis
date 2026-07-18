@@ -27,6 +27,7 @@ The backend uses Flyway to manage database schema changes.
 - `V1__create_game_record_tables.sql` creates the first game record tables
 - `V2__create_members_table.sql` creates the member account table
 - `V3__add_member_to_game_records.sql` connects game records to members
+- `V4__add_member_profile_fields.sql` adds member profile and billiards handicap settings
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -89,3 +90,4 @@ The backend currently includes:
 - Member signup foundation with BCrypt password hashing
 - Login API with JWT access token issuance
 - JWT-protected game record APIs scoped to the authenticated member
+- JWT-protected member profile/password APIs
