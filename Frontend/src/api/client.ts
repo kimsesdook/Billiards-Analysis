@@ -17,6 +17,7 @@ type ApiErrorBody = {
 };
 
 const DEFAULT_API_BASE_URL = 'http://localhost:8080';
+const AUTH_UNAUTHORIZED_EVENT = 'billiards_auth_unauthorized';
 
 type ApiRequestInit = RequestInit & {
   skipAuth?: boolean;
@@ -43,6 +44,15 @@ export class ApiClientError extends Error {
     this.errors = errors;
   }
 }
+
+export const addUnauthorizedListener = (listener: () => void) => {
+  window.addEventListener(AUTH_UNAUTHORIZED_EVENT, listener);
+  return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, listener);
+};
+
+const notifyUnauthorized = () => {
+  window.dispatchEvent(new CustomEvent(AUTH_UNAUTHORIZED_EVENT));
+};
 
 export const getApiErrorMessage = (error: unknown) => {
   if (error instanceof ApiClientError) {
@@ -85,6 +95,10 @@ export async function apiRequest<T>(path: string, init: ApiRequestInit = {}): Pr
 
   if (!response.ok) {
     const errorBody = body as ApiErrorBody | null;
+    if (response.status === 401 && !skipAuth) {
+      notifyUnauthorized();
+    }
+
     throw new ApiClientError(
       errorBody?.message || `API 요청에 실패했습니다. (${response.status})`,
       response.status,

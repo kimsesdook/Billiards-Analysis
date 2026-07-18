@@ -3,11 +3,11 @@ import { motion } from 'motion/react';
 import { AlertCircle, CheckCircle2, ChevronRight, Eye, EyeOff, Loader2, Lock, Mail, User, UserPlus } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login, signUp } from '../api/auth';
-import { AuthSession } from '../api/authStorage';
+import type { AuthSessionPayload } from '../api/authStorage';
 import { getApiErrorMessage } from '../api/client';
 
 interface SignupPageProps {
-  onAuthenticated: (session: AuthSession) => void;
+  onAuthenticated: (session: AuthSessionPayload) => void;
 }
 
 export function SignupPage({ onAuthenticated }: SignupPageProps) {
@@ -27,7 +27,16 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
     ? formData.password === formData.confirmPassword
     : true;
   const isPasswordLengthValid = formData.password.length >= 8;
-  const canSubmit = formData.email.trim() && formData.nickname.trim() && isPasswordLengthValid && isPasswordMatch;
+  const canSubmit = Boolean(
+    formData.email.trim()
+    && formData.nickname.trim()
+    && isPasswordLengthValid
+    && isPasswordMatch,
+  );
+
+  const updateFormData = (field: keyof typeof formData, value: string) => {
+    setFormData((current) => ({ ...current, [field]: value }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,7 +86,7 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
               <UserPlus size={28} />
             </div>
             <h1 className="text-3xl font-bold text-zinc-900">회원가입</h1>
-            <p className="text-zinc-500 mt-2">계정을 만들고 내 경기 기록을 안전하게 저장하세요.</p>
+            <p className="text-zinc-500 mt-2">계정을 만들고 경기 기록을 안전하게 저장해 보세요.</p>
           </div>
 
           {errorMessage && (
@@ -96,8 +105,9 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                   required
                   type="email"
                   value={formData.email}
-                  onChange={(event) => setFormData({ ...formData, email: event.target.value })}
+                  onChange={(event) => updateFormData('email', event.target.value)}
                   placeholder="player@example.com"
+                  autoComplete="email"
                   className="w-full pl-12 pr-6 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
               </div>
@@ -112,8 +122,9 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                   type="text"
                   maxLength={30}
                   value={formData.nickname}
-                  onChange={(event) => setFormData({ ...formData, nickname: event.target.value })}
+                  onChange={(event) => updateFormData('nickname', event.target.value)}
                   placeholder="표시할 닉네임"
+                  autoComplete="nickname"
                   className="w-full pl-12 pr-6 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
                 />
               </div>
@@ -127,8 +138,9 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                   required
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
-                  onChange={(event) => setFormData({ ...formData, password: event.target.value })}
+                  onChange={(event) => updateFormData('password', event.target.value)}
                   placeholder="8자 이상 입력"
+                  autoComplete="new-password"
                   className={`w-full pl-12 pr-12 py-4 bg-zinc-50 border rounded-2xl focus:outline-none focus:ring-2 transition-all ${
                     formData.password && !isPasswordLengthValid
                       ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
@@ -137,6 +149,7 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                 />
                 <button
                   type="button"
+                  aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
                   onClick={() => setShowPassword(!showPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors"
                 >
@@ -159,8 +172,9 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                   required
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={formData.confirmPassword}
-                  onChange={(event) => setFormData({ ...formData, confirmPassword: event.target.value })}
+                  onChange={(event) => updateFormData('confirmPassword', event.target.value)}
                   placeholder="비밀번호 재입력"
+                  autoComplete="new-password"
                   className={`w-full pl-12 pr-12 py-4 bg-zinc-50 border rounded-2xl focus:outline-none focus:ring-2 transition-all ${
                     !isPasswordMatch && formData.confirmPassword
                       ? 'border-red-300 focus:ring-red-500/20 focus:border-red-500'
@@ -169,6 +183,7 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
                 />
                 <button
                   type="button"
+                  aria-label={showConfirmPassword ? '비밀번호 확인 숨기기' : '비밀번호 확인 보기'}
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                   className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors"
                 >

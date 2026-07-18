@@ -1,5 +1,5 @@
 import { apiRequest } from './client';
-import { AuthSession, AuthMember } from './authStorage';
+import type { AuthMember, AuthSessionPayload } from './authStorage';
 
 export type LoginPayload = {
   email: string;
@@ -15,7 +15,7 @@ export type SignUpPayload = {
 export type SignUpResult = AuthMember;
 
 export const login = (payload: LoginPayload) =>
-  apiRequest<AuthSession>('/api/auth/login', {
+  apiRequest<AuthSessionPayload>('/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(payload),
     skipAuth: true,
