@@ -41,6 +41,7 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
 				.requestMatchers("/api/game-records/**").authenticated()
 				.requestMatchers("/api/members/**").authenticated()
+				.requestMatchers("/api/friends/**").authenticated()
 				.anyRequest().permitAll()
 			)
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)

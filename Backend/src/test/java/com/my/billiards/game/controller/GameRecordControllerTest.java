@@ -1,5 +1,6 @@
 package com.my.billiards.game.controller;
 
+import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.repository.MemberRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,9 +36,13 @@ class GameRecordControllerTest {
 	@Autowired
 	private MemberRepository memberRepository;
 
+	@Autowired
+	private FriendshipRepository friendshipRepository;
+
 	@BeforeEach
 	void setUp() {
 		gameRecordRepository.deleteAll();
+		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}
 
