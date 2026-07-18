@@ -3,11 +3,11 @@ import { motion } from 'motion/react';
 import { AlertCircle, ArrowRight, Loader2, Lock, LogIn, Mail } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { login } from '../api/auth';
-import { AuthSession } from '../api/authStorage';
+import type { AuthSessionPayload } from '../api/authStorage';
 import { getApiErrorMessage } from '../api/client';
 
 interface LoginPageProps {
-  onLogin: (session: AuthSession) => void;
+  onLogin: (session: AuthSessionPayload) => void;
 }
 
 export function LoginPage({ onLogin }: LoginPageProps) {
@@ -69,6 +69,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 placeholder="player@example.com"
+                autoComplete="email"
                 className="w-full pl-12 pr-4 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
@@ -84,6 +85,7 @@ export function LoginPage({ onLogin }: LoginPageProps) {
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 placeholder="비밀번호를 입력하세요"
+                autoComplete="current-password"
                 className="w-full pl-12 pr-4 py-4 bg-zinc-50 border border-zinc-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
               />
             </div>
@@ -101,7 +103,10 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         <div className="mt-8 text-center space-y-4">
           <p className="text-sm text-zinc-500">
-            계정이 없나요? <Link to="/signup" className="text-emerald-600 font-bold hover:underline">회원가입</Link>
+            계정이 없나요?{' '}
+            <Link to="/signup" className="text-emerald-600 font-bold hover:underline">
+              회원가입
+            </Link>
           </p>
           <Link to="/" className="inline-block text-xs text-zinc-400 hover:text-zinc-600 transition-colors">
             메인으로 돌아가기

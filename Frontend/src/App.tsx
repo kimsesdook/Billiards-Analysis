@@ -63,8 +63,15 @@ import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
 import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRecords';
-import { ApiClientError, getApiErrorMessage } from './api/client';
-import { AuthSession, clearAuthSession, getStoredAuthSession, saveAuthSession } from './api/authStorage';
+import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
+import {
+  AuthSession,
+  AuthSessionPayload,
+  clearAuthSession,
+  getAuthSessionRemainingMs,
+  getStoredAuthSession,
+  saveAuthSession,
+} from './api/authStorage';
 
 function BilliardsLogo() {
   return (
@@ -96,15 +103,15 @@ function AppContent() {
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [filter, setFilter] = useState<GameType>('3-Cushion');
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
-  const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(getStoredAuthSession()));
+  const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(authSession));
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [userName, setUserName] = useState(() => getStoredAuthSession()?.member.nickname || localStorage.getItem('billiards_name') || '사용자');
-  const [userNickname, setUserNickname] = useState(() => getStoredAuthSession()?.member.nickname || localStorage.getItem('billiards_nickname') || '사용자');
+  const [userName, setUserName] = useState(() => authSession?.member.nickname || localStorage.getItem('billiards_name') || '사용자');
+  const [userNickname, setUserNickname] = useState(() => authSession?.member.nickname || localStorage.getItem('billiards_nickname') || '사용자');
   
   const [userCushionCount, setUserCushionCount] = useState<number>(() => {
     const saved = localStorage.getItem('billiards_cushion_count');
@@ -671,23 +678,23 @@ function AppContent() {
     };
   };
 
-  const handleAuthenticated = useCallback((session: AuthSession) => {
-    saveAuthSession(session);
-    setAuthSession(session);
+  const handleAuthenticated = useCallback((session: AuthSessionPayload) => {
+    const savedSession = saveAuthSession(session);
+    setAuthSession(savedSession);
     setIsLoggedIn(true);
-    setUserName(session.member.nickname);
-    setUserNickname(session.member.nickname);
+    setUserName(savedSession.member.nickname);
+    setUserNickname(savedSession.member.nickname);
     setRecordsError(null);
   }, []);
 
   const handleLogout = useCallback(() => {
     clearAuthSession();
     setAuthSession(null);
-    setAuthSession(null);
     setIsLoggedIn(false);
     setRecords([]);
     setIsUserMenuOpen(false);
-    setRecords([]);
+    setUserName('사용자');
+    setUserNickname('사용자');
     setRecordsError(null);
     navigate('/login');
   }, [navigate]);
@@ -697,6 +704,8 @@ function AppContent() {
     setAuthSession(null);
     setIsLoggedIn(false);
     setRecords([]);
+    setUserName('사용자');
+    setUserNickname('사용자');
     setRecordsError('로그인이 만료되었습니다. 다시 로그인해 주세요.');
     navigate('/login');
   }, [navigate]);
@@ -731,6 +740,15 @@ function AppContent() {
   useEffect(() => {
     void loadRecords();
   }, [loadRecords]);
+
+  useEffect(() => addUnauthorizedListener(handleAuthExpired), [handleAuthExpired]);
+
+  useEffect(() => {
+    if (!authSession) return undefined;
+
+    const timeoutId = window.setTimeout(handleAuthExpired, getAuthSessionRemainingMs(authSession));
+    return () => window.clearTimeout(timeoutId);
+  }, [authSession, handleAuthExpired]);
 
   // Robust real-time search logic
   const performSearch = (queryStr: string) => {
