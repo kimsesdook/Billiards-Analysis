@@ -1,5 +1,6 @@
 package com.my.billiards.member.controller;
 
+import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.repository.MemberRepository;
@@ -38,11 +39,15 @@ class MemberControllerTest {
 	private GameRecordRepository gameRecordRepository;
 
 	@Autowired
+	private FriendshipRepository friendshipRepository;
+
+	@Autowired
 	private PasswordEncoder passwordEncoder;
 
 	@BeforeEach
 	void setUp() {
 		gameRecordRepository.deleteAll();
+		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}
 
