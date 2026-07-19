@@ -6,9 +6,11 @@ import com.my.billiards.member.domain.Member;
 import com.my.billiards.notification.domain.Notification;
 import com.my.billiards.notification.domain.NotificationType;
 import com.my.billiards.notification.dto.NotificationResponse;
+import com.my.billiards.notification.event.NotificationRealtimeEvent;
 import com.my.billiards.notification.repository.NotificationRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,6 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
 
 	private final NotificationRepository notificationRepository;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public NotificationResponse createForMember(
@@ -36,7 +39,9 @@ public class NotificationService {
 			relatedResourceId
 		);
 
-		return NotificationResponse.from(notificationRepository.save(notification));
+		NotificationResponse response = NotificationResponse.from(notificationRepository.save(notification));
+		eventPublisher.publishEvent(new NotificationRealtimeEvent(member.getId(), response));
+		return response;
 	}
 
 	@Transactional(readOnly = true)
