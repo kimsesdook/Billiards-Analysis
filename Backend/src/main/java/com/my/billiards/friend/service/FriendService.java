@@ -14,6 +14,8 @@ import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.domain.MemberStatus;
 import com.my.billiards.member.repository.MemberRepository;
+import com.my.billiards.notification.domain.NotificationType;
+import com.my.billiards.notification.service.NotificationService;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -31,6 +33,7 @@ public class FriendService {
 
 	private final FriendshipRepository friendshipRepository;
 	private final MemberRepository memberRepository;
+	private final NotificationService notificationService;
 
 	@Transactional(readOnly = true)
 	public List<FriendResponse> findFriends(Long memberId) {
@@ -78,7 +81,10 @@ public class FriendService {
 				PageRequest.of(0, SEARCH_LIMIT)
 			)
 			.stream()
-			.map(member -> FriendSearchResponse.of(member, resolveSearchStatus(memberId, relationsByMemberId.get(member.getId()))))
+			.map(member -> FriendSearchResponse.of(
+				member,
+				resolveSearchStatus(memberId, relationsByMemberId.get(member.getId()))
+			))
 			.toList();
 	}
 
@@ -98,7 +104,17 @@ public class FriendService {
 				throw new BilliardsException(ErrorCode.FRIENDSHIP_ALREADY_EXISTS);
 			});
 
-		return FriendRequestResponse.outgoing(friendshipRepository.save(Friendship.request(requester, receiver)));
+		Friendship friendship = friendshipRepository.save(Friendship.request(requester, receiver));
+		notificationService.createForMember(
+			receiver,
+			NotificationType.FRIEND,
+			"새 친구 요청",
+			requester.getNickname() + "님이 친구 요청을 보냈습니다.",
+			"FRIEND_REQUEST",
+			friendship.getId()
+		);
+
+		return FriendRequestResponse.outgoing(friendship);
 	}
 
 	@Transactional
@@ -112,6 +128,15 @@ public class FriendService {
 		}
 
 		friendship.accept();
+		notificationService.createForMember(
+			friendship.getRequester(),
+			NotificationType.FRIEND,
+			"친구 요청 수락",
+			friendship.getReceiver().getNickname() + "님이 친구 요청을 수락했습니다.",
+			"FRIENDSHIP",
+			friendship.getId()
+		);
+
 		return FriendResponse.of(friendship, friendship.getRequester());
 	}
 

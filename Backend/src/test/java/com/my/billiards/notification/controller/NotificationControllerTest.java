@@ -1,4 +1,4 @@
-package com.my.billiards.friend.controller;
+package com.my.billiards.notification.controller;
 
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
@@ -24,7 +24,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-class FriendControllerTest {
+class NotificationControllerTest {
 
 	private static final String PASSWORD = "password123";
 
@@ -35,10 +35,10 @@ class FriendControllerTest {
 	private MemberRepository memberRepository;
 
 	@Autowired
-	private FriendshipRepository friendshipRepository;
+	private GameRecordRepository gameRecordRepository;
 
 	@Autowired
-	private GameRecordRepository gameRecordRepository;
+	private FriendshipRepository friendshipRepository;
 
 	@Autowired
 	private NotificationRepository notificationRepository;
@@ -52,179 +52,120 @@ class FriendControllerTest {
 	}
 
 	@Test
-	void rejectFindFriendsWithoutToken() throws Exception {
-		mockMvc.perform(get("/api/friends"))
+	void rejectFindNotificationsWithoutToken() throws Exception {
+		mockMvc.perform(get("/api/notifications"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.success").value(false))
 			.andExpect(jsonPath("$.code").value("AUTH_001"));
 	}
 
 	@Test
-	void sendRequestAndListRequests() throws Exception {
+	void sendFriendRequestCreatesNotificationForReceiver() throws Exception {
 		String senderToken = signUpAndLogin("sender@example.com", "Sender");
 		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
 		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
 
-		mockMvc.perform(post("/api/friends/requests")
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken))
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "targetMemberId": %d
-					}
-					""".formatted(receiverId)))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.success").value(true))
-			.andExpect(jsonPath("$.data.member.nickname").value("Receiver"))
-			.andExpect(jsonPath("$.data.direction").value("OUTGOING"));
+		sendFriendRequest(senderToken, receiverId);
 
-		mockMvc.perform(get("/api/friends/requests")
-				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.incoming[0].member.nickname").value("Sender"))
-			.andExpect(jsonPath("$.data.incoming[0].direction").value("INCOMING"))
-			.andExpect(jsonPath("$.data.outgoing").isEmpty());
-	}
-
-	@Test
-	void acceptRequestCreatesFriendForBothMembers() throws Exception {
-		String senderToken = signUpAndLogin("sender@example.com", "Sender");
-		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
-		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
-		Long requestId = sendRequest(senderToken, receiverId);
-
-		mockMvc.perform(patch("/api/friends/requests/{requestId}/accept", requestId)
+		mockMvc.perform(get("/api/notifications")
 				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true))
-			.andExpect(jsonPath("$.data.friend.nickname").value("Sender"));
+			.andExpect(jsonPath("$.data[0].type").value("FRIEND"))
+			.andExpect(jsonPath("$.data[0].title").value("새 친구 요청"))
+			.andExpect(jsonPath("$.data[0].message").value("Sender님이 친구 요청을 보냈습니다."))
+			.andExpect(jsonPath("$.data[0].read").value(false))
+			.andExpect(jsonPath("$.data[0].relatedResourceType").value("FRIEND_REQUEST"));
 
-		mockMvc.perform(get("/api/friends")
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken)))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data[0].friend.nickname").value("Receiver"));
-
-		mockMvc.perform(get("/api/friends")
+		mockMvc.perform(get("/api/notifications/unread-count")
 				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data[0].friend.nickname").value("Sender"));
+			.andExpect(jsonPath("$.data").value(1));
 	}
 
 	@Test
-	void declineRequestRemovesPendingRequest() throws Exception {
+	void markAsReadAndDeleteNotification() throws Exception {
 		String senderToken = signUpAndLogin("sender@example.com", "Sender");
 		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
 		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
-		Long requestId = sendRequest(senderToken, receiverId);
 
-		mockMvc.perform(patch("/api/friends/requests/{requestId}/decline", requestId)
+		sendFriendRequest(senderToken, receiverId);
+		Long notificationId = findFirstNotificationId(receiverToken);
+
+		mockMvc.perform(patch("/api/notifications/{notificationId}/read", notificationId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.read").value(true));
+
+		mockMvc.perform(get("/api/notifications/unread-count")
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data").value(0));
+
+		mockMvc.perform(delete("/api/notifications/{notificationId}", notificationId)
 				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.success").value(true));
 
-		mockMvc.perform(get("/api/friends/requests")
+		mockMvc.perform(get("/api/notifications")
 				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data.incoming").isEmpty());
-	}
-
-	@Test
-	void rejectReverseDuplicateRequest() throws Exception {
-		String senderToken = signUpAndLogin("sender@example.com", "Sender");
-		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
-		Long senderId = memberRepository.findByEmail("sender@example.com").orElseThrow().getId();
-		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
-
-		sendRequest(senderToken, receiverId);
-
-		mockMvc.perform(post("/api/friends/requests")
-				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken))
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "targetMemberId": %d
-					}
-					""".formatted(senderId)))
-			.andExpect(status().isConflict())
-			.andExpect(jsonPath("$.success").value(false))
-			.andExpect(jsonPath("$.code").value("FRIEND_002"));
-	}
-
-	@Test
-	void rejectSelfFriendRequest() throws Exception {
-		String token = signUpAndLogin("player@example.com", "Player");
-		Long memberId = memberRepository.findByEmail("player@example.com").orElseThrow().getId();
-
-		mockMvc.perform(post("/api/friends/requests")
-				.header(HttpHeaders.AUTHORIZATION, bearer(token))
-				.contentType(MediaType.APPLICATION_JSON)
-				.content("""
-					{
-					  "targetMemberId": %d
-					}
-					""".formatted(memberId)))
-			.andExpect(status().isBadRequest())
-			.andExpect(jsonPath("$.success").value(false))
-			.andExpect(jsonPath("$.code").value("FRIEND_001"));
-	}
-
-	@Test
-	void removeFriend() throws Exception {
-		String senderToken = signUpAndLogin("sender@example.com", "Sender");
-		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
-		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
-		Long requestId = sendRequest(senderToken, receiverId);
-
-		String acceptResponse = mockMvc.perform(patch("/api/friends/requests/{requestId}/accept", requestId)
-				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
-			.andExpect(status().isOk())
-			.andReturn()
-			.getResponse()
-			.getContentAsString();
-		Long friendshipId = extractLong(acceptResponse, "friendshipId");
-
-		mockMvc.perform(delete("/api/friends/{friendshipId}", friendshipId)
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken)))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.success").value(true));
-
-		mockMvc.perform(get("/api/friends")
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken)))
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data").isEmpty());
 	}
 
 	@Test
-	void searchMembersWithRelationshipStatus() throws Exception {
+	void acceptFriendRequestCreatesNotificationForRequester() throws Exception {
 		String senderToken = signUpAndLogin("sender@example.com", "Sender");
 		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
-		Long senderId = memberRepository.findByEmail("sender@example.com").orElseThrow().getId();
 		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
+		Long requestId = sendFriendRequest(senderToken, receiverId);
 
-		mockMvc.perform(get("/api/friends/search")
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken))
-				.param("keyword", "Receiver"))
+		mockMvc.perform(patch("/api/friends/requests/{requestId}/accept", requestId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk());
+
+		mockMvc.perform(get("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken)))
 			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data[0].memberId").value(receiverId))
-			.andExpect(jsonPath("$.data[0].relationshipStatus").value("NONE"));
-
-		sendRequest(senderToken, receiverId);
-
-		mockMvc.perform(get("/api/friends/search")
-				.header(HttpHeaders.AUTHORIZATION, bearer(senderToken))
-				.param("keyword", "Receiver"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data[0].relationshipStatus").value("PENDING_OUTGOING"));
-
-		mockMvc.perform(get("/api/friends/search")
-				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken))
-				.param("keyword", "Sender"))
-			.andExpect(status().isOk())
-			.andExpect(jsonPath("$.data[0].memberId").value(senderId))
-			.andExpect(jsonPath("$.data[0].relationshipStatus").value("PENDING_INCOMING"));
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data[0].type").value("FRIEND"))
+			.andExpect(jsonPath("$.data[0].title").value("친구 요청 수락"))
+			.andExpect(jsonPath("$.data[0].message").value("Receiver님이 친구 요청을 수락했습니다."))
+			.andExpect(jsonPath("$.data[0].read").value(false))
+			.andExpect(jsonPath("$.data[0].relatedResourceType").value("FRIENDSHIP"));
 	}
 
-	private Long sendRequest(String token, Long targetMemberId) throws Exception {
+	@Test
+	void markAllAsReadAndDeleteAllNotifications() throws Exception {
+		String senderToken = signUpAndLogin("sender@example.com", "Sender");
+		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
+		Long receiverId = memberRepository.findByEmail("receiver@example.com").orElseThrow().getId();
+
+		sendFriendRequest(senderToken, receiverId);
+
+		mockMvc.perform(patch("/api/notifications/read-all")
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true));
+
+		mockMvc.perform(get("/api/notifications/unread-count")
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data").value(0));
+
+		mockMvc.perform(delete("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true));
+
+		mockMvc.perform(get("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data").isEmpty());
+	}
+
+	private Long sendFriendRequest(String token, Long targetMemberId) throws Exception {
 		String response = mockMvc.perform(post("/api/friends/requests")
 				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
@@ -239,6 +180,17 @@ class FriendControllerTest {
 			.getContentAsString();
 
 		return extractLong(response, "requestId");
+	}
+
+	private Long findFirstNotificationId(String token) throws Exception {
+		String response = mockMvc.perform(get("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractLong(response, "id");
 	}
 
 	private String signUpAndLogin(String email, String nickname) throws Exception {

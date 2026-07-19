@@ -3,6 +3,7 @@ package com.my.billiards.game.controller;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.repository.MemberRepository;
+import com.my.billiards.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,9 +40,13 @@ class GameRecordControllerTest {
 	@Autowired
 	private FriendshipRepository friendshipRepository;
 
+	@Autowired
+	private NotificationRepository notificationRepository;
+
 	@BeforeEach
 	void setUp() {
 		gameRecordRepository.deleteAll();
+		notificationRepository.deleteAll();
 		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}

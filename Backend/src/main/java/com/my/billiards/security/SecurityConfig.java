@@ -42,6 +42,7 @@ public class SecurityConfig {
 				.requestMatchers("/api/game-records/**").authenticated()
 				.requestMatchers("/api/members/**").authenticated()
 				.requestMatchers("/api/friends/**").authenticated()
+				.requestMatchers("/api/notifications/**").authenticated()
 				.anyRequest().permitAll()
 			)
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
