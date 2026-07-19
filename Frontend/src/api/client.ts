@@ -23,7 +23,7 @@ type ApiRequestInit = RequestInit & {
   skipAuth?: boolean;
 };
 
-const getApiBaseUrl = () => {
+export const getApiBaseUrl = () => {
   const meta = import.meta as ImportMeta & {
     env?: Record<string, string | undefined>;
   };

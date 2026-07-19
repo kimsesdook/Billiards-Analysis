@@ -73,6 +73,7 @@ import {
   markNotificationAsRead,
   type NotificationItem,
 } from './api/notifications';
+import { connectNotificationSocket } from './api/realtimeNotifications';
 import {
   AuthSession,
   AuthSessionPayload,
@@ -823,6 +824,51 @@ function AppContent() {
       window.removeEventListener('billiards_notifications_updated', handleNotificationsUpdated);
     };
   }, [loadNotifications]);
+
+  useEffect(() => {
+    if (!isLoggedIn || !authSession?.accessToken) {
+      return undefined;
+    }
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let closedByClient = false;
+
+    const connect = () => {
+      socket = connectNotificationSocket({
+        accessToken: authSession.accessToken,
+        onNotification: (notification) => {
+          const nextNotification = toAppNotification(notification);
+          setNotifications((prev) => [
+            nextNotification,
+            ...prev.filter((item) => item.id !== nextNotification.id),
+          ]);
+        },
+        onClose: (event) => {
+          if (closedByClient) {
+            return;
+          }
+
+          if (event.code === 1008) {
+            handleAuthExpired();
+            return;
+          }
+
+          reconnectTimer = window.setTimeout(connect, 3000);
+        },
+      });
+    };
+
+    connect();
+
+    return () => {
+      closedByClient = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
+    };
+  }, [authSession?.accessToken, handleAuthExpired, isLoggedIn]);
 
   const handleMarkAllNotificationsRead = useCallback(async () => {
     setNotifications((prev) => prev.map((notification) => ({ ...notification, isNew: false })));
