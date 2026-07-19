@@ -204,6 +204,7 @@ export const FriendsPage: React.FC = () => {
       setSearchResults([]);
       setHasSearched(false);
       await refreshFriendState();
+      window.dispatchEvent(new CustomEvent('billiards_notifications_updated'));
       alert(`${recipient.nickname}님에게 친구 요청을 보냈습니다.`);
     } catch (error) {
       alert(getApiErrorMessage(error));
@@ -218,6 +219,7 @@ export const FriendsPage: React.FC = () => {
     try {
       await acceptFriendRequest(Number(requestId));
       await refreshFriendState();
+      window.dispatchEvent(new CustomEvent('billiards_notifications_updated'));
     } catch (error) {
       alert(getApiErrorMessage(error));
     } finally {

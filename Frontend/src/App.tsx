@@ -66,6 +66,14 @@ import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRe
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
 import {
+  deleteAllNotifications,
+  deleteNotification,
+  getNotifications,
+  markAllNotificationsAsRead,
+  markNotificationAsRead,
+  type NotificationItem,
+} from './api/notifications';
+import {
   AuthSession,
   AuthSessionPayload,
   clearAuthSession,
@@ -74,6 +82,62 @@ import {
   saveAuthSession,
   updateStoredAuthMember,
 } from './api/authStorage';
+
+type AppNotificationType = 'match' | 'friend' | 'report' | 'system';
+
+type AppNotification = {
+  id: string;
+  title: string;
+  message: string;
+  time: string;
+  isNew: boolean;
+  type: AppNotificationType;
+};
+
+const notificationTypeMap: Record<NotificationItem['type'], AppNotificationType> = {
+  FRIEND: 'friend',
+  MATCH: 'match',
+  REPORT: 'report',
+  SYSTEM: 'system',
+};
+
+const formatNotificationTime = (createdAt: string) => {
+  const created = new Date(createdAt);
+  if (Number.isNaN(created.getTime())) {
+    return '';
+  }
+
+  const diffMs = Date.now() - created.getTime();
+  if (diffMs < 60_000) {
+    return '방금 전';
+  }
+
+  const diffMinutes = Math.floor(diffMs / 60_000);
+  if (diffMinutes < 60) {
+    return `${diffMinutes}분 전`;
+  }
+
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) {
+    return `${diffHours}시간 전`;
+  }
+
+  return format(created, 'M월 d일', { locale: ko });
+};
+
+const toAppNotification = (notification: NotificationItem): AppNotification => ({
+  id: String(notification.id),
+  title: notification.title,
+  message: notification.message,
+  time: formatNotificationTime(notification.createdAt),
+  isNew: !notification.read,
+  type: notificationTypeMap[notification.type],
+});
+
+const toServerNotificationId = (notificationId: string) => {
+  const parsedId = Number(notificationId);
+  return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
+};
 
 function BilliardsLogo() {
   return (
@@ -254,7 +318,7 @@ function AppContent() {
       setActiveDevices(remaining);
       localStorage.setItem('billiards_active_devices', JSON.stringify(remaining));
 
-      const newNotif = {
+      const newNotif: AppNotification = {
         id: `notif-${Date.now()}`,
         title: '보안 알림: 모든 기기 로그아웃 완료',
         message: '현재 활성화 세션을 제외한 다른 모든 기기에서의 자격 증명이 말소 처리되었습니다.',
@@ -273,7 +337,7 @@ function AppContent() {
       setActiveDevices(updated);
       localStorage.setItem('billiards_active_devices', JSON.stringify(updated));
 
-      const newNotif = {
+      const newNotif: AppNotification = {
         id: `notif-${Date.now()}`,
         title: '보안 알림: 특정 기기 접속 해제',
         message: `${name} 기기의 로그인 접속이 해제되었습니다.`,
@@ -507,40 +571,7 @@ function AppContent() {
     setIsUserMenuOpen(false);
   };
 
-  const [notifications, setNotifications] = useState<any[]>([
-    {
-      id: 'notif-1',
-      title: '새로운 교류전 제안',
-      message: '최성민님이 친선 대국 매치를 제안했습니다. 수지 조율이 자동 적용됩니다.',
-      time: '방금 전',
-      isNew: true,
-      type: 'match'
-    },
-    {
-      id: 'notif-2',
-      title: '신규 친구 도달',
-      message: '강태윤님으로부터 대기 중인 친구 신청이 들어왔습니다.',
-      time: '15분 전',
-      isNew: true,
-      type: 'friend'
-    },
-    {
-      id: 'notif-3',
-      title: '주간 매뉴얼 리포트',
-      message: '최근 5경기 에버리지가 12% 상승했습니다! 📈 기록 분석 탭에서 차트를 확인해보세요.',
-      time: '2시간 전',
-      isNew: false,
-      type: 'report'
-    },
-    {
-      id: 'notif-4',
-      title: 'AI 수지 가이드',
-      message: '최근 10경기 고승률(65%) 기록 감안 시, 3구 수지를 +20점 향상하는 것이 공평합니다.',
-      time: '2일 전',
-      isNew: false,
-      type: 'system'
-    }
-  ]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
   const [headerFriendsCount, setHeaderFriendsCount] = useState(6);
   const [headerRequests, setHeaderRequests] = useState<any[]>([
@@ -677,7 +708,7 @@ function AppContent() {
   };
 
   const handleDeclineInvitation = () => {
-    const decNotif = {
+    const decNotif: AppNotification = {
       id: `notif-${Date.now()}`,
       title: '경기 초대 거절함',
       message: `${incomingInvitation?.name || '동호인'}님의 경기 초대를 거절하였습니다.`,
@@ -697,7 +728,7 @@ function AppContent() {
       gameType: incomingInvitation?.gameType || '3구'
     }));
     
-    const accNotif = {
+    const accNotif: AppNotification = {
       id: `notif-${Date.now()}`,
       title: '대국 매치 이동 중',
       message: `${incomingInvitation?.name || '동호인'}님의 초대를 수락하여 대국방에 입장합니다.`,
@@ -761,6 +792,99 @@ function AppContent() {
     setRecordsError('로그인이 만료되었습니다. 다시 로그인해 주세요.');
     navigate('/login');
   }, [navigate]);
+
+  const loadNotifications = useCallback(async () => {
+    if (!isLoggedIn) {
+      setNotifications([]);
+      return;
+    }
+
+    try {
+      const fetchedNotifications = await getNotifications();
+      setNotifications(fetchedNotifications.map(toAppNotification));
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [handleAuthExpired, isLoggedIn]);
+
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
+  useEffect(() => {
+    const handleNotificationsUpdated = () => {
+      void loadNotifications();
+    };
+
+    window.addEventListener('billiards_notifications_updated', handleNotificationsUpdated);
+    return () => {
+      window.removeEventListener('billiards_notifications_updated', handleNotificationsUpdated);
+    };
+  }, [loadNotifications]);
+
+  const handleMarkAllNotificationsRead = useCallback(async () => {
+    setNotifications((prev) => prev.map((notification) => ({ ...notification, isNew: false })));
+
+    try {
+      await markAllNotificationsAsRead();
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [handleAuthExpired]);
+
+  const handleMarkNotificationRead = useCallback(async (notificationId: string) => {
+    setNotifications((prev) =>
+      prev.map((notification) =>
+        notification.id === notificationId ? { ...notification, isNew: false } : notification
+      )
+    );
+
+    const serverNotificationId = toServerNotificationId(notificationId);
+    if (!serverNotificationId) {
+      return;
+    }
+
+    try {
+      await markNotificationAsRead(serverNotificationId);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [handleAuthExpired]);
+
+  const handleDeleteNotification = useCallback(async (notificationId: string) => {
+    setNotifications((prev) => prev.filter((notification) => notification.id !== notificationId));
+
+    const serverNotificationId = toServerNotificationId(notificationId);
+    if (!serverNotificationId) {
+      return;
+    }
+
+    try {
+      await deleteNotification(serverNotificationId);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [handleAuthExpired]);
+
+  const handleDeleteAllNotifications = useCallback(async () => {
+    setNotifications([]);
+
+    try {
+      await deleteAllNotifications();
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+      }
+    }
+  }, [handleAuthExpired]);
 
   const loadRecords = useCallback(async () => {
     if (!isLoggedIn) {
@@ -1372,7 +1496,7 @@ function AppContent() {
                               {notifications.some(n => n.isNew) && (
                                 <button
                                   onClick={() => {
-                                    setNotifications(prev => prev.map(n => ({ ...n, isNew: false })));
+                                    void handleMarkAllNotificationsRead();
                                   }}
                                   className="text-[10px] text-emerald-400 hover:text-emerald-300 font-bold px-2 py-1 rounded bg-[#1a5d4e]/50 hover:bg-[#1a5d4e] transition-colors"
                                 >
@@ -1390,7 +1514,7 @@ function AppContent() {
                                   <div 
                                     key={notif.id} 
                                     onClick={() => {
-                                      setNotifications(prev => prev.map(n => n.id === notif.id ? { ...n, isNew: false } : n));
+                                      void handleMarkNotificationRead(notif.id);
                                     }}
                                     className={cn(
                                       "p-4 cursor-pointer text-left transition-colors",
@@ -1410,7 +1534,7 @@ function AppContent() {
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setNotifications(prev => prev.filter(n => n.id !== notif.id));
+                                            void handleDeleteNotification(notif.id);
                                           }}
                                           className="p-1 hover:bg-orange-500/20 text-emerald-100/30 hover:text-orange-400 rounded transition-all"
                                           title="알림 삭제"
@@ -1440,7 +1564,9 @@ function AppContent() {
                               {notifications.length > 0 && (
                                 <button
                                   type="button"
-                                  onClick={() => setNotifications([])}
+                                  onClick={() => {
+                                    void handleDeleteAllNotifications();
+                                  }}
                                   className="flex-1 text-center py-3 text-[10px] font-black text-orange-400 hover:bg-orange-500/10 transition-colors uppercase tracking-wider"
                                 >
                                   전체 삭제
