@@ -17,6 +17,7 @@ This backend is designed as a modular monolith first. The package boundaries are
 ## Profiles
 
 - `local`: MySQL-based local development profile
+- `docker`: MySQL-based Docker Compose profile
 - `test`: H2-based test profile for fast context and repository tests
 
 ## Database Migration
@@ -29,6 +30,7 @@ The backend uses Flyway to manage database schema changes.
 - `V3__add_member_to_game_records.sql` connects game records to members
 - `V4__add_member_profile_fields.sql` adds member profile and billiards handicap settings
 - `V5__create_friendships_table.sql` creates friend request and friendship relationships
+- `V6__create_notifications_table.sql` creates user notifications
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -74,6 +76,16 @@ Run automated tests:
 .\gradlew.bat test
 ```
 
+## Docker Run
+
+From the project root, run the full stack:
+
+```powershell
+docker compose up --build
+```
+
+The backend runs with `SPRING_PROFILES_ACTIVE=docker`, connects to the Docker MySQL service, applies Flyway migrations, and serves the API on http://localhost:8080.
+
 ## Current Stage
 
 The backend currently includes:
@@ -93,3 +105,5 @@ The backend currently includes:
 - JWT-protected game record APIs scoped to the authenticated member
 - JWT-protected member profile/password APIs
 - JWT-protected friend list, friend request, and member search APIs
+- Notification REST APIs and realtime WebSocket delivery
+- Docker Compose development environment

@@ -1,0 +1,55 @@
+name: billiards
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: billiards-mysql
+    environment:
+      MYSQL_DATABASE: billiards
+      MYSQL_USER: billiards
+      MYSQL_PASSWORD: billiards
+      MYSQL_ROOT_PASSWORD: root
+      TZ: Asia/Seoul
+    ports:
+      - "13306:3306"
+    volumes:
+      - billiards-mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -ubilliards -p$${MYSQL_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./Backend
+    container_name: billiards-backend
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DB_URL: jdbc:mysql://mysql:3306/billiards?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+      DB_USERNAME: billiards
+      DB_PASSWORD: billiards
+      JWT_SECRET: docker-development-jwt-secret-change-me-please-32bytes
+      FRONTEND_URL: http://localhost:3000
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./Frontend
+      args:
+        VITE_API_BASE_URL: http://localhost:8080
+    container_name: billiards-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  billiards-mysql-data:
