@@ -2,6 +2,14 @@
 
 Full-stack billiards analytics project with a Spring Boot backend, React frontend, MySQL, Flyway migrations, JWT authentication, friend APIs, notifications, and realtime WebSocket notifications.
 
+## CI
+
+GitHub Actions automatically runs when a pull request targets `main` and when code is pushed to `main`.
+
+- Backend tests with Java 17 and Gradle
+- Frontend lint and production build with Node.js 22
+- Docker Compose configuration validation
+
 ## Docker Quick Start
 
 Run the full local stack from the project root:
