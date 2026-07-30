@@ -2,6 +2,8 @@ import {
   GameAverageTrend,
   GameRecord,
   GameRecordDraft,
+	GameRecordPage,
+	GameRecordSearchParams,
   GameStatistics,
   GameType,
 } from '../types';
@@ -15,6 +17,10 @@ type ApiGameRecord = Omit<GameRecord, 'id' | 'average'> & {
 type ApiGameAverageTrend = Omit<GameAverageTrend, 'gameRecordId' | 'average'> & {
 	gameRecordId: number | string;
 	average: number | string;
+};
+
+type ApiGameRecordPage = Omit<GameRecordPage, 'content'> & {
+	content: ApiGameRecord[];
 };
 
 type ApiGameStatistics = Omit<
@@ -53,6 +59,25 @@ const toCreateRequest = (record: GameRecordDraft) => ({
 export const getGameRecords = async () => {
   const records = await apiRequest<ApiGameRecord[]>('/api/game-records');
   return records.map(normalizeGameRecord);
+};
+
+export const searchGameRecords = async (params: GameRecordSearchParams) => {
+	const query = new URLSearchParams({
+		page: String(params.page),
+		size: String(params.size),
+	});
+
+	if (params.type) query.set('type', params.type);
+	if (params.mode) query.set('mode', params.mode);
+	if (params.playerCount) query.set('playerCount', String(params.playerCount));
+	if (params.keyword) query.set('keyword', params.keyword);
+
+	const result = await apiRequest<ApiGameRecordPage>(`/api/game-records/search?${query}`);
+
+	return {
+		...result,
+		content: result.content.map(normalizeGameRecord),
+	};
 };
 
 export const getGameStatistics = async (type: GameType, recentGameCount: number) => {

@@ -27,6 +27,24 @@ export type GameRecordDraft = Omit<GameRecord, 'id' | 'average' | 'win' | 'mode'
   mode?: GameMode;
 };
 
+export interface GameRecordSearchParams {
+  type?: GameType;
+  mode?: GameMode;
+  playerCount?: 2 | 3 | 4;
+  keyword?: string;
+  page: number;
+  size: number;
+}
+
+export interface GameRecordPage {
+  content: GameRecord[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+}
+
 export interface PlayerStats {
   totalGames: number;
   wins: number;

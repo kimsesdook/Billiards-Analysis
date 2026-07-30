@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   BrowserRouter as Router,
   Routes,
@@ -46,7 +46,7 @@ import {
   Globe,
   Key
 } from 'lucide-react';
-import { GameRecord, GameRecordDraft, GameStatistics, PlayerStats, GameType } from './types';
+import { GameRecord, GameRecordDraft, GameRecordPage, GameRecordSearchParams, GameStatistics, PlayerStats, GameType } from './types';
 import { StatsChart } from './components/StatsChart';
 import { GuidePage } from './components/GuidePage';
 import { LoginPage } from './components/LoginPage';
@@ -67,6 +67,7 @@ import {
   deleteGameRecord,
   getGameRecords,
   getGameStatistics,
+	searchGameRecords,
   updateGameRecord,
 } from './api/gameRecords';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
@@ -163,6 +164,15 @@ const createEmptyGameStatistics = (type: GameType): GameStatistics => ({
   recentAverageTrends: [],
 });
 
+const createEmptyGameRecordPage = (): GameRecordPage => ({
+	content: [],
+	page: 0,
+	size: 10,
+	totalElements: 0,
+	totalPages: 0,
+	hasNext: false,
+});
+
 function BilliardsLogo() {
   return (
     <div className="relative w-10 h-10 flex items-center justify-center">
@@ -191,6 +201,10 @@ function AppContent() {
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
+	const [recordSearchPage, setRecordSearchPage] = useState<GameRecordPage>(createEmptyGameRecordPage);
+	const [isRecordSearchLoading, setIsRecordSearchLoading] = useState(false);
+	const [recordSearchError, setRecordSearchError] = useState<string | null>(null);
+	const recordSearchRequestIdRef = useRef(0);
   const [filter, setFilter] = useState<GameType>('3-Cushion');
   const [recentGameCount, setRecentGameCount] = useState<5 | 10 | 20>(10);
   const [gameStatistics, setGameStatistics] = useState<GameStatistics>(() =>
@@ -992,6 +1006,43 @@ function AppContent() {
   useEffect(() => {
     void loadRecords();
   }, [loadRecords]);
+
+	const loadRecordSearchPage = useCallback(async (params: GameRecordSearchParams) => {
+		const requestId = ++recordSearchRequestIdRef.current;
+
+		if (!isLoggedIn) {
+			setRecordSearchPage(createEmptyGameRecordPage());
+			setRecordSearchError(null);
+			setIsRecordSearchLoading(false);
+			return;
+		}
+
+		setIsRecordSearchLoading(true);
+		setRecordSearchError(null);
+
+		try {
+			const result = await searchGameRecords(params);
+			if (requestId === recordSearchRequestIdRef.current) {
+				setRecordSearchPage({
+					...result,
+					content: result.content.map(fillMissingInningScores),
+				});
+			}
+		} catch (error) {
+			if (error instanceof ApiClientError && error.status === 401) {
+				handleAuthExpired();
+				return;
+			}
+
+			if (requestId === recordSearchRequestIdRef.current) {
+				setRecordSearchError(getApiErrorMessage(error));
+			}
+		} finally {
+			if (requestId === recordSearchRequestIdRef.current) {
+				setIsRecordSearchLoading(false);
+			}
+		}
+	}, [handleAuthExpired, isLoggedIn]);
 
   const loadStatistics = useCallback(async () => {
     if (!isLoggedIn) {
@@ -1992,10 +2043,11 @@ function AppContent() {
             path="/records"
             element={requireAuth(
               <GameRecordsPage
-                records={records}
-                isLoading={isRecordsLoading}
-                errorMessage={recordsError}
-                onRetry={loadRecords}
+				records={recordSearchPage.content}
+				pageInfo={recordSearchPage}
+				isLoading={isRecordSearchLoading}
+				errorMessage={recordSearchError}
+				onSearch={loadRecordSearchPage}
                 onDelete={removeRecord}
                 onUpdate={updateRecord}
               />
