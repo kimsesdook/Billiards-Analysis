@@ -1,6 +1,6 @@
-import React, { useState, useMemo } from 'react';
-import { AlertCircle, History, Search, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
-import { GameRecord, GameRecordDraft } from '../types';
+import React, { useCallback, useEffect, useState } from 'react';
+import { AlertCircle, History, Search, ChevronLeft, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { GameRecord, GameRecordDraft, GameRecordPage, GameRecordSearchParams } from '../types';
 import { GameRecordEditModal } from './GameRecordEditModal';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
@@ -21,6 +21,7 @@ import {
 } from 'recharts';
 
 const COLORS = ['#10b981', '#1a5d4e', '#34d399', '#059669', '#6366f1'];
+const PAGE_SIZE = 10;
 
 function calculatePattern(scores: number[]) {
   if (!scores || scores.length < 4) return { label: '데이터 부족', color: 'text-emerald-500/40', bg: 'bg-[#1a5d4e]/10', icon: '❓' };
@@ -46,21 +47,51 @@ function calculatePattern(scores: number[]) {
 
 interface GameRecordsPageProps {
   records: GameRecord[];
+	pageInfo: GameRecordPage;
   isLoading?: boolean;
   errorMessage?: string | null;
-  onRetry?: () => void | Promise<void>;
+	onSearch: (params: GameRecordSearchParams) => void | Promise<void>;
   onDelete?: (recordId: string) => void | Promise<void>;
   onUpdate?: (recordId: string, record: GameRecordDraft) => GameRecord | void | Promise<GameRecord | void>;
 }
 
-export function GameRecordsPage({ records, isLoading = false, errorMessage = null, onRetry, onDelete, onUpdate }: GameRecordsPageProps) {
+export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMessage = null, onSearch, onDelete, onUpdate }: GameRecordsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
+	const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [modeFilter, setModeFilter] = useState<'all' | 'Individual' | 'Team'>('all');
   const [playerFilter, setPlayerFilter] = useState<'all' | 2 | 3 | 4>('all');
   const [gameTypeFilter, setGameTypeFilter] = useState<'all' | '3-Cushion' | '4-Ball'>('all');
+	const [currentPage, setCurrentPage] = useState(0);
   const [selectedRecord, setSelectedRecord] = useState<GameRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<GameRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+	useEffect(() => {
+		const timeoutId = window.setTimeout(() => {
+			setDebouncedKeyword(searchQuery.trim());
+		}, 300);
+
+		return () => window.clearTimeout(timeoutId);
+	}, [searchQuery]);
+
+	const requestSearchPage = useCallback(async (page: number) => {
+		await onSearch({
+			type: gameTypeFilter === 'all' ? undefined : gameTypeFilter,
+			mode: modeFilter === 'all' ? undefined : modeFilter,
+			playerCount: modeFilter === 'Team' || playerFilter === 'all' ? undefined : playerFilter,
+			keyword: debouncedKeyword || undefined,
+			page,
+			size: PAGE_SIZE,
+		});
+	}, [debouncedKeyword, gameTypeFilter, modeFilter, onSearch, playerFilter]);
+
+	const isKeywordDebouncing = debouncedKeyword !== searchQuery.trim();
+
+	useEffect(() => {
+		if (isKeywordDebouncing) return;
+
+		void requestSearchPage(currentPage);
+	}, [currentPage, isKeywordDebouncing, requestSearchPage]);
 
   const handleDeleteSelectedRecord = async () => {
     if (!selectedRecord || !onDelete) return;
@@ -70,6 +101,13 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
       setIsDeleting(true);
       await onDelete(selectedRecord.id);
       setSelectedRecord(null);
+		setEditingRecord(null);
+
+		if (records.length === 1 && currentPage > 0) {
+			setCurrentPage(currentPage - 1);
+		} else {
+			void requestSearchPage(currentPage);
+		}
     } catch {
       // The parent API handler owns the user-facing error message.
     } finally {
@@ -83,21 +121,8 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
     await onUpdate(editingRecord.id, record);
     setEditingRecord(null);
     setSelectedRecord(null);
+		void requestSearchPage(currentPage);
   };
-
-  const filteredRecords = useMemo(() => {
-    return records.filter(record => {
-      const matchesSearch = searchQuery === '' || 
-        (record.notes?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (record.opponentName?.toLowerCase().includes(searchQuery.toLowerCase()));
-      
-      const matchesMode = modeFilter === 'all' || record.mode === modeFilter;
-      const matchesPlayer = modeFilter === 'Team' ? true : (playerFilter === 'all' || record.playerCount === playerFilter);
-      const matchesType = gameTypeFilter === 'all' || record.type === gameTypeFilter;
-      
-      return matchesSearch && matchesMode && matchesPlayer && matchesType;
-    });
-  }, [records, searchQuery, modeFilter, playerFilter, gameTypeFilter]);
 
   return (
     <div className="max-w-5xl mx-auto space-y-8 pb-20">
@@ -115,7 +140,10 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
             <input 
               type="text" 
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+				setSearchQuery(e.target.value);
+				setCurrentPage(0);
+			}}
               placeholder="닉네임 검색"
               className="bg-[#0d4d3b] border border-[#1a5d4e] rounded-2xl pl-6 pr-12 py-4 text-sm text-emerald-50 focus:outline-none focus:border-emerald-500 transition-all w-full shadow-lg"
             />
@@ -132,6 +160,7 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
                   onClick={() => {
                     setModeFilter(m);
                     if (m === 'Team') setPlayerFilter('all');
+					setCurrentPage(0);
                   }}
                   className={cn(
                     "px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
@@ -150,7 +179,10 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
               {(['all', '3-Cushion', '4-Ball'] as const).map((t) => (
                 <button
                   key={t}
-                  onClick={() => setGameTypeFilter(t)}
+                  onClick={() => {
+					setGameTypeFilter(t);
+					setCurrentPage(0);
+				}}
                   className={cn(
                     "px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
                     gameTypeFilter === t 
@@ -174,7 +206,10 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
               {([ 'all', 2, 3, 4 ] as const).map((num) => (
                 <button
                   key={num}
-                  onClick={() => setPlayerFilter(num)}
+                  onClick={() => {
+					setPlayerFilter(num);
+					setCurrentPage(0);
+				}}
                   className={cn(
                     "px-6 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap",
                     playerFilter === num 
@@ -200,16 +235,14 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
               <p className="text-xs text-red-100/70 mt-1">{errorMessage}</p>
             </div>
           </div>
-          {onRetry && (
-            <button
+          <button
               type="button"
-              onClick={() => void onRetry()}
+              onClick={() => void requestSearchPage(currentPage)}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-400/20 px-4 py-2 text-xs font-black text-red-50 hover:bg-red-400/30 transition-colors"
             >
               <RefreshCw size={14} />
               다시 시도
             </button>
-          )}
         </div>
       )}
 
@@ -220,7 +253,7 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
             {playerFilter === 'all' ? '전체' : `${playerFilter}인전`} 경기 내역
           </h2>
           <span className="text-xs font-bold text-emerald-500/50 uppercase tracking-widest">
-            Total {filteredRecords.length} Games
+            Total {pageInfo.totalElements} Games
           </span>
         </div>
 
@@ -230,7 +263,7 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
               <Loader2 size={32} className="mx-auto mb-4 animate-spin text-emerald-400" />
               <p className="text-sm font-bold text-emerald-100/60">서버에서 경기 기록을 불러오는 중입니다.</p>
             </div>
-          ) : filteredRecords.map((record) => (
+          ) : records.map((record) => (
             <div 
               key={record.id} 
               onClick={() => setSelectedRecord(record)}
@@ -297,7 +330,7 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
             </div>
           ))}
 
-          {!isLoading && filteredRecords.length === 0 && (
+          {!isLoading && records.length === 0 && (
             <div className="py-32 text-center">
               <div className="w-20 h-20 bg-[#1a5d4e]/20 rounded-[2rem] flex items-center justify-center mx-auto mb-6">
                 <History size={32} className="text-emerald-500/20" />
@@ -308,6 +341,34 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
           )}
         </div>
       </div>
+
+		{pageInfo.totalElements > 0 && (
+			<div className="flex items-center justify-center gap-4">
+				<button
+					type="button"
+					onClick={() => setCurrentPage((page) => Math.max(0, page - 1))}
+					disabled={isLoading || currentPage === 0}
+					className="p-2 text-emerald-100/70 transition-colors hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-30"
+					title="이전 페이지"
+					aria-label="이전 페이지"
+				>
+					<ChevronLeft size={20} />
+				</button>
+				<span className="min-w-20 text-center text-sm font-bold text-emerald-100/70">
+					{pageInfo.page + 1} / {pageInfo.totalPages}
+				</span>
+				<button
+					type="button"
+					onClick={() => setCurrentPage((page) => page + 1)}
+					disabled={isLoading || !pageInfo.hasNext}
+					className="p-2 text-emerald-100/70 transition-colors hover:text-emerald-300 disabled:cursor-not-allowed disabled:opacity-30"
+					title="다음 페이지"
+					aria-label="다음 페이지"
+				>
+					<ChevronRight size={20} />
+				</button>
+			</div>
+		)}
 
       <AnimatePresence>
         {selectedRecord && (
