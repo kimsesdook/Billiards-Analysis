@@ -56,16 +56,19 @@ public class GameRecordController {
 		@AuthenticationPrincipal AuthenticatedMember member,
 		@RequestParam(required = false) String type,
 		@RequestParam(required = false) String mode,
+		@RequestParam(required = false) Integer playerCount,
 		@RequestParam(required = false) String keyword,
 		@RequestParam(defaultValue = "0") int page,
 		@RequestParam(defaultValue = "20") int size
 	) {
 		validatePageRequest(page, size);
+		validatePlayerCount(playerCount);
 
 		return ApiResponse.success(gameRecordService.search(
 			member.id(),
 			toOptionalGameType(type),
 			toOptionalGameMode(mode),
+			playerCount,
 			keyword,
 			page,
 			size
@@ -159,6 +162,15 @@ public class GameRecordController {
 			throw new BilliardsException(
 				ErrorCode.INVALID_INPUT_VALUE,
 				"size must be between 1 and " + MAX_PAGE_SIZE + "."
+			);
+		}
+	}
+
+	private void validatePlayerCount(Integer playerCount) {
+		if (playerCount != null && (playerCount < 2 || playerCount > 4)) {
+			throw new BilliardsException(
+				ErrorCode.INVALID_INPUT_VALUE,
+				"playerCount must be between 2 and 4."
 			);
 		}
 	}
