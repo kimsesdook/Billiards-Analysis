@@ -7,6 +7,7 @@ import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
+import com.my.billiards.game.dto.GameRecordUpdateRequest;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -66,6 +68,15 @@ public class GameRecordController {
 		@PathVariable Long id
 	) {
 		return ApiResponse.success(gameRecordService.findById(member.id(), id));
+	}
+
+	@PatchMapping("/{id}")
+	public ApiResponse<GameRecordResponse> update(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@PathVariable Long id,
+		@Valid @RequestBody GameRecordUpdateRequest request
+	) {
+		return ApiResponse.success(gameRecordService.update(member.id(), id, request));
 	}
 
 	@DeleteMapping("/{id}")

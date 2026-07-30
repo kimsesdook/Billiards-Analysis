@@ -17,6 +17,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -227,6 +228,96 @@ class GameRecordControllerTest {
 			.andExpect(status().isNotFound())
 			.andExpect(jsonPath("$.success").value(false))
 			.andExpect(jsonPath("$.code").value("COMMON_002"));
+	}
+
+	@Test
+	void updateGameRecordRecalculatesAverageAndWin() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+		Long id = createSampleRecord(token, "Before Update");
+
+		mockMvc.perform(patch("/api/game-records/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "date": "2026-07-12T10:00:00Z",
+					  "type": "4-Ball",
+					  "mode": "Individual",
+					  "myScore": 30,
+					  "opponentScore": 31,
+					  "innings": 20,
+					  "highRun": 7,
+					  "playerCount": 2,
+					  "rank": 1,
+					  "lastThreeCushions": 2,
+					  "notes": "Updated record",
+					  "opponentName": "Updated Opponent",
+					  "inningScores": [1, 2, 3],
+					  "myCushionScore": 2,
+					  "opponentCushionScore": 1
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.type").value("4-Ball"))
+			.andExpect(jsonPath("$.data.myScore").value(30))
+			.andExpect(jsonPath("$.data.average").value(1.5))
+			.andExpect(jsonPath("$.data.win").value(false))
+			.andExpect(jsonPath("$.data.rank").doesNotExist())
+			.andExpect(jsonPath("$.data.lastThreeCushions").value(2))
+			.andExpect(jsonPath("$.data.inningScores", hasSize(3)));
+
+		mockMvc.perform(get("/api/game-records/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.opponentName").value("Updated Opponent"))
+			.andExpect(jsonPath("$.data.notes").value("Updated record"));
+	}
+
+	@Test
+	void rejectUpdatingOtherMembersRecordAsNotFound() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		Long otherRecordId = createSampleRecord(otherToken, "Other Record");
+
+		mockMvc.perform(patch("/api/game-records/{id}", otherRecordId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(gameRecordJson("Unauthorized Update")))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+
+		mockMvc.perform(get("/api/game-records/{id}", otherRecordId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(otherToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.opponentName").value("Other Record"));
+	}
+
+	@Test
+	void rejectInvalidUpdateGameRecordRequest() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+		Long id = createSampleRecord(token, "Opponent");
+
+		mockMvc.perform(patch("/api/game-records/{id}", id)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "date": "2026-07-11T10:00:00Z",
+					  "type": "3-Cushion",
+					  "mode": "Individual",
+					  "myScore": 15,
+					  "opponentScore": 12,
+					  "innings": 0,
+					  "highRun": 4,
+					  "playerCount": 2
+					}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"))
+			.andExpect(jsonPath("$.errors[0].field").value("innings"));
 	}
 
 	@Test

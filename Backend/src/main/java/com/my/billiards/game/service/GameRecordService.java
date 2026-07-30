@@ -9,6 +9,7 @@ import com.my.billiards.game.dto.GameAverageTrendResponse;
 import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
+import com.my.billiards.game.dto.GameRecordUpdateRequest;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.domain.MemberStatus;
@@ -67,6 +68,30 @@ public class GameRecordService {
 	@Transactional(readOnly = true)
 	public GameRecordResponse findById(Long memberId, Long id) {
 		return GameRecordResponse.from(getGameRecord(memberId, id));
+	}
+
+	@Transactional
+	public GameRecordResponse update(Long memberId, Long id, GameRecordUpdateRequest request) {
+		GameRecord gameRecord = getGameRecord(memberId, id);
+		gameRecord.update(
+			request.date(),
+			request.type(),
+			request.mode(),
+			request.myScore(),
+			request.opponentScore(),
+			request.innings(),
+			request.highRun(),
+			request.playerCount(),
+			request.rank(),
+			request.lastThreeCushions(),
+			request.notes(),
+			request.opponentName(),
+			request.inningScores(),
+			request.myCushionScore(),
+			request.opponentCushionScore()
+		);
+
+		return GameRecordResponse.from(gameRecord);
 	}
 
 	@Transactional(readOnly = true)

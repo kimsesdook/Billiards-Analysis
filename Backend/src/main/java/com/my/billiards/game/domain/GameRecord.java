@@ -117,6 +117,42 @@ public class GameRecord extends BaseTimeEntity {
 		Integer opponentCushionScore
 	) {
 		this.member = member;
+		update(
+			playedAt,
+			type,
+			mode,
+			myScore,
+			opponentScore,
+			innings,
+			highRun,
+			playerCount,
+			rank,
+			lastThreeCushions,
+			notes,
+			opponentName,
+			inningScores,
+			myCushionScore,
+			opponentCushionScore
+		);
+	}
+
+	public void update(
+		OffsetDateTime playedAt,
+		GameType type,
+		GameMode mode,
+		int myScore,
+		int opponentScore,
+		int innings,
+		int highRun,
+		int playerCount,
+		Integer rank,
+		Integer lastThreeCushions,
+		String notes,
+		String opponentName,
+		List<Integer> inningScores,
+		Integer myCushionScore,
+		Integer opponentCushionScore
+	) {
 		this.playedAt = playedAt;
 		this.type = type;
 		this.mode = mode;
@@ -131,7 +167,8 @@ public class GameRecord extends BaseTimeEntity {
 		this.lastThreeCushions = type == GameType.FOUR_BALL ? lastThreeCushions : null;
 		this.notes = notes;
 		this.opponentName = opponentName;
-		this.inningScores = new ArrayList<>(inningScores == null ? List.of() : inningScores);
+		this.inningScores.clear();
+		this.inningScores.addAll(inningScores == null ? List.of() : inningScores);
 		this.myCushionScore = type == GameType.FOUR_BALL ? myCushionScore : null;
 		this.opponentCushionScore = type == GameType.FOUR_BALL ? opponentCushionScore : null;
 	}
