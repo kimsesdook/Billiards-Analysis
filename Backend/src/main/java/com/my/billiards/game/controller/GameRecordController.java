@@ -10,6 +10,7 @@ import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.GameRecordUpdateRequest;
+import com.my.billiards.game.dto.OpponentStatisticsResponse;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
 import jakarta.validation.Valid;
@@ -49,6 +50,13 @@ public class GameRecordController {
 	@GetMapping
 	public ApiResponse<List<GameRecordResponse>> findAll(@AuthenticationPrincipal AuthenticatedMember member) {
 		return ApiResponse.success(gameRecordService.findAll(member.id()));
+	}
+
+	@GetMapping("/opponent-statistics")
+	public ApiResponse<List<OpponentStatisticsResponse>> getOpponentStatistics(
+		@AuthenticationPrincipal AuthenticatedMember member
+	) {
+		return ApiResponse.success(gameRecordService.getOpponentStatistics(member.id()));
 	}
 
 	@GetMapping("/search")

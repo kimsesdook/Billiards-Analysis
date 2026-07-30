@@ -20,6 +20,25 @@ public interface GameRecordRepository extends JpaRepository<GameRecord, Long> {
 	Optional<GameRecord> findByIdAndMemberId(Long id, Long memberId);
 
 	@Query("""
+		select new com.my.billiards.game.repository.OpponentStatisticsProjection(
+			coalesce(nullif(trim(gameRecord.opponentName), ''), 'Anonymous'),
+			count(gameRecord),
+			sum(case when gameRecord.win = true then 1 else 0 end),
+			sum(gameRecord.myScore),
+			sum(gameRecord.opponentScore),
+			sum(gameRecord.innings),
+			max(gameRecord.average),
+			max(gameRecord.highRun),
+			max(gameRecord.playedAt)
+		)
+		from GameRecord gameRecord
+		where gameRecord.member.id = :memberId
+		group by coalesce(nullif(trim(gameRecord.opponentName), ''), 'Anonymous')
+		order by count(gameRecord) desc, max(gameRecord.playedAt) desc
+		""")
+	List<OpponentStatisticsProjection> findOpponentStatisticsByMemberId(@Param("memberId") Long memberId);
+
+	@Query("""
 		select gameRecord
 		from GameRecord gameRecord
 		where gameRecord.member.id = :memberId

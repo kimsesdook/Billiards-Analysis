@@ -12,6 +12,7 @@ import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.GameRecordUpdateRequest;
+import com.my.billiards.game.dto.OpponentStatisticsResponse;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.domain.MemberStatus;
@@ -72,6 +73,14 @@ public class GameRecordService {
 	@Transactional(readOnly = true)
 	public GameRecordResponse findById(Long memberId, Long id) {
 		return GameRecordResponse.from(getGameRecord(memberId, id));
+	}
+
+	@Transactional(readOnly = true)
+	public List<OpponentStatisticsResponse> getOpponentStatistics(Long memberId) {
+		return gameRecordRepository.findOpponentStatisticsByMemberId(memberId)
+			.stream()
+			.map(OpponentStatisticsResponse::from)
+			.toList();
 	}
 
 	@Transactional(readOnly = true)
