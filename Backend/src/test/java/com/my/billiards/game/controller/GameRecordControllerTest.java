@@ -115,11 +115,21 @@ class GameRecordControllerTest {
 		createSearchRecord(myToken, "2026-07-01T10:00:00Z", "3-Cushion", "Individual", "Alex Kim", "Opening match");
 		createSearchRecord(myToken, "2026-07-02T10:00:00Z", "4-Ball", "Team", "Bora Lee", "Team match");
 		createSearchRecord(myToken, "2026-07-03T10:00:00Z", "3-Cushion", "Individual", "Alex Park", "Keyword match");
-		createSearchRecord(otherToken, "2026-07-04T10:00:00Z", "3-Cushion", "Individual", "Alex Other", "Other member");
+		createSearchRecord(
+			myToken,
+			"2026-07-04T10:00:00Z",
+			"3-Cushion",
+			"Individual",
+			"Alex Three",
+			"Three player match",
+			3
+		);
+		createSearchRecord(otherToken, "2026-07-05T10:00:00Z", "3-Cushion", "Individual", "Alex Other", "Other member");
 
 		mockMvc.perform(get("/api/game-records/search")
 				.queryParam("type", "3-Cushion")
 				.queryParam("mode", "Individual")
+				.queryParam("playerCount", "2")
 				.queryParam("keyword", "alex")
 				.queryParam("page", "0")
 				.queryParam("size", "1")
@@ -137,6 +147,7 @@ class GameRecordControllerTest {
 		mockMvc.perform(get("/api/game-records/search")
 				.queryParam("type", "3-Cushion")
 				.queryParam("mode", "Individual")
+				.queryParam("playerCount", "2")
 				.queryParam("keyword", "alex")
 				.queryParam("page", "1")
 				.queryParam("size", "1")
@@ -160,6 +171,13 @@ class GameRecordControllerTest {
 
 		mockMvc.perform(get("/api/game-records/search")
 				.queryParam("size", "101")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+
+		mockMvc.perform(get("/api/game-records/search")
+				.queryParam("playerCount", "5")
 				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
 			.andExpect(status().isBadRequest())
 			.andExpect(jsonPath("$.success").value(false))
@@ -470,6 +488,18 @@ class GameRecordControllerTest {
 		String opponentName,
 		String notes
 	) throws Exception {
+		createSearchRecord(token, date, type, mode, opponentName, notes, 2);
+	}
+
+	private void createSearchRecord(
+		String token,
+		String date,
+		String type,
+		String mode,
+		String opponentName,
+		String notes,
+		int playerCount
+	) throws Exception {
 		mockMvc.perform(post("/api/game-records")
 				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
@@ -482,11 +512,11 @@ class GameRecordControllerTest {
 					  "opponentScore": 12,
 					  "innings": 18,
 					  "highRun": 4,
-					  "playerCount": 2,
+					  "playerCount": %d,
 					  "opponentName": "%s",
 					  "notes": "%s"
 					}
-					""".formatted(date, type, mode, opponentName, notes)))
+					""".formatted(date, type, mode, playerCount, opponentName, notes)))
 			.andExpect(status().isCreated());
 	}
 

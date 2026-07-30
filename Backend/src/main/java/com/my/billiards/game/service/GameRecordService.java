@@ -79,6 +79,7 @@ public class GameRecordService {
 		Long memberId,
 		GameType type,
 		GameMode mode,
+		Integer playerCount,
 		String keyword,
 		int page,
 		int size
@@ -90,7 +91,14 @@ public class GameRecordService {
 		);
 
 		return PageResponse.from(
-			gameRecordRepository.searchByConditions(memberId, type, mode, normalizeKeyword(keyword), pageRequest),
+			gameRecordRepository.searchByConditions(
+				memberId,
+				type,
+				mode,
+				playerCount,
+				normalizeKeyword(keyword),
+				pageRequest
+			),
 			GameRecordResponse::from
 		);
 	}

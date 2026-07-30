@@ -25,6 +25,7 @@ public interface GameRecordRepository extends JpaRepository<GameRecord, Long> {
 		where gameRecord.member.id = :memberId
 		  and (:type is null or gameRecord.type = :type)
 		  and (:mode is null or gameRecord.mode = :mode)
+		  and (:playerCount is null or gameRecord.playerCount = :playerCount)
 		  and (
 			:keyword is null
 			or lower(coalesce(gameRecord.opponentName, '')) like lower(concat('%', :keyword, '%'))
@@ -35,6 +36,7 @@ public interface GameRecordRepository extends JpaRepository<GameRecord, Long> {
 		@Param("memberId") Long memberId,
 		@Param("type") GameType type,
 		@Param("mode") GameMode mode,
+		@Param("playerCount") Integer playerCount,
 		@Param("keyword") String keyword,
 		Pageable pageable
 	);
