@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   BarChart, 
   Bar, 
@@ -27,9 +27,13 @@ import {
   Trophy,
   PieChart as PieChartIcon,
   Search,
-  Sparkles
+  Sparkles,
+  Loader2,
+  RefreshCw
 } from 'lucide-react';
-import { GameRecord, GameType } from '../types';
+import { GameRecord, GameType, OpponentStatistics } from '../types';
+import { getOpponentStatistics } from '../api/gameRecords';
+import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -104,10 +108,15 @@ interface FilterState {
 
 const COLORS = ['#10b981', '#1a5d4e', '#34d399', '#059669', '#6366f1'];
 
+const getOpponentName = (record: GameRecord) => record.opponentName?.trim() || 'Anonymous';
+
 export function AnalysisPage({ records }: AnalysisPageProps) {
   const [activeTab, setActiveTab] = useState<'individual' | 'records'>('individual');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedOpponentName, setSelectedOpponentName] = useState<string | null>(null);
+  const [opponentStatistics, setOpponentStatistics] = useState<OpponentStatistics[]>([]);
+  const [isOpponentStatisticsLoading, setIsOpponentStatisticsLoading] = useState(false);
+  const [opponentStatisticsError, setOpponentStatisticsError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     type: '3-Cushion',
     mode: 'all',
@@ -119,6 +128,23 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
   useEffect(() => {
     setSelectedOpponentName(null);
   }, [activeTab]);
+
+  const loadOpponentStatistics = useCallback(async () => {
+    setIsOpponentStatisticsLoading(true);
+    setOpponentStatisticsError(null);
+
+    try {
+      setOpponentStatistics(await getOpponentStatistics());
+    } catch (error) {
+      setOpponentStatisticsError(getApiErrorMessage(error));
+    } finally {
+      setIsOpponentStatisticsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadOpponentStatistics();
+  }, [loadOpponentStatistics, records]);
 
   const getStatsForType = (type: GameType, filters: FilterState) => {
     let result = [...records].reverse().filter(r => r.type === type);
@@ -260,38 +286,18 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
     [records, filters]
   );
 
-  const opponentStats = useMemo(() => {
-    const stats: Record<string, {
-      name: string;
-      totalGames: number;
-      wins: number;
-      myTotalScore: number;
-      opTotalScore: number;
-      innings: number;
-      bestAvg: number;
-      highRun: number;
-    }> = {};
-
-    records.forEach(r => {
-      const name = r.opponentName || '익명';
-      if (!stats[name]) {
-        stats[name] = { name, totalGames: 0, wins: 0, myTotalScore: 0, opTotalScore: 0, innings: 0, bestAvg: 0, highRun: 0 };
-      }
-      stats[name].totalGames += 1;
-      if (r.win) stats[name].wins += 1;
-      stats[name].myTotalScore += r.myScore;
-      stats[name].opTotalScore += r.opponentScore;
-      stats[name].innings += r.innings;
-      stats[name].bestAvg = Math.max(stats[name].bestAvg, r.average);
-      stats[name].highRun = Math.max(stats[name].highRun, r.highRun);
-    });
-
-    return Object.values(stats).map(s => ({
-      ...s,
-      winRate: parseFloat(((s.wins / s.totalGames) * 100).toFixed(1)),
-      avg: s.innings > 0 ? parseFloat((s.myTotalScore / s.innings).toFixed(3)) : 0
-    })).sort((a, b) => b.totalGames - a.totalGames);
-  }, [records]);
+  const opponentStats = useMemo(() => opponentStatistics.map((statistics) => ({
+    name: statistics.opponentName,
+    totalGames: statistics.totalGames,
+    wins: statistics.wins,
+    myTotalScore: statistics.totalMyScore,
+    opTotalScore: statistics.totalOpponentScore,
+    innings: statistics.totalInnings,
+    bestAvg: statistics.bestAverage,
+    highRun: statistics.maxHighRun,
+    winRate: statistics.winRate,
+    avg: statistics.overallAverage,
+  })), [opponentStatistics]);
 
   const filteredOpponentStats = useMemo(() => {
     if (!searchQuery.trim()) return opponentStats;
@@ -305,7 +311,7 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
     const statsObj = opponentStats.find(s => s.name === selectedOpponentName);
     if (!statsObj) return null;
 
-    const oppGames = records.filter(r => (r.opponentName || '익명') === selectedOpponentName);
+    const oppGames = records.filter(record => getOpponentName(record) === selectedOpponentName);
 
     const games3c = oppGames.filter(g => g.type === '3-Cushion');
     const games4b = oppGames.filter(g => g.type === '4-Ball');
@@ -539,7 +545,13 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#1a5d4e]">
-                  {filteredOpponentStats.length === 0 ? (
+                  {isOpponentStatisticsLoading ? (
+                    <tr>
+                      <td colSpan={5} className="py-20 text-center">
+                        <Loader2 size={28} className="mx-auto animate-spin text-emerald-400" />
+                      </td>
+                    </tr>
+                  ) : filteredOpponentStats.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-20 text-center">
                         <div className="flex flex-col items-center justify-center">
@@ -590,6 +602,20 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
                 </tbody>
               </table>
             </div>
+
+            {opponentStatisticsError && (
+              <div className="flex items-center justify-between gap-4 border-t border-red-400/20 bg-red-400/10 px-6 py-4 text-sm text-red-100">
+                <span>{opponentStatisticsError}</span>
+                <button
+                  type="button"
+                  onClick={() => void loadOpponentStatistics()}
+                  className="inline-flex items-center gap-2 text-xs font-bold text-red-100 transition-colors hover:text-white"
+                >
+                  <RefreshCw size={14} />
+                  다시 시도
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Elegant Status Window Modal Overlay */}
@@ -1356,6 +1382,3 @@ function AnalysisSection({ stats, playerCount, mode, cushions }: {
     </div>
   );
 }
-
-
-

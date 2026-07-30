@@ -4,6 +4,7 @@ import {
   GameRecordDraft,
 	GameRecordPage,
 	GameRecordSearchParams,
+	OpponentStatistics,
   GameStatistics,
   GameType,
 } from '../types';
@@ -21,6 +22,11 @@ type ApiGameAverageTrend = Omit<GameAverageTrend, 'gameRecordId' | 'average'> & 
 
 type ApiGameRecordPage = Omit<GameRecordPage, 'content'> & {
 	content: ApiGameRecord[];
+};
+
+type ApiOpponentStatistics = Omit<OpponentStatistics, 'overallAverage' | 'bestAverage'> & {
+	overallAverage: number | string;
+	bestAverage: number | string;
 };
 
 type ApiGameStatistics = Omit<
@@ -51,6 +57,12 @@ const normalizeGameStatistics = (statistics: ApiGameStatistics): GameStatistics 
 	})),
 });
 
+const normalizeOpponentStatistics = (statistics: ApiOpponentStatistics): OpponentStatistics => ({
+	...statistics,
+	overallAverage: Number(statistics.overallAverage),
+	bestAverage: Number(statistics.bestAverage),
+});
+
 const toCreateRequest = (record: GameRecordDraft) => ({
   ...record,
   mode: record.mode || 'Individual',
@@ -78,6 +90,12 @@ export const searchGameRecords = async (params: GameRecordSearchParams) => {
 		...result,
 		content: result.content.map(normalizeGameRecord),
 	};
+};
+
+export const getOpponentStatistics = async () => {
+	const statistics = await apiRequest<ApiOpponentStatistics[]>('/api/game-records/opponent-statistics');
+
+	return statistics.map(normalizeOpponentStatistics);
 };
 
 export const getGameStatistics = async (type: GameType, recentGameCount: number) => {
