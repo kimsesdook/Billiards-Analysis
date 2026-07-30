@@ -3,6 +3,7 @@ package com.my.billiards.game.repository;
 import com.my.billiards.game.domain.GameRecord;
 import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.domain.GameType;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Page;
@@ -18,6 +19,22 @@ public interface GameRecordRepository extends JpaRepository<GameRecord, Long> {
 	List<GameRecord> findAllByMemberIdAndTypeOrderByPlayedAtDescIdDesc(Long memberId, GameType type);
 
 	Optional<GameRecord> findByIdAndMemberId(Long id, Long memberId);
+
+	@Query("""
+		select gameRecord
+		from GameRecord gameRecord
+		where gameRecord.member.id = :memberId
+		  and (:type is null or gameRecord.type = :type)
+		  and gameRecord.playedAt >= :startAt
+		  and gameRecord.playedAt < :endAt
+		order by gameRecord.playedAt desc, gameRecord.id desc
+		""")
+	List<GameRecord> findWeeklyReportRecords(
+		@Param("memberId") Long memberId,
+		@Param("type") GameType type,
+		@Param("startAt") OffsetDateTime startAt,
+		@Param("endAt") OffsetDateTime endAt
+	);
 
 	@Query("""
 		select new com.my.billiards.game.repository.OpponentStatisticsProjection(

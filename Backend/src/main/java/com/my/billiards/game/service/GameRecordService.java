@@ -13,12 +13,18 @@ import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.GameRecordUpdateRequest;
 import com.my.billiards.game.dto.OpponentStatisticsResponse;
+import com.my.billiards.game.dto.WeeklyGameReportComparison;
+import com.my.billiards.game.dto.WeeklyGameReportResponse;
+import com.my.billiards.game.dto.WeeklyGameSummary;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.domain.MemberStatus;
 import com.my.billiards.member.repository.MemberRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +39,7 @@ public class GameRecordService {
 
 	private static final int TREND_COMPARISON_GAME_COUNT = 5;
 	private static final BigDecimal TREND_CHANGE_THRESHOLD = BigDecimal.valueOf(5);
+	private static final int WEEK_LENGTH_DAYS = 7;
 
 	private final GameRecordRepository gameRecordRepository;
 	private final MemberRepository memberRepository;
@@ -169,6 +176,41 @@ public class GameRecordService {
 		);
 	}
 
+	@Transactional(readOnly = true)
+	public WeeklyGameReportResponse getWeeklyReport(Long memberId, GameType type, LocalDate referenceDate) {
+		LocalDate reportDate = referenceDate == null ? LocalDate.now(ZoneOffset.UTC) : referenceDate;
+		LocalDate currentWeekStartDate = reportDate.minusDays(WEEK_LENGTH_DAYS - 1L);
+		LocalDate previousWeekStartDate = currentWeekStartDate.minusDays(WEEK_LENGTH_DAYS);
+		OffsetDateTime currentWeekStartAt = currentWeekStartDate.atStartOfDay().atOffset(ZoneOffset.UTC);
+		OffsetDateTime reportEndAt = reportDate.plusDays(1).atStartOfDay().atOffset(ZoneOffset.UTC);
+
+		List<GameRecord> records = gameRecordRepository.findWeeklyReportRecords(
+			memberId,
+			type,
+			previousWeekStartDate.atStartOfDay().atOffset(ZoneOffset.UTC),
+			reportEndAt
+		);
+		List<GameRecord> currentWeekRecords = records.stream()
+			.filter(record -> !record.getPlayedAt().isBefore(currentWeekStartAt))
+			.toList();
+		List<GameRecord> previousWeekRecords = records.stream()
+			.filter(record -> record.getPlayedAt().isBefore(currentWeekStartAt))
+			.toList();
+		WeeklyGameSummary currentWeek = summarizeWeek(currentWeekRecords);
+		WeeklyGameSummary previousWeek = summarizeWeek(previousWeekRecords);
+
+		return new WeeklyGameReportResponse(
+			type,
+			currentWeekStartDate,
+			reportDate,
+			previousWeekStartDate,
+			currentWeekStartDate.minusDays(1),
+			currentWeek,
+			previousWeek,
+			compareWeeks(currentWeek, previousWeek)
+		);
+	}
+
 	@Transactional
 	public void delete(Long memberId, Long id) {
 		GameRecord gameRecord = getGameRecord(memberId, id);
@@ -212,6 +254,72 @@ public class GameRecordService {
 			.multiply(BigDecimal.valueOf(100))
 			.setScale(0, RoundingMode.HALF_UP)
 			.intValue();
+	}
+
+	private WeeklyGameSummary summarizeWeek(List<GameRecord> records) {
+		int totalGames = records.size();
+		int wins = (int) records.stream().filter(GameRecord::isWin).count();
+		int totalInnings = records.stream().mapToInt(GameRecord::getInnings).sum();
+		int totalPoints = records.stream().mapToInt(GameRecord::getMyScore).sum();
+
+		return new WeeklyGameSummary(
+			totalGames,
+			wins,
+			totalGames - wins,
+			calculateWinRate(wins, totalGames),
+			calculateAverage(totalPoints, totalInnings),
+			records.stream().mapToInt(GameRecord::getHighRun).max().orElse(0),
+			totalInnings,
+			totalPoints
+		);
+	}
+
+	private WeeklyGameReportComparison compareWeeks(
+		WeeklyGameSummary currentWeek,
+		WeeklyGameSummary previousWeek
+	) {
+		boolean hasPreviousWeekData = previousWeek.totalGames() > 0;
+		BigDecimal averageChange = currentWeek.overallAverage().subtract(previousWeek.overallAverage())
+			.setScale(3, RoundingMode.HALF_UP);
+		BigDecimal averageChangeRate = calculateWeekAverageChangeRate(
+			currentWeek.overallAverage(),
+			previousWeek.overallAverage()
+		);
+
+		return new WeeklyGameReportComparison(
+			hasPreviousWeekData,
+			currentWeek.totalGames() - previousWeek.totalGames(),
+			currentWeek.winRate() - previousWeek.winRate(),
+			averageChange,
+			averageChangeRate,
+			currentWeek.maxHighRun() - previousWeek.maxHighRun(),
+			calculateWeekTrend(hasPreviousWeekData, averageChangeRate)
+		);
+	}
+
+	private BigDecimal calculateWeekAverageChangeRate(BigDecimal currentAverage, BigDecimal previousAverage) {
+		if (previousAverage.compareTo(BigDecimal.ZERO) == 0) {
+			return BigDecimal.ZERO.setScale(1);
+		}
+
+		return currentAverage.subtract(previousAverage)
+			.divide(previousAverage, 4, RoundingMode.HALF_UP)
+			.multiply(BigDecimal.valueOf(100))
+			.setScale(1, RoundingMode.HALF_UP);
+	}
+
+	private GameTrend calculateWeekTrend(boolean hasPreviousWeekData, BigDecimal averageChangeRate) {
+		if (!hasPreviousWeekData) {
+			return GameTrend.STABLE;
+		}
+
+		if (averageChangeRate.compareTo(TREND_CHANGE_THRESHOLD) > 0) {
+			return GameTrend.RISING;
+		}
+		if (averageChangeRate.compareTo(TREND_CHANGE_THRESHOLD.negate()) < 0) {
+			return GameTrend.FALLING;
+		}
+		return GameTrend.STABLE;
 	}
 
 	private BigDecimal calculateAverage(int totalPoints, int totalInnings) {

@@ -137,6 +137,45 @@ class GameRecordControllerTest {
 	}
 
 	@Test
+	void getWeeklyReportComparesTwoWeeksAndExcludesOtherMembersRecords() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		createGameRecord(myToken, "2026-07-01T10:00:00Z", "3-Cushion", 10, 5, 10, 2);
+		createGameRecord(myToken, "2026-07-02T10:00:00Z", "3-Cushion", 10, 15, 10, 3);
+		createGameRecord(myToken, "2026-07-05T10:00:00Z", "3-Cushion", 20, 10, 10, 4);
+		createGameRecord(myToken, "2026-07-08T10:00:00Z", "3-Cushion", 10, 5, 10, 2);
+		createGameRecord(myToken, "2026-07-10T10:00:00Z", "3-Cushion", 20, 25, 10, 5);
+		createGameRecord(myToken, "2026-07-14T10:00:00Z", "3-Cushion", 12, 10, 6, 4);
+		createGameRecord(myToken, "2026-07-15T10:00:00Z", "3-Cushion", 100, 1, 10, 20);
+		createGameRecord(otherToken, "2026-07-10T10:00:00Z", "3-Cushion", 100, 1, 10, 20);
+
+		mockMvc.perform(get("/api/game-records/weekly-report")
+				.queryParam("type", "3-Cushion")
+				.queryParam("referenceDate", "2026-07-14")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.type").value("3-Cushion"))
+			.andExpect(jsonPath("$.data.currentWeekStartDate").value("2026-07-08"))
+			.andExpect(jsonPath("$.data.currentWeekEndDate").value("2026-07-14"))
+			.andExpect(jsonPath("$.data.previousWeekStartDate").value("2026-07-01"))
+			.andExpect(jsonPath("$.data.previousWeekEndDate").value("2026-07-07"))
+			.andExpect(jsonPath("$.data.currentWeek.totalGames").value(3))
+			.andExpect(jsonPath("$.data.currentWeek.wins").value(2))
+			.andExpect(jsonPath("$.data.currentWeek.losses").value(1))
+			.andExpect(jsonPath("$.data.currentWeek.winRate").value(67))
+			.andExpect(jsonPath("$.data.currentWeek.overallAverage").value(1.615))
+			.andExpect(jsonPath("$.data.currentWeek.maxHighRun").value(5))
+			.andExpect(jsonPath("$.data.previousWeek.totalGames").value(3))
+			.andExpect(jsonPath("$.data.previousWeek.overallAverage").value(1.333))
+			.andExpect(jsonPath("$.data.comparison.hasPreviousWeekData").value(true))
+			.andExpect(jsonPath("$.data.comparison.overallAverageChange").value(0.282))
+			.andExpect(jsonPath("$.data.comparison.overallAverageChangeRate").value(21.2))
+			.andExpect(jsonPath("$.data.comparison.highRunChange").value(1))
+			.andExpect(jsonPath("$.data.comparison.trend").value("RISING"));
+	}
+
+	@Test
 	void searchGameRecordsFiltersByConditionsAndReturnsPaginationMetadata() throws Exception {
 		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
 		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
