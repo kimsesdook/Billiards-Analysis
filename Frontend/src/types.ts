@@ -87,3 +87,35 @@ export interface GameStatistics extends PlayerStats {
   type: GameType;
   recentAverageTrends: GameAverageTrend[];
 }
+
+export interface WeeklyGameSummary {
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  overallAverage: number;
+  maxHighRun: number;
+  totalInnings: number;
+  totalPoints: number;
+}
+
+export interface WeeklyGameReportComparison {
+  hasPreviousWeekData: boolean;
+  gameCountChange: number;
+  winRateChange: number;
+  overallAverageChange: number;
+  overallAverageChangeRate: number;
+  highRunChange: number;
+  trend: GameTrend;
+}
+
+export interface WeeklyGameReport {
+  type: GameType | null;
+  currentWeekStartDate: string;
+  currentWeekEndDate: string;
+  previousWeekStartDate: string;
+  previousWeekEndDate: string;
+  currentWeek: WeeklyGameSummary;
+  previousWeek: WeeklyGameSummary;
+  comparison: WeeklyGameReportComparison;
+}

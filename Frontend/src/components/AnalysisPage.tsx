@@ -31,8 +31,8 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
-import { GameRecord, GameType, OpponentStatistics } from '../types';
-import { getOpponentStatistics } from '../api/gameRecords';
+import { GameRecord, GameTrend, GameType, OpponentStatistics, WeeklyGameReport } from '../types';
+import { getOpponentStatistics, getWeeklyGameReport } from '../api/gameRecords';
 import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -117,6 +117,9 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
   const [opponentStatistics, setOpponentStatistics] = useState<OpponentStatistics[]>([]);
   const [isOpponentStatisticsLoading, setIsOpponentStatisticsLoading] = useState(false);
   const [opponentStatisticsError, setOpponentStatisticsError] = useState<string | null>(null);
+	const [weeklyReport, setWeeklyReport] = useState<WeeklyGameReport | null>(null);
+	const [isWeeklyReportLoading, setIsWeeklyReportLoading] = useState(false);
+	const [weeklyReportError, setWeeklyReportError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     type: '3-Cushion',
     mode: 'all',
@@ -145,6 +148,23 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
   useEffect(() => {
     void loadOpponentStatistics();
   }, [loadOpponentStatistics, records]);
+
+	const loadWeeklyReport = useCallback(async () => {
+		setIsWeeklyReportLoading(true);
+		setWeeklyReportError(null);
+
+		try {
+			setWeeklyReport(await getWeeklyGameReport(filters.type));
+		} catch (error) {
+			setWeeklyReportError(getApiErrorMessage(error));
+		} finally {
+			setIsWeeklyReportLoading(false);
+		}
+	}, [filters.type]);
+
+	useEffect(() => {
+		void loadWeeklyReport();
+	}, [loadWeeklyReport, records]);
 
   const getStatsForType = (type: GameType, filters: FilterState) => {
     let result = [...records].reverse().filter(r => r.type === type);
@@ -386,6 +406,12 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
 
       {activeTab === 'individual' ? (
         <>
+			<WeeklyReportPanel
+				report={weeklyReport}
+				isLoading={isWeeklyReportLoading}
+				error={weeklyReportError}
+				onRetry={() => void loadWeeklyReport()}
+			/>
           <div className="bg-[#0d4d3b] rounded-[2.5rem] border border-[#1a5d4e] p-10 relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
               <Activity size={180} className="text-emerald-400" />
@@ -863,6 +889,114 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
       )}
     </div>
   );
+}
+
+interface WeeklyReportPanelProps {
+	report: WeeklyGameReport | null;
+	isLoading: boolean;
+	error: string | null;
+	onRetry: () => void;
+}
+
+const formatPeriod = (startDate: string, endDate: string) =>
+	`${startDate.replaceAll('-', '.')} - ${endDate.replaceAll('-', '.')}`;
+
+const formatSignedNumber = (value: number, suffix = '') => `${value > 0 ? '+' : ''}${value}${suffix}`;
+
+const getTrendLabel = (trend: GameTrend) => {
+	if (trend === 'RISING') return { label: '상승', className: 'text-emerald-300 bg-emerald-400/10 border-emerald-400/30' };
+	if (trend === 'FALLING') return { label: '하락', className: 'text-rose-300 bg-rose-400/10 border-rose-400/30' };
+	return { label: '유지', className: 'text-amber-200 bg-amber-400/10 border-amber-400/30' };
+};
+
+function WeeklyReportPanel({ report, isLoading, error, onRetry }: WeeklyReportPanelProps) {
+	const trend = report ? getTrendLabel(report.comparison.trend) : null;
+
+	return (
+		<section aria-label="주간 경기 리포트" className="border-y border-[#1a5d4e] py-6">
+			<div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+				<div>
+					<div className="flex items-center gap-2">
+						<Activity size={18} className="text-emerald-400" />
+						<h2 className="text-lg font-black text-emerald-50">주간 경기 리포트</h2>
+					</div>
+					<p className="mt-1 text-xs text-emerald-100/45">선택한 종목의 최근 7일 기록을 직전 7일과 비교합니다.</p>
+				</div>
+				{report && (
+					<div className="text-left md:text-right">
+						<p className="text-xs font-bold text-emerald-100/80">{report.type === '3-Cushion' ? '3구' : '4구'}</p>
+						<p className="mt-1 text-[11px] text-emerald-100/45">{formatPeriod(report.currentWeekStartDate, report.currentWeekEndDate)}</p>
+					</div>
+				)}
+			</div>
+
+			{isLoading ? (
+				<div className="flex h-32 items-center justify-center" aria-live="polite">
+					<Loader2 size={24} className="animate-spin text-emerald-400" />
+				</div>
+			) : error ? (
+				<div className="mt-5 flex flex-col gap-3 border-l-2 border-rose-400 bg-rose-400/10 p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+					<p className="text-sm text-rose-100">주간 리포트를 불러오지 못했습니다. {error}</p>
+					<button type="button" onClick={onRetry} className="inline-flex items-center gap-2 self-start text-xs font-bold text-rose-100 hover:text-white">
+						<RefreshCw size={14} />
+						다시 불러오기
+					</button>
+				</div>
+			) : report ? (
+				<div className="mt-5 grid gap-5 lg:grid-cols-[1fr_1fr_1.15fr]">
+					<WeeklySummary title="이번 주" period={formatPeriod(report.currentWeekStartDate, report.currentWeekEndDate)} summary={report.currentWeek} emphasize />
+					<WeeklySummary title="이전 주" period={formatPeriod(report.previousWeekStartDate, report.previousWeekEndDate)} summary={report.previousWeek} />
+					<div className="border-l border-[#1a5d4e] pl-5">
+						<div className="flex items-center justify-between gap-3">
+							<span className="text-xs font-bold text-emerald-100/65">에버리지 추세</span>
+							<span className={cn('border px-2 py-1 text-xs font-black', trend?.className)}>{trend?.label}</span>
+						</div>
+						{report.comparison.hasPreviousWeekData ? (
+							<>
+								<p className="mt-4 text-2xl font-black text-emerald-50">{formatSignedNumber(report.comparison.overallAverageChangeRate, '%')}</p>
+								<p className="mt-1 text-xs text-emerald-100/45">전주 대비 에버리지 변화율</p>
+								<div className="mt-5 grid grid-cols-3 gap-3 text-center">
+									<ComparisonValue label="경기 수" value={formatSignedNumber(report.comparison.gameCountChange)} />
+									<ComparisonValue label="승률" value={formatSignedNumber(report.comparison.winRateChange, '%p')} />
+									<ComparisonValue label="하이런" value={formatSignedNumber(report.comparison.highRunChange)} />
+								</div>
+							</>
+						) : (
+							<p className="mt-5 text-sm leading-6 text-emerald-100/50">이전 주 기록이 없어 이번 주의 단독 기록을 표시합니다. 다음 주부터 변화 추세를 비교할 수 있습니다.</p>
+						)}
+					</div>
+				</div>
+			) : null}
+		</section>
+	);
+}
+
+function WeeklySummary({ title, period, summary, emphasize = false }: {
+	title: string;
+	period: string;
+	summary: WeeklyGameReport['currentWeek'];
+	emphasize?: boolean;
+}) {
+	return (
+		<div className={cn('border-l pl-5', emphasize ? 'border-emerald-400' : 'border-[#1a5d4e]')}>
+			<p className="text-xs font-black text-emerald-50">{title}</p>
+			<p className="mt-1 text-[11px] text-emerald-100/40">{period}</p>
+			<div className="mt-4 grid grid-cols-2 gap-x-5 gap-y-3 text-sm">
+				<SummaryValue label="경기" value={`${summary.totalGames}회`} />
+				<SummaryValue label="승률" value={`${summary.winRate}%`} />
+				<SummaryValue label="에버리지" value={summary.overallAverage.toFixed(3)} />
+				<SummaryValue label="하이런" value={`${summary.maxHighRun}점`} />
+			</div>
+		</div>
+	);
+}
+
+function SummaryValue({ label, value }: { label: string; value: string }) {
+	return <div><p className="text-[11px] text-emerald-100/40">{label}</p><p className="mt-1 font-mono font-bold text-emerald-50">{value}</p></div>;
+}
+
+function ComparisonValue({ label, value }: { label: string; value: string }) {
+	return <div><p className="text-[11px] text-emerald-100/40">{label}</p><p className="mt-1 font-mono text-sm font-bold text-emerald-100">{value}</p></div>;
 }
 
 function AnalysisSection({ stats, playerCount, mode, cushions }: { 

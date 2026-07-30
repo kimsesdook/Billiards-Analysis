@@ -7,6 +7,9 @@ import {
 	OpponentStatistics,
   GameStatistics,
   GameType,
+	WeeklyGameReport,
+	WeeklyGameReportComparison,
+	WeeklyGameSummary,
 } from '../types';
 import { apiRequest } from './client';
 
@@ -39,6 +42,27 @@ type ApiGameStatistics = Omit<
 	recentAverageTrends: ApiGameAverageTrend[];
 };
 
+type ApiWeeklyGameSummary = Omit<WeeklyGameSummary, 'overallAverage'> & {
+	overallAverage: number | string;
+};
+
+type ApiWeeklyGameReportComparison = Omit<
+	WeeklyGameReportComparison,
+	'overallAverageChange' | 'overallAverageChangeRate'
+> & {
+	overallAverageChange: number | string;
+	overallAverageChangeRate: number | string;
+};
+
+type ApiWeeklyGameReport = Omit<
+	WeeklyGameReport,
+	'currentWeek' | 'previousWeek' | 'comparison'
+> & {
+	currentWeek: ApiWeeklyGameSummary;
+	previousWeek: ApiWeeklyGameSummary;
+	comparison: ApiWeeklyGameReportComparison;
+};
+
 const normalizeGameRecord = (record: ApiGameRecord): GameRecord => ({
   ...record,
   id: String(record.id),
@@ -61,6 +85,22 @@ const normalizeOpponentStatistics = (statistics: ApiOpponentStatistics): Opponen
 	...statistics,
 	overallAverage: Number(statistics.overallAverage),
 	bestAverage: Number(statistics.bestAverage),
+});
+
+const normalizeWeeklyGameSummary = (summary: ApiWeeklyGameSummary): WeeklyGameSummary => ({
+	...summary,
+	overallAverage: Number(summary.overallAverage),
+});
+
+const normalizeWeeklyGameReport = (report: ApiWeeklyGameReport): WeeklyGameReport => ({
+	...report,
+	currentWeek: normalizeWeeklyGameSummary(report.currentWeek),
+	previousWeek: normalizeWeeklyGameSummary(report.previousWeek),
+	comparison: {
+		...report.comparison,
+		overallAverageChange: Number(report.comparison.overallAverageChange),
+		overallAverageChangeRate: Number(report.comparison.overallAverageChangeRate),
+	},
 });
 
 const toCreateRequest = (record: GameRecordDraft) => ({
@@ -106,6 +146,13 @@ export const getGameStatistics = async (type: GameType, recentGameCount: number)
 	const statistics = await apiRequest<ApiGameStatistics>(`/api/game-records/statistics?${query}`);
 
 	return normalizeGameStatistics(statistics);
+};
+
+export const getWeeklyGameReport = async (type: GameType) => {
+	const query = new URLSearchParams({ type });
+	const report = await apiRequest<ApiWeeklyGameReport>(`/api/game-records/weekly-report?${query}`);
+
+	return normalizeWeeklyGameReport(report);
 };
 
 export const createGameRecord = async (record: GameRecordDraft) => {
