@@ -67,6 +67,7 @@ import {
   deleteGameRecord,
   getGameRecords,
   getGameStatistics,
+  updateGameRecord,
 } from './api/gameRecords';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
@@ -1229,6 +1230,29 @@ function AppContent() {
     }
   };
 
+  const updateRecord = async (recordId: string, updatedRecord: GameRecordDraft) => {
+    const payload = fillMissingInningScores(updatedRecord);
+
+    try {
+      const savedRecord = await updateGameRecord(recordId, payload);
+      setRecords(prevRecords => prevRecords.map(record => (
+        record.id === recordId ? fillMissingInningScores(savedRecord) : record
+      )));
+      setRecordsError(null);
+      void loadStatistics();
+      return savedRecord;
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        throw error;
+      }
+
+      const message = getApiErrorMessage(error);
+      setRecordsError(message);
+      throw new Error(message);
+    }
+  };
+
   const filteredRecords = useMemo(() => {
     return records.filter(r => r.type === filter);
   }, [records, filter]);
@@ -1973,6 +1997,7 @@ function AppContent() {
                 errorMessage={recordsError}
                 onRetry={loadRecords}
                 onDelete={removeRecord}
+                onUpdate={updateRecord}
               />
             )}
           />

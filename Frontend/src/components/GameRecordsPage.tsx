@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
-import { AlertCircle, History, Search, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2 } from 'lucide-react';
-import { GameRecord } from '../types';
+import { AlertCircle, History, Search, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { GameRecord, GameRecordDraft } from '../types';
+import { GameRecordEditModal } from './GameRecordEditModal';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -49,14 +50,16 @@ interface GameRecordsPageProps {
   errorMessage?: string | null;
   onRetry?: () => void | Promise<void>;
   onDelete?: (recordId: string) => void | Promise<void>;
+  onUpdate?: (recordId: string, record: GameRecordDraft) => GameRecord | void | Promise<GameRecord | void>;
 }
 
-export function GameRecordsPage({ records, isLoading = false, errorMessage = null, onRetry, onDelete }: GameRecordsPageProps) {
+export function GameRecordsPage({ records, isLoading = false, errorMessage = null, onRetry, onDelete, onUpdate }: GameRecordsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [modeFilter, setModeFilter] = useState<'all' | 'Individual' | 'Team'>('all');
   const [playerFilter, setPlayerFilter] = useState<'all' | 2 | 3 | 4>('all');
   const [gameTypeFilter, setGameTypeFilter] = useState<'all' | '3-Cushion' | '4-Ball'>('all');
   const [selectedRecord, setSelectedRecord] = useState<GameRecord | null>(null);
+  const [editingRecord, setEditingRecord] = useState<GameRecord | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteSelectedRecord = async () => {
@@ -72,6 +75,14 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
     } finally {
       setIsDeleting(false);
     }
+  };
+
+  const handleUpdateRecord = async (record: GameRecordDraft) => {
+    if (!editingRecord || !onUpdate) return;
+
+    await onUpdate(editingRecord.id, record);
+    setEditingRecord(null);
+    setSelectedRecord(null);
   };
 
   const filteredRecords = useMemo(() => {
@@ -330,6 +341,18 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  {onUpdate && (
+                    <button
+                      type="button"
+                      onClick={() => setEditingRecord(selectedRecord)}
+                      disabled={isDeleting}
+                      className="p-3 bg-blue-500/10 hover:bg-blue-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-blue-200 rounded-xl transition-all"
+                      title="경기 기록 수정"
+                      aria-label="경기 기록 수정"
+                    >
+                      <Pencil size={20} />
+                    </button>
+                  )}
                   {onDelete && (
                     <button
                       onClick={handleDeleteSelectedRecord}
@@ -633,6 +656,14 @@ export function GameRecordsPage({ records, isLoading = false, errorMessage = nul
           </div>
         )}
       </AnimatePresence>
+
+      {editingRecord && (
+        <GameRecordEditModal
+          record={editingRecord}
+          onClose={() => setEditingRecord(null)}
+          onUpdate={handleUpdateRecord}
+        />
+      )}
     </div>
   );
 }
