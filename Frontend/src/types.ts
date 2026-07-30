@@ -45,6 +45,21 @@ export interface GameRecordPage {
   hasNext: boolean;
 }
 
+export interface OpponentStatistics {
+  opponentName: string;
+  totalGames: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  overallAverage: number;
+  bestAverage: number;
+  maxHighRun: number;
+  totalInnings: number;
+  totalMyScore: number;
+  totalOpponentScore: number;
+  lastPlayedAt: string;
+}
+
 export interface PlayerStats {
   totalGames: number;
   wins: number;
