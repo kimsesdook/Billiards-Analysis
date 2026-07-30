@@ -2,7 +2,9 @@ package com.my.billiards.game.service;
 
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.api.PageResponse;
 import com.my.billiards.game.domain.GameRecord;
+import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.domain.GameTrend;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameAverageTrendResponse;
@@ -21,6 +23,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 @Service
 @RequiredArgsConstructor
@@ -68,6 +72,27 @@ public class GameRecordService {
 	@Transactional(readOnly = true)
 	public GameRecordResponse findById(Long memberId, Long id) {
 		return GameRecordResponse.from(getGameRecord(memberId, id));
+	}
+
+	@Transactional(readOnly = true)
+	public PageResponse<GameRecordResponse> search(
+		Long memberId,
+		GameType type,
+		GameMode mode,
+		String keyword,
+		int page,
+		int size
+	) {
+		PageRequest pageRequest = PageRequest.of(
+			page,
+			size,
+			Sort.by(Sort.Order.desc("playedAt"), Sort.Order.desc("id"))
+		);
+
+		return PageResponse.from(
+			gameRecordRepository.searchByConditions(memberId, type, mode, normalizeKeyword(keyword), pageRequest),
+			GameRecordResponse::from
+		);
 	}
 
 	@Transactional
@@ -139,6 +164,14 @@ public class GameRecordService {
 				ErrorCode.RESOURCE_NOT_FOUND,
 				"경기 기록을 찾을 수 없습니다."
 			));
+	}
+
+	private String normalizeKeyword(String keyword) {
+		if (keyword == null || keyword.isBlank()) {
+			return null;
+		}
+
+		return keyword.trim();
 	}
 
 	private Member getActiveMember(Long memberId) {

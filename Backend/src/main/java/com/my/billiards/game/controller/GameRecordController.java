@@ -1,9 +1,11 @@
 package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.api.PageResponse;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.game.domain.GameType;
+import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
@@ -31,6 +33,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class GameRecordController {
 
+	private static final int MAX_PAGE_SIZE = 100;
+
 	private final GameRecordService gameRecordService;
 
 	@PostMapping
@@ -45,6 +49,27 @@ public class GameRecordController {
 	@GetMapping
 	public ApiResponse<List<GameRecordResponse>> findAll(@AuthenticationPrincipal AuthenticatedMember member) {
 		return ApiResponse.success(gameRecordService.findAll(member.id()));
+	}
+
+	@GetMapping("/search")
+	public ApiResponse<PageResponse<GameRecordResponse>> search(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@RequestParam(required = false) String type,
+		@RequestParam(required = false) String mode,
+		@RequestParam(required = false) String keyword,
+		@RequestParam(defaultValue = "0") int page,
+		@RequestParam(defaultValue = "20") int size
+	) {
+		validatePageRequest(page, size);
+
+		return ApiResponse.success(gameRecordService.search(
+			member.id(),
+			toOptionalGameType(type),
+			toOptionalGameMode(mode),
+			keyword,
+			page,
+			size
+		));
 	}
 
 	@GetMapping("/statistics")
@@ -96,11 +121,44 @@ public class GameRecordController {
 		}
 	}
 
+	private GameType toOptionalGameType(String type) {
+		if (type == null || type.isBlank()) {
+			return null;
+		}
+
+		return toGameType(type);
+	}
+
+	private GameMode toOptionalGameMode(String mode) {
+		if (mode == null || mode.isBlank()) {
+			return null;
+		}
+
+		try {
+			return GameMode.from(mode);
+		} catch (IllegalArgumentException exception) {
+			throw new BilliardsException(ErrorCode.INVALID_INPUT_VALUE, "Unsupported game mode.");
+		}
+	}
+
 	private void validateRecentGameCount(int recentGameCount) {
 		if (recentGameCount < 1 || recentGameCount > 50) {
 			throw new BilliardsException(
 				ErrorCode.INVALID_INPUT_VALUE,
 				"recentGameCount must be between 1 and 50."
+			);
+		}
+	}
+
+	private void validatePageRequest(int page, int size) {
+		if (page < 0) {
+			throw new BilliardsException(ErrorCode.INVALID_INPUT_VALUE, "page must be zero or greater.");
+		}
+
+		if (size < 1 || size > MAX_PAGE_SIZE) {
+			throw new BilliardsException(
+				ErrorCode.INVALID_INPUT_VALUE,
+				"size must be between 1 and " + MAX_PAGE_SIZE + "."
 			);
 		}
 	}

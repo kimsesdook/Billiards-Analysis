@@ -109,6 +109,64 @@ class GameRecordControllerTest {
 	}
 
 	@Test
+	void searchGameRecordsFiltersByConditionsAndReturnsPaginationMetadata() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		createSearchRecord(myToken, "2026-07-01T10:00:00Z", "3-Cushion", "Individual", "Alex Kim", "Opening match");
+		createSearchRecord(myToken, "2026-07-02T10:00:00Z", "4-Ball", "Team", "Bora Lee", "Team match");
+		createSearchRecord(myToken, "2026-07-03T10:00:00Z", "3-Cushion", "Individual", "Alex Park", "Keyword match");
+		createSearchRecord(otherToken, "2026-07-04T10:00:00Z", "3-Cushion", "Individual", "Alex Other", "Other member");
+
+		mockMvc.perform(get("/api/game-records/search")
+				.queryParam("type", "3-Cushion")
+				.queryParam("mode", "Individual")
+				.queryParam("keyword", "alex")
+				.queryParam("page", "0")
+				.queryParam("size", "1")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.content", hasSize(1)))
+			.andExpect(jsonPath("$.data.content[0].opponentName").value("Alex Park"))
+			.andExpect(jsonPath("$.data.page").value(0))
+			.andExpect(jsonPath("$.data.size").value(1))
+			.andExpect(jsonPath("$.data.totalElements").value(2))
+			.andExpect(jsonPath("$.data.totalPages").value(2))
+			.andExpect(jsonPath("$.data.hasNext").value(true));
+
+		mockMvc.perform(get("/api/game-records/search")
+				.queryParam("type", "3-Cushion")
+				.queryParam("mode", "Individual")
+				.queryParam("keyword", "alex")
+				.queryParam("page", "1")
+				.queryParam("size", "1")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content", hasSize(1)))
+			.andExpect(jsonPath("$.data.content[0].opponentName").value("Alex Kim"))
+			.andExpect(jsonPath("$.data.hasNext").value(false));
+	}
+
+	@Test
+	void rejectSearchGameRecordsWithInvalidPageRequest() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(get("/api/game-records/search")
+				.queryParam("page", "-1")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+
+		mockMvc.perform(get("/api/game-records/search")
+				.queryParam("size", "101")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	@Test
 	void getStatisticsAggregatesOnlyMyRecordsForTheRequestedGameType() throws Exception {
 		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
 		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
@@ -401,6 +459,34 @@ class GameRecordControllerTest {
 					  "playerCount": 2
 					}
 					""".formatted(date, type, myScore, opponentScore, innings, highRun)))
+			.andExpect(status().isCreated());
+	}
+
+	private void createSearchRecord(
+		String token,
+		String date,
+		String type,
+		String mode,
+		String opponentName,
+		String notes
+	) throws Exception {
+		mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "date": "%s",
+					  "type": "%s",
+					  "mode": "%s",
+					  "myScore": 15,
+					  "opponentScore": 12,
+					  "innings": 18,
+					  "highRun": 4,
+					  "playerCount": 2,
+					  "opponentName": "%s",
+					  "notes": "%s"
+					}
+					""".formatted(date, type, mode, opponentName, notes)))
 			.andExpect(status().isCreated());
 	}
 
