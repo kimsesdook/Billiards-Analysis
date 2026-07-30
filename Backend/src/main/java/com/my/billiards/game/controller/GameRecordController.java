@@ -1,8 +1,12 @@
 package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.error.BilliardsException;
+import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameRecordCreateRequest;
 import com.my.billiards.game.dto.GameRecordResponse;
+import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
 import jakarta.validation.Valid;
@@ -16,6 +20,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -40,6 +45,21 @@ public class GameRecordController {
 		return ApiResponse.success(gameRecordService.findAll(member.id()));
 	}
 
+	@GetMapping("/statistics")
+	public ApiResponse<GameStatisticsResponse> getStatistics(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@RequestParam(required = false) String type,
+		@RequestParam(defaultValue = "10") int recentGameCount
+	) {
+		validateRecentGameCount(recentGameCount);
+
+		return ApiResponse.success(gameRecordService.getStatistics(
+			member.id(),
+			toGameType(type),
+			recentGameCount
+		));
+	}
+
 	@GetMapping("/{id}")
 	public ApiResponse<GameRecordResponse> findById(
 		@AuthenticationPrincipal AuthenticatedMember member,
@@ -55,5 +75,22 @@ public class GameRecordController {
 	) {
 		gameRecordService.delete(member.id(), id);
 		return ApiResponse.ok();
+	}
+
+	private GameType toGameType(String type) {
+		try {
+			return GameType.from(type);
+		} catch (IllegalArgumentException exception) {
+			throw new BilliardsException(ErrorCode.INVALID_INPUT_VALUE, "Unsupported game type.");
+		}
+	}
+
+	private void validateRecentGameCount(int recentGameCount) {
+		if (recentGameCount < 1 || recentGameCount > 50) {
+			throw new BilliardsException(
+				ErrorCode.INVALID_INPUT_VALUE,
+				"recentGameCount must be between 1 and 50."
+			);
+		}
 	}
 }
