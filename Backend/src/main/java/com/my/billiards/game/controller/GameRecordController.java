@@ -11,13 +11,16 @@ import com.my.billiards.game.dto.GameRecordResponse;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.GameRecordUpdateRequest;
 import com.my.billiards.game.dto.OpponentStatisticsResponse;
+import com.my.billiards.game.dto.WeeklyGameReportResponse;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
 import jakarta.validation.Valid;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -95,6 +98,20 @@ public class GameRecordController {
 			member.id(),
 			toGameType(type),
 			recentGameCount
+		));
+	}
+
+	@GetMapping("/weekly-report")
+	public ApiResponse<WeeklyGameReportResponse> getWeeklyReport(
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@RequestParam(required = false) String type,
+		@RequestParam(required = false)
+		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate referenceDate
+	) {
+		return ApiResponse.success(gameRecordService.getWeeklyReport(
+			member.id(),
+			toOptionalGameType(type),
+			referenceDate
 		));
 	}
 
