@@ -109,6 +109,34 @@ class GameRecordControllerTest {
 	}
 
 	@Test
+	void getOpponentStatisticsAggregatesOnlyMyRecords() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		createOpponentRecord(myToken, "2026-07-01T10:00:00Z", "Kim", 10, 5, 10, 3);
+		createOpponentRecord(myToken, "2026-07-03T10:00:00Z", "Kim", 10, 12, 8, 5);
+		createOpponentRecord(myToken, "2026-07-04T10:00:00Z", "Lee", 20, 10, 10, 7);
+		createOpponentRecord(otherToken, "2026-07-05T10:00:00Z", "Kim", 50, 1, 10, 10);
+
+		mockMvc.perform(get("/api/game-records/opponent-statistics")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data", hasSize(2)))
+			.andExpect(jsonPath("$.data[0].opponentName").value("Kim"))
+			.andExpect(jsonPath("$.data[0].totalGames").value(2))
+			.andExpect(jsonPath("$.data[0].wins").value(1))
+			.andExpect(jsonPath("$.data[0].losses").value(1))
+			.andExpect(jsonPath("$.data[0].winRate").value(50))
+			.andExpect(jsonPath("$.data[0].overallAverage").value(1.111))
+			.andExpect(jsonPath("$.data[0].bestAverage").value(1.25))
+			.andExpect(jsonPath("$.data[0].maxHighRun").value(5))
+			.andExpect(jsonPath("$.data[0].totalInnings").value(18))
+			.andExpect(jsonPath("$.data[0].totalMyScore").value(20))
+			.andExpect(jsonPath("$.data[0].totalOpponentScore").value(17))
+			.andExpect(jsonPath("$.data[0].lastPlayedAt").value("2026-07-03T10:00:00Z"));
+	}
+
+	@Test
 	void searchGameRecordsFiltersByConditionsAndReturnsPaginationMetadata() throws Exception {
 		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
 		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
@@ -517,6 +545,34 @@ class GameRecordControllerTest {
 					  "notes": "%s"
 					}
 					""".formatted(date, type, mode, playerCount, opponentName, notes)))
+			.andExpect(status().isCreated());
+	}
+
+	private void createOpponentRecord(
+		String token,
+		String date,
+		String opponentName,
+		int myScore,
+		int opponentScore,
+		int innings,
+		int highRun
+	) throws Exception {
+		mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "date": "%s",
+					  "type": "3-Cushion",
+					  "mode": "Individual",
+					  "myScore": %d,
+					  "opponentScore": %d,
+					  "innings": %d,
+					  "highRun": %d,
+					  "playerCount": 2,
+					  "opponentName": "%s"
+					}
+					""".formatted(date, myScore, opponentScore, innings, highRun, opponentName)))
 			.andExpect(status().isCreated());
 	}
 
