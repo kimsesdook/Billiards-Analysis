@@ -108,6 +108,111 @@ class GameRecordControllerTest {
 	}
 
 	@Test
+	void getStatisticsAggregatesOnlyMyRecordsForTheRequestedGameType() throws Exception {
+		String myToken = signUpAndLogin("player@example.com", "PlayerOne");
+		String otherToken = signUpAndLogin("other@example.com", "OtherPlayer");
+		createGameRecord(myToken, "2026-07-01T10:00:00Z", "3-Cushion", 10, 8, 10, 2);
+		createGameRecord(myToken, "2026-07-02T10:00:00Z", "3-Cushion", 12, 15, 10, 3);
+		createGameRecord(myToken, "2026-07-03T10:00:00Z", "3-Cushion", 15, 10, 10, 5);
+		createGameRecord(myToken, "2026-07-04T10:00:00Z", "4-Ball", 50, 40, 10, 10);
+		createGameRecord(otherToken, "2026-07-05T10:00:00Z", "3-Cushion", 100, 1, 10, 20);
+
+		mockMvc.perform(get("/api/game-records/statistics")
+				.queryParam("type", "3-Cushion")
+				.queryParam("recentGameCount", "2")
+				.header(HttpHeaders.AUTHORIZATION, bearer(myToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.type").value("3-Cushion"))
+			.andExpect(jsonPath("$.data.totalGames").value(3))
+			.andExpect(jsonPath("$.data.wins").value(2))
+			.andExpect(jsonPath("$.data.losses").value(1))
+			.andExpect(jsonPath("$.data.winRate").value(67))
+			.andExpect(jsonPath("$.data.overallAverage").value(1.233))
+			.andExpect(jsonPath("$.data.bestAverage").value(1.5))
+			.andExpect(jsonPath("$.data.maxHighRun").value(5))
+			.andExpect(jsonPath("$.data.totalInnings").value(30))
+			.andExpect(jsonPath("$.data.totalPoints").value(37))
+			.andExpect(jsonPath("$.data.calculatedDama").value(135))
+			.andExpect(jsonPath("$.data.trend").value("STABLE"))
+			.andExpect(jsonPath("$.data.changeRate").value(0.0))
+			.andExpect(jsonPath("$.data.recentAverageTrends", hasSize(2)))
+			.andExpect(jsonPath("$.data.recentAverageTrends[0].average").value(1.2))
+			.andExpect(jsonPath("$.data.recentAverageTrends[1].average").value(1.5));
+	}
+
+	@Test
+	void getStatisticsReturnsRisingTrendWhenRecentGamesImprove() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		for (int day = 1; day <= 5; day++) {
+			createGameRecord(
+				token,
+				"2026-07-%02dT10:00:00Z".formatted(day),
+				"3-Cushion",
+				10,
+				5,
+				10,
+				2
+			);
+		}
+		for (int day = 6; day <= 10; day++) {
+			createGameRecord(
+				token,
+				"2026-07-%02dT10:00:00Z".formatted(day),
+				"3-Cushion",
+				20,
+				5,
+				10,
+				4
+			);
+		}
+
+		mockMvc.perform(get("/api/game-records/statistics")
+				.queryParam("type", "3-Cushion")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.trend").value("RISING"))
+			.andExpect(jsonPath("$.data.changeRate").value(100.0));
+	}
+
+	@Test
+	void rejectStatisticsRequestWithInvalidGameType() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(get("/api/game-records/statistics")
+				.queryParam("type", "INVALID")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	@Test
+	void rejectStatisticsRequestWithoutGameType() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(get("/api/game-records/statistics")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	@Test
+	void rejectStatisticsRequestWithInvalidRecentGameCount() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(get("/api/game-records/statistics")
+				.queryParam("type", "3-Cushion")
+				.queryParam("recentGameCount", "0")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	@Test
 	void deleteGameRecord() throws Exception {
 		String token = signUpAndLogin("player@example.com", "PlayerOne");
 		Long id = createSampleRecord(token, "Opponent");
@@ -179,6 +284,33 @@ class GameRecordControllerTest {
 			.getContentAsString();
 
 		return extractLong(response, "id");
+	}
+
+	private void createGameRecord(
+		String token,
+		String date,
+		String type,
+		int myScore,
+		int opponentScore,
+		int innings,
+		int highRun
+	) throws Exception {
+		mockMvc.perform(post("/api/game-records")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "date": "%s",
+					  "type": "%s",
+					  "mode": "Individual",
+					  "myScore": %d,
+					  "opponentScore": %d,
+					  "innings": %d,
+					  "highRun": %d,
+					  "playerCount": 2
+					}
+					""".formatted(date, type, myScore, opponentScore, innings, highRun)))
+			.andExpect(status().isCreated());
 	}
 
 	private String signUpAndLogin(String email, String nickname) throws Exception {
