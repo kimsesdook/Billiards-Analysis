@@ -21,25 +21,42 @@ import {
   ChevronDown,
   Search,
   Medal,
-  Plus
+  Plus,
+  RefreshCw
 } from 'lucide-react';
-import { GameRecord, PlayerStats, GameType } from '../types';
+import { GameRecord, GameStatistics, GameType } from '../types';
 import { StatsChart } from './StatsChart';
 import { cn } from '../lib/utils';
 
 interface DashboardPageProps {
   records: GameRecord[];
-  stats: PlayerStats;
+  stats: GameStatistics;
   filter: GameType;
   setFilter: (filter: GameType) => void;
+  recentGameCount: 5 | 10 | 20;
+  setRecentGameCount: (recentGameCount: 5 | 10 | 20) => void;
+  isStatisticsLoading: boolean;
+  statisticsError: string | null;
+  onRetryStatistics: () => void;
 }
 
-export function DashboardPage({ records, stats, filter, setFilter }: DashboardPageProps) {
-  const [damaCount, setDamaCount] = useState<5 | 10 | 20>(10);
+export function DashboardPage({
+  records,
+  stats,
+  filter,
+  setFilter,
+  recentGameCount,
+  setRecentGameCount,
+  isStatisticsLoading,
+  statisticsError,
+  onRetryStatistics,
+}: DashboardPageProps) {
   const [winRateView, setWinRateView] = useState<'2p' | '3p' | '4p'>('2p');
-  const [teamWinRateView, setTeamWinRateView] = useState<'3p' | '4p'>('4p');
   const [friendSearch, setFriendSearch] = useState('');
-  const recentRecords = useMemo(() => records.slice(0, 5), [records]);
+  const recentRecords = useMemo(
+    () => records.filter((record) => record.type === filter).slice(0, 5),
+    [filter, records]
+  );
 
   // Mock Friend Data
   const friends = [
@@ -102,6 +119,27 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
         </div>
       </div>
 
+      {isStatisticsLoading && (
+        <div className="flex items-center gap-2 text-xs font-bold text-emerald-300">
+          <Activity size={15} className="animate-spin" />
+          Loading statistics...
+        </div>
+      )}
+
+      {statisticsError && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border border-rose-400/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-100">
+          <span>{statisticsError}</span>
+          <button
+            type="button"
+            onClick={onRetryStatistics}
+            className="inline-flex items-center gap-2 text-xs font-bold text-rose-100 hover:text-white"
+          >
+            <RefreshCw size={14} />
+            Retry
+          </button>
+        </div>
+      )}
+
       {/* Main Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {/* Dama Card */}
@@ -113,8 +151,8 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
               </div>
               <div className="relative">
                 <select 
-                  value={damaCount}
-                  onChange={(e) => setDamaCount(Number(e.target.value) as any)}
+                  value={recentGameCount}
+                  onChange={(event) => setRecentGameCount(Number(event.target.value) as 5 | 10 | 20)}
                   className="appearance-none bg-[#1a5d4e] text-[10px] font-bold text-emerald-400 px-3 py-1.5 rounded-lg border border-[#2d8a75] focus:ring-2 focus:ring-emerald-500/50 cursor-pointer pr-8"
                 >
                   <option value={5}>최근 5경기</option>
@@ -139,7 +177,7 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
             <div className="p-3 bg-[#1a5d4e] rounded-2xl">
               <User className="text-amber-400" />
             </div>
-            <div className="flex gap-1 bg-black/20 p-1 rounded-lg">
+            <div className="hidden">
               {(['2p', '3p', '4p'] as const).map((v) => (
                 <button
                   key={v}
@@ -163,17 +201,15 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
               transition={{ duration: 0.2 }}
             >
               <p className="text-emerald-500/50 text-xs font-bold uppercase tracking-wider mb-1">
-                {winRateView === '2p' ? '개인 승률' : '개인 평균 등수'}
+                Win rate
               </p>
               <div className="flex items-baseline gap-2">
                 <h4 className="text-3xl font-black text-emerald-50 mb-1">
-                  {winRateView === '2p' ? '68%' : 
-                   winRateView === '3p' ? '1.5' : '2.1'}
+                  {stats.winRate}%
                 </h4>
-                {winRateView !== '2p' && <span className="text-emerald-100/30 text-sm font-bold">위</span>}
               </div>
               <p className="text-[10px] text-emerald-100/30 font-medium">
-                {winRateView === '2p' ? '12승 6패' : '최근 10경기 분석 결과'}
+                {stats.wins} wins {stats.losses} losses
               </p>
             </motion.div>
           </AnimatePresence>
@@ -187,7 +223,14 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
           icon={<Award className="text-purple-400" />}
         />
 
-        <div className="bg-[#0d4d3b] p-6 rounded-[2.5rem] border border-[#1a5d4e] hover:border-emerald-500/30 transition-all group shadow-xl shadow-black/10">
+        <StatCard
+          title="Overall average"
+          value={stats.overallAverage.toFixed(3)}
+          subValue={`${stats.trend} ${stats.changeRate > 0 ? '+' : ''}${stats.changeRate}%`}
+          icon={<TrendingUp className="text-blue-400" />}
+        />
+
+        <div className="hidden">
           <div className="flex justify-between items-start mb-4">
             <div className="p-3 bg-[#1a5d4e] rounded-2xl group-hover:scale-110 transition-transform">
               <Users className="text-blue-400" />
@@ -217,11 +260,13 @@ export function DashboardPage({ records, stats, filter, setFilter }: DashboardPa
                 에버리지 추이
               </h2>
               <div className="flex gap-2">
-                <span className="px-3 py-1 bg-[#1a5d4e] rounded-full text-[10px] font-bold text-emerald-400/70 uppercase tracking-wider">최근 10경기</span>
+                <span className="px-3 py-1 bg-[#1a5d4e] rounded-full text-[10px] font-bold text-emerald-400/70 uppercase tracking-wider">
+                  Recent {recentGameCount} games
+                </span>
               </div>
             </div>
             <div className="h-[300px]">
-              <StatsChart records={records} />
+              <StatsChart trends={stats.recentAverageTrends} />
             </div>
           </div>
         </div>

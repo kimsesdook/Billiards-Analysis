@@ -1,5 +1,6 @@
 export type GameType = '3-Cushion' | '4-Ball';
 export type GameMode = 'Individual' | 'Team';
+export type GameTrend = 'RISING' | 'FALLING' | 'STABLE';
 
 export interface GameRecord {
   id: string;
@@ -37,6 +38,19 @@ export interface PlayerStats {
   totalInnings: number;
   totalPoints: number;
   calculatedDama: number;
-  trend: '상승세' | '하락세' | '유지';
+  trend: GameTrend;
   changeRate: number;
+}
+
+export interface GameAverageTrend {
+  gameRecordId: string;
+  playedAt: string;
+  average: number;
+  highRun: number;
+  win: boolean;
+}
+
+export interface GameStatistics extends PlayerStats {
+  type: GameType;
+  recentAverageTrends: GameAverageTrend[];
 }

@@ -46,7 +46,7 @@ import {
   Globe,
   Key
 } from 'lucide-react';
-import { GameRecord, GameRecordDraft, PlayerStats, GameType } from './types';
+import { GameRecord, GameRecordDraft, GameStatistics, PlayerStats, GameType } from './types';
 import { StatsChart } from './components/StatsChart';
 import { GuidePage } from './components/GuidePage';
 import { LoginPage } from './components/LoginPage';
@@ -62,7 +62,12 @@ import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from './lib/utils';
-import { createGameRecord, deleteGameRecord, getGameRecords } from './api/gameRecords';
+import {
+  createGameRecord,
+  deleteGameRecord,
+  getGameRecords,
+  getGameStatistics,
+} from './api/gameRecords';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
 import {
@@ -140,6 +145,23 @@ const toServerNotificationId = (notificationId: string) => {
   return Number.isInteger(parsedId) && parsedId > 0 ? parsedId : null;
 };
 
+const createEmptyGameStatistics = (type: GameType): GameStatistics => ({
+  type,
+  totalGames: 0,
+  wins: 0,
+  losses: 0,
+  winRate: 0,
+  overallAverage: 0,
+  bestAverage: 0,
+  maxHighRun: 0,
+  totalInnings: 0,
+  totalPoints: 0,
+  calculatedDama: 0,
+  trend: 'STABLE',
+  changeRate: 0,
+  recentAverageTrends: [],
+});
+
 function BilliardsLogo() {
   return (
     <div className="relative w-10 h-10 flex items-center justify-center">
@@ -169,6 +191,12 @@ function AppContent() {
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
   const [filter, setFilter] = useState<GameType>('3-Cushion');
+  const [recentGameCount, setRecentGameCount] = useState<5 | 10 | 20>(10);
+  const [gameStatistics, setGameStatistics] = useState<GameStatistics>(() =>
+    createEmptyGameStatistics('3-Cushion')
+  );
+  const [isStatisticsLoading, setIsStatisticsLoading] = useState(false);
+  const [statisticsError, setStatisticsError] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
   const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(authSession));
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
@@ -769,6 +797,7 @@ function AppContent() {
     setUserName(savedSession.member.nickname);
     setUserNickname(savedSession.member.nickname);
     setRecordsError(null);
+    setStatisticsError(null);
   }, []);
 
   const handleLogout = useCallback(() => {
@@ -963,6 +992,37 @@ function AppContent() {
     void loadRecords();
   }, [loadRecords]);
 
+  const loadStatistics = useCallback(async () => {
+    if (!isLoggedIn) {
+      setGameStatistics(createEmptyGameStatistics(filter));
+      setStatisticsError(null);
+      setIsStatisticsLoading(false);
+      return;
+    }
+
+    setIsStatisticsLoading(true);
+    setStatisticsError(null);
+
+    try {
+      const fetchedStatistics = await getGameStatistics(filter, recentGameCount);
+      setGameStatistics(fetchedStatistics);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setGameStatistics(createEmptyGameStatistics(filter));
+      setStatisticsError(getApiErrorMessage(error));
+    } finally {
+      setIsStatisticsLoading(false);
+    }
+  }, [filter, handleAuthExpired, isLoggedIn, recentGameCount]);
+
+  useEffect(() => {
+    void loadStatistics();
+  }, [loadStatistics]);
+
   const loadMemberProfile = useCallback(async () => {
     if (!isLoggedIn) return;
 
@@ -1135,6 +1195,7 @@ function AppContent() {
       const savedRecord = await createGameRecord(payload);
       setRecords(prevRecords => [fillMissingInningScores(savedRecord), ...prevRecords]);
       setRecordsError(null);
+      void loadStatistics();
       return savedRecord;
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
@@ -1154,6 +1215,7 @@ function AppContent() {
       await deleteGameRecord(recordId);
       setRecords(prevRecords => prevRecords.filter(record => record.id !== recordId));
       setRecordsError(null);
+      void loadStatistics();
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
         handleAuthExpired();
@@ -1888,7 +1950,19 @@ function AppContent() {
           <Route path="/contact" element={<ContactPage isLoggedIn={isLoggedIn} />} />
           <Route path="/notice" element={<NoticePage />} />
           <Route path="/signup" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <SignupPage onAuthenticated={handleAuthenticated} />} />
-          <Route path="/dashboard" element={requireAuth(<DashboardPage records={records} stats={stats} filter={filter} setFilter={(f) => setFilter(f as GameType)} />)} />
+          <Route path="/dashboard" element={requireAuth(
+            <DashboardPage
+              records={records}
+              stats={gameStatistics}
+              filter={filter}
+              setFilter={setFilter}
+              recentGameCount={recentGameCount}
+              setRecentGameCount={setRecentGameCount}
+              isStatisticsLoading={isStatisticsLoading}
+              statisticsError={statisticsError}
+              onRetryStatistics={loadStatistics}
+            />
+          )} />
           <Route path="/create-game" element={requireAuth(<CreateGamePage onAdd={addRecord} />)} />
           <Route
             path="/records"
