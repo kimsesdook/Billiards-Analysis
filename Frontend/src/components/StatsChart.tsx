@@ -10,25 +10,32 @@ import {
   AreaChart,
   Area
 } from 'recharts';
-import { GameRecord } from '../types';
+import { GameAverageTrend, GameRecord } from '../types';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface StatsChartProps {
-  records: GameRecord[];
+  records?: GameRecord[];
+  trends?: GameAverageTrend[];
 }
 
-export const StatsChart: React.FC<StatsChartProps> = ({ records }) => {
-  const data = records
-    .slice()
-    .reverse()
-    .map((record) => ({
-      date: format(new Date(record.date), 'MM/dd', { locale: ko }),
-      average: record.average,
-      highRun: record.highRun,
-    }));
+export const StatsChart: React.FC<StatsChartProps> = ({ records = [], trends }) => {
+  const data = trends
+    ? trends.map((trend) => ({
+        date: format(new Date(trend.playedAt), 'MM/dd', { locale: ko }),
+        average: trend.average,
+        highRun: trend.highRun,
+      }))
+    : records
+        .slice()
+        .reverse()
+        .map((record) => ({
+          date: format(new Date(record.date), 'MM/dd', { locale: ko }),
+          average: record.average,
+          highRun: record.highRun,
+        }));
 
-  if (records.length === 0) {
+  if (data.length === 0) {
     return (
       <div className="h-64 flex items-center justify-center text-zinc-500 bg-zinc-900/50 rounded-2xl border border-zinc-800 border-dashed">
         데이터가 충분하지 않습니다.
