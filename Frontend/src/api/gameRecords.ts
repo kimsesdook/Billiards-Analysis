@@ -74,6 +74,15 @@ export const createGameRecord = async (record: GameRecordDraft) => {
   return normalizeGameRecord(savedRecord);
 };
 
+export const updateGameRecord = async (id: string, record: GameRecordDraft) => {
+  const updatedRecord = await apiRequest<ApiGameRecord>(`/api/game-records/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(toCreateRequest(record)),
+  });
+
+  return normalizeGameRecord(updatedRecord);
+};
+
 export const deleteGameRecord = async (id: string) => {
   await apiRequest<void>(`/api/game-records/${id}`, {
     method: 'DELETE',
