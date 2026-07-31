@@ -119,3 +119,20 @@ export interface WeeklyGameReport {
   previousWeek: WeeklyGameSummary;
   comparison: WeeklyGameReportComparison;
 }
+
+export interface AiWeeklyAnalysis {
+  summary: string;
+  strengths: string[];
+  focusAreas: string[];
+  trainingRecommendations: string[];
+  dataNotice: string;
+}
+
+export interface AiWeeklyReport {
+  type: GameType;
+  reportStartDate: string;
+  reportEndDate: string;
+  modelName: string;
+  generatedAt: string;
+  analysis: AiWeeklyAnalysis;
+}

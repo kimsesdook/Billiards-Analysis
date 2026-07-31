@@ -31,9 +31,10 @@ import {
   Loader2,
   RefreshCw
 } from 'lucide-react';
-import { GameRecord, GameTrend, GameType, OpponentStatistics, WeeklyGameReport } from '../types';
+import { AiWeeklyReport, GameRecord, GameTrend, GameType, OpponentStatistics, WeeklyGameReport } from '../types';
+import { generateWeeklyAiReport, getWeeklyAiReport } from '../api/aiReports';
 import { getOpponentStatistics, getWeeklyGameReport } from '../api/gameRecords';
-import { getApiErrorMessage } from '../api/client';
+import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -120,6 +121,10 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
 	const [weeklyReport, setWeeklyReport] = useState<WeeklyGameReport | null>(null);
 	const [isWeeklyReportLoading, setIsWeeklyReportLoading] = useState(false);
 	const [weeklyReportError, setWeeklyReportError] = useState<string | null>(null);
+	const [aiReport, setAiReport] = useState<AiWeeklyReport | null>(null);
+	const [isAiReportLoading, setIsAiReportLoading] = useState(false);
+	const [isAiReportGenerating, setIsAiReportGenerating] = useState(false);
+	const [aiReportError, setAiReportError] = useState<string | null>(null);
   const [filters, setFilters] = useState<FilterState>({
     type: '3-Cushion',
     mode: 'all',
@@ -165,6 +170,41 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
 	useEffect(() => {
 		void loadWeeklyReport();
 	}, [loadWeeklyReport, records]);
+
+	const loadAiReport = useCallback(async () => {
+		setIsAiReportLoading(true);
+		setAiReportError(null);
+
+		try {
+			setAiReport(await getWeeklyAiReport(filters.type));
+		} catch (error) {
+			if (error instanceof ApiClientError && error.status === 404) {
+				setAiReport(null);
+				return;
+			}
+
+			setAiReportError(getApiErrorMessage(error));
+		} finally {
+			setIsAiReportLoading(false);
+		}
+	}, [filters.type]);
+
+	useEffect(() => {
+		void loadAiReport();
+	}, [loadAiReport]);
+
+	const handleGenerateAiReport = async () => {
+		setIsAiReportGenerating(true);
+		setAiReportError(null);
+
+		try {
+			setAiReport(await generateWeeklyAiReport(filters.type));
+		} catch (error) {
+			setAiReportError(getApiErrorMessage(error));
+		} finally {
+			setIsAiReportGenerating(false);
+		}
+	};
 
   const getStatsForType = (type: GameType, filters: FilterState) => {
     let result = [...records].reverse().filter(r => r.type === type);
@@ -411,6 +451,14 @@ export function AnalysisPage({ records }: AnalysisPageProps) {
 				isLoading={isWeeklyReportLoading}
 				error={weeklyReportError}
 				onRetry={() => void loadWeeklyReport()}
+			/>
+			<AiWeeklyReportPanel
+				report={aiReport}
+				isLoading={isAiReportLoading}
+				isGenerating={isAiReportGenerating}
+				error={aiReportError}
+				onLoad={() => void loadAiReport()}
+				onGenerate={() => void handleGenerateAiReport()}
 			/>
           <div className="bg-[#0d4d3b] rounded-[2.5rem] border border-[#1a5d4e] p-10 relative overflow-hidden shadow-2xl">
             <div className="absolute top-0 right-0 p-12 opacity-5 pointer-events-none">
@@ -968,6 +1016,98 @@ function WeeklyReportPanel({ report, isLoading, error, onRetry }: WeeklyReportPa
 				</div>
 			) : null}
 		</section>
+	);
+}
+
+interface AiWeeklyReportPanelProps {
+	report: AiWeeklyReport | null;
+	isLoading: boolean;
+	isGenerating: boolean;
+	error: string | null;
+	onLoad: () => void;
+	onGenerate: () => void;
+}
+
+function AiWeeklyReportPanel({
+	report,
+	isLoading,
+	isGenerating,
+	error,
+	onLoad,
+	onGenerate,
+}: AiWeeklyReportPanelProps) {
+	return (
+		<section aria-label="AI 주간 분석" className="border-y border-[#1a5d4e] py-6">
+			<div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+				<div>
+					<div className="flex items-center gap-2">
+						<Sparkles size={18} className="text-amber-300" />
+						<h2 className="text-lg font-black text-emerald-50">AI 주간 분석</h2>
+					</div>
+					<p className="mt-1 text-xs text-emerald-100/45">이번 주의 집계 경기 통계를 바탕으로 생성한 개인 맞춤형 연습 제안입니다.</p>
+				</div>
+				{report && (
+					<div className="text-left md:text-right">
+						<p className="text-xs font-bold text-emerald-100/80">{report.type === '3-Cushion' ? '3구' : '4구'}</p>
+						<p className="mt-1 text-[11px] text-emerald-100/45">{formatPeriod(report.reportStartDate, report.reportEndDate)}</p>
+					</div>
+				)}
+			</div>
+
+			{isLoading ? (
+				<div className="flex h-32 items-center justify-center" aria-live="polite">
+					<Loader2 size={24} className="animate-spin text-amber-300" />
+				</div>
+			) : error ? (
+				<div className="mt-5 flex flex-col gap-3 border-l-2 border-rose-400 bg-rose-400/10 p-4 sm:flex-row sm:items-center sm:justify-between" role="alert">
+					<p className="text-sm text-rose-100">AI 분석을 처리하지 못했습니다. {error}</p>
+					<button type="button" onClick={onLoad} className="inline-flex items-center gap-2 self-start text-xs font-bold text-rose-100 hover:text-white">
+						<RefreshCw size={14} />
+						다시 확인
+					</button>
+				</div>
+			) : report ? (
+				<div className="mt-5 grid gap-5 lg:grid-cols-2">
+					<div className="border-l border-amber-300 pl-5">
+						<p className="text-xs font-bold text-amber-200">이번 주 코칭 요약</p>
+						<p className="mt-3 whitespace-pre-line text-sm leading-6 text-emerald-50">{report.analysis.summary}</p>
+					</div>
+					<div className="grid gap-4 sm:grid-cols-2">
+						<AiAnalysisList title="강점" items={report.analysis.strengths} />
+						<AiAnalysisList title="집중할 점" items={report.analysis.focusAreas} />
+						<AiAnalysisList title="연습 제안" items={report.analysis.trainingRecommendations} className="sm:col-span-2" />
+					</div>
+					<p className="text-xs leading-5 text-emerald-100/40 lg:col-span-2">{report.analysis.dataNotice}</p>
+				</div>
+			) : (
+				<div className="mt-5 flex flex-col gap-4 border-l border-[#1a5d4e] pl-5 sm:flex-row sm:items-center sm:justify-between">
+					<div>
+						<p className="text-sm font-bold text-emerald-50">아직 생성된 AI 분석이 없습니다.</p>
+						<p className="mt-1 text-xs leading-5 text-emerald-100/45">생성 요청을 누를 때만 AI가 집계 통계를 분석합니다. 경기 기록의 개인정보와 개별 메모는 전송하지 않습니다.</p>
+					</div>
+					<button
+						type="button"
+						onClick={onGenerate}
+						disabled={isGenerating}
+						className="inline-flex shrink-0 items-center justify-center gap-2 bg-amber-300 px-4 py-2.5 text-xs font-black text-[#173b2f] transition-colors hover:bg-amber-200 disabled:cursor-not-allowed disabled:opacity-60"
+					>
+						{isGenerating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+						{isGenerating ? 'AI 분석 생성 중' : 'AI 분석 생성'}
+					</button>
+				</div>
+			)}
+		</section>
+	);
+}
+
+function AiAnalysisList({ title, items, className }: { title: string; items: string[]; className?: string }) {
+	return (
+		<div className={cn('border-l border-[#1a5d4e] pl-4', className)}>
+			<p className="text-xs font-bold text-emerald-100/70">{title}</p>
+			<ul className="mt-2 space-y-1.5 text-sm leading-5 text-emerald-50">
+				{items.map((item) => <li key={item}>- {item}</li>)}
+			</ul>
+		</div>
 	);
 }
 
