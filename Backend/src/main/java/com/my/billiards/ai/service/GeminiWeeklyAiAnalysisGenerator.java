@@ -9,10 +9,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "spring.ai.model.chat", havingValue = "google-genai")
 public class GeminiWeeklyAiAnalysisGenerator implements WeeklyAiAnalysisGenerator {
 
 	private static final String SYSTEM_PROMPT = """

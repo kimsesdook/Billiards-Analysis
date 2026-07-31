@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 
 @ExtendWith(MockitoExtension.class)
 class AiWeeklyReportServiceTest {
@@ -46,6 +47,9 @@ class AiWeeklyReportServiceTest {
 
 	@Mock
 	private WeeklyAiAnalysisGenerator weeklyAiAnalysisGenerator;
+
+	@Mock
+	private ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
 
 	private AiWeeklyReportService aiWeeklyReportService;
 	private final ObjectMapper objectMapper = new ObjectMapper();
@@ -64,10 +68,11 @@ class AiWeeklyReportServiceTest {
 		aiWeeklyReportService = new AiWeeklyReportService(
 			weeklyAiReportRepository,
 			gameRecordService,
-			weeklyAiAnalysisGenerator,
+			weeklyAiAnalysisGeneratorProvider,
 			objectMapper,
 			properties
 		);
+		when(weeklyAiAnalysisGeneratorProvider.getIfAvailable()).thenReturn(weeklyAiAnalysisGenerator);
 	}
 
 	@Test
@@ -130,6 +135,26 @@ class AiWeeklyReportServiceTest {
 			.isInstanceOf(BilliardsException.class)
 			.extracting(exception -> ((BilliardsException) exception).getErrorCode())
 			.isEqualTo(ErrorCode.INVALID_INPUT_VALUE);
+
+		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
+	}
+
+	@Test
+	void generateTodayReportReturnsServiceUnavailableWhenTheAiProviderIsDisabled() {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		when(weeklyAiReportRepository.findByMemberIdAndGameTypeAndReportEndDate(
+			MEMBER_ID,
+			GameType.THREE_CUSHION,
+			today
+		)).thenReturn(Optional.empty());
+		when(gameRecordService.getWeeklyReport(MEMBER_ID, GameType.THREE_CUSHION, today)).thenReturn(weeklyReport(2));
+		when(gameRecordService.getStatistics(MEMBER_ID, GameType.THREE_CUSHION, 10)).thenReturn(statistics());
+		when(weeklyAiAnalysisGeneratorProvider.getIfAvailable()).thenReturn(null);
+
+		assertThatThrownBy(() -> aiWeeklyReportService.generateTodayReport(MEMBER_ID, GameType.THREE_CUSHION))
+			.isInstanceOf(BilliardsException.class)
+			.extracting(exception -> ((BilliardsException) exception).getErrorCode())
+			.isEqualTo(ErrorCode.AI_SERVICE_UNAVAILABLE);
 
 		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
 	}

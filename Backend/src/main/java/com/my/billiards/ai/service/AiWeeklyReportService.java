@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +31,7 @@ public class AiWeeklyReportService {
 
 	private final WeeklyAiReportRepository weeklyAiReportRepository;
 	private final GameRecordService gameRecordService;
-	private final WeeklyAiAnalysisGenerator weeklyAiAnalysisGenerator;
+	private final ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
 	private final ObjectMapper objectMapper;
 	private final AiReportProperties aiReportProperties;
 	private final ConcurrentMap<String, Object> generationLocks = new ConcurrentHashMap<>();
@@ -81,7 +82,7 @@ public class AiWeeklyReportService {
 		}
 
 		GameStatisticsResponse statistics = gameRecordService.getStatistics(memberId, type, RECENT_GAME_COUNT);
-		AiWeeklyAnalysis analysis = weeklyAiAnalysisGenerator.generate(weeklyReport, statistics);
+		AiWeeklyAnalysis analysis = getAnalysisGenerator().generate(weeklyReport, statistics);
 		validateAnalysis(analysis);
 
 		WeeklyAiReport savedReport = weeklyAiReportRepository.save(WeeklyAiReport.create(
@@ -105,6 +106,17 @@ public class AiWeeklyReportService {
 
 	private AiWeeklyReportResponse toResponse(WeeklyAiReport report) {
 		return AiWeeklyReportResponse.from(report, readAnalysis(report.getAnalysisJson()));
+	}
+
+	private WeeklyAiAnalysisGenerator getAnalysisGenerator() {
+		WeeklyAiAnalysisGenerator generator = weeklyAiAnalysisGeneratorProvider.getIfAvailable();
+		if (generator == null) {
+			throw new BilliardsException(
+				ErrorCode.AI_SERVICE_UNAVAILABLE,
+				"AI analysis is disabled. Configure GEMINI_API_KEY and AI_CHAT_MODEL to enable it."
+			);
+		}
+		return generator;
 	}
 
 	private String writeAnalysis(AiWeeklyAnalysis analysis) {
