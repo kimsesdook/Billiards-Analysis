@@ -1,72 +1,183 @@
-# Billiards Project
+# Billiards Analysis
 
-Full-stack billiards analytics project with a Spring Boot backend, React frontend, MySQL, Flyway migrations, JWT authentication, friend APIs, notifications, and realtime WebSocket notifications.
+개인 당구 경기 기록을 데이터로 전환해 통계, 상대 전적, 주간 리포트, AI 코칭 제안까지 제공하는 풀스택 웹 애플리케이션입니다.
 
-## CI
+단순 기록 저장을 넘어, 인증된 사용자별 데이터 경계를 지키고 반복 가능한 DB 마이그레이션과 자동 검증 파이프라인을 갖춘 서비스 구조를 목표로 구현했습니다.
 
-GitHub Actions automatically runs when a pull request targets `main` and when code is pushed to `main`.
+## Problem And Value
 
-- Backend tests with Java 17 and Gradle
-- Frontend lint and production build with Node.js 22
-- Docker Compose configuration validation
+- 경기 결과와 이닝별 점수는 남아 있지만, 실력 변화와 연습 방향을 한눈에 보기 어렵습니다.
+- 사용자는 경기 기록을 등록하고, 종목별 통계와 상대 전적을 확인하며, 최근 한 주의 변화를 비교할 수 있습니다.
+- 선택적으로 AI 리포트를 생성하면 집계 통계만 사용해 강점, 집중할 점, 연습 제안을 제공합니다.
 
-## Docker Quick Start
+## Key Features
 
-Run the full local stack from the project root:
+- 회원가입, 로그인, JWT 기반 인증과 프로필 관리
+- 3쿠션과 4구 경기 기록 생성, 조회, 수정, 삭제, 검색, 페이지네이션
+- 종목별 통계, 평균 추세, 상대 전적, 주간 경기 리포트
+- 친구 요청과 친구 관리
+- 알림 REST API와 WebSocket 기반 실시간 알림
+- 명시적 요청 기반 Gemini 주간 AI 코칭 리포트
+- JWT로 보호된 읽기 전용 MCP 경기 분석 도구
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Browser["React 19 SPA\nTypeScript + Vite"]
+    API["Spring Boot API\nModular Monolith"]
+    DB[("MySQL 8.4\nFlyway")]
+    Socket["WebSocket\nRealtime Notifications"]
+    MCP["Streamable HTTP MCP\nRead-only tools"]
+    Gemini["Google Gemini\nOptional"]
+    CI["GitHub Actions\nCI"]
+
+    Browser -->|"REST + JWT"| API
+    Browser <-->|"WebSocket"| Socket
+    Socket --> API
+    API -->|"JPA"| DB
+    MCP -->|"JWT"| API
+    API -. "manual AI request only" .-> Gemini
+    CI -->|"test, lint, build"| API
+    CI -->|"test, lint, build"| Browser
+```
+
+### Domain Boundaries
+
+`auth`, `member`, `game`, `friend`, `notification`, `ai`, `mcp`를 중심으로 패키지를 나눈 모듈형 모놀리스입니다. 현재는 단일 애플리케이션의 단순성을 유지하면서도, 변경 빈도가 높은 도메인은 독립적으로 확장할 수 있게 경계를 분리했습니다.
+
+## Data Model
+
+```mermaid
+erDiagram
+    MEMBERS ||--o{ GAME_RECORDS : owns
+    GAME_RECORDS ||--o{ GAME_RECORD_INNING_SCORES : contains
+    MEMBERS ||--o{ FRIENDSHIPS : requests
+    MEMBERS ||--o{ FRIENDSHIPS : receives
+    MEMBERS ||--o{ NOTIFICATIONS : receives
+    MEMBERS ||--o{ WEEKLY_AI_REPORTS : owns
+
+    MEMBERS {
+        bigint id PK
+        string email UK
+        string nickname
+        string password_hash
+        string role
+        string status
+    }
+    GAME_RECORDS {
+        bigint id PK
+        bigint member_id FK
+        datetime played_at
+        string game_type
+        decimal average
+        boolean is_win
+    }
+    GAME_RECORD_INNING_SCORES {
+        bigint game_record_id FK
+        int score_order
+        int score
+    }
+    FRIENDSHIPS {
+        bigint id PK
+        bigint requester_id FK
+        bigint receiver_id FK
+        string status
+    }
+    NOTIFICATIONS {
+        bigint id PK
+        bigint member_id FK
+        string notification_type
+        boolean is_read
+    }
+    WEEKLY_AI_REPORTS {
+        bigint id PK
+        bigint member_id FK
+        string game_type
+        date report_end_date
+        string model_name
+    }
+```
+
+## Technical Decisions
+
+### Authentication And Data Isolation
+
+- Spring Security와 JWT로 보호 API를 구성했습니다.
+- API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
+- 요청에 회원 ID를 받지 않아 다른 사용자의 기록을 조회할 수 없게 했습니다.
+
+### Database Change Management
+
+- Flyway SQL 마이그레이션으로 테이블, 인덱스, 제약조건 변경 이력을 Git에서 관리합니다.
+- Hibernate는 `ddl-auto=validate`로 스키마를 검증만 하므로, 런타임에 의도하지 않은 DDL이 실행되지 않습니다.
+- `member_id + played_at` 인덱스와 친구 쌍 유니크 제약조건처럼 조회와 데이터 무결성에 필요한 제약을 DB에 둡니다.
+
+### AI Cost And Privacy Controls
+
+- AI 기능은 기본 비활성화 상태이며, 화면 진입이나 주기 작업만으로 모델을 호출하지 않습니다.
+- 사용자가 생성 버튼을 눌렀을 때만 AI 요청을 보냅니다.
+- 회원 ID, 이메일, 상대 이름, 메모, 개별 경기 기록은 전송하지 않고 주간 집계 통계만 전달합니다.
+- 리포트는 회원, 종목, 기준일 조합으로 저장하고 같은 요청은 캐시를 반환해 중복 호출을 줄입니다.
+- Gemini API 키는 백엔드의 로컬 환경 변수에서만 관리하며 React 코드, Docker 빌드 인자, Git에 넣지 않습니다.
+
+### MCP Integration
+
+- Streamable HTTP MCP 서버는 기본 비활성화 상태입니다.
+- 활성화해도 JWT 인증이 필요하고, 주간 리포트, 최근 통계, 상대 전적을 조회하는 읽기 전용 도구만 제공합니다.
+- MCP 모듈 자체는 LLM 호출을 하지 않으므로 API 키나 모델 비용이 필요하지 않습니다.
+
+### Frontend Performance
+
+- React lazy loading으로 화면별 코드를 분리했습니다.
+- React, 애니메이션, 날짜 처리 라이브러리를 공통 청크로 분리해 초기 앱 청크를 약 1.13MB에서 126KB로 줄였습니다.
+
+## Tech Stack
+
+| Area | Technology |
+| --- | --- |
+| Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4, React Router, Recharts, Vitest |
+| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket |
+| Data | MySQL 8.4, H2 for tests, Flyway |
+| AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
+| DevOps | Docker Compose, Nginx, GitHub Actions |
+
+## Quality Gates
+
+GitHub Actions runs on every pull request to `main` and every push to `main`.
+
+- Backend: Java 17, Gradle, Spring Boot tests
+- Frontend: Vitest API contract tests, TypeScript lint, production build
+- Infrastructure: Docker Compose configuration validation
+
+The frontend AI report tests verify the selected game type, explicit `POST` generation request, and error propagation without calling Gemini, a database, or an external API.
+
+## Run Locally
+
+### Docker Compose
+
+From the project root:
 
 ```powershell
 docker compose up --build
 ```
 
-Services:
+| Service | Address |
+| --- | --- |
+| Frontend | http://localhost:3000 |
+| Backend API | http://localhost:8080 |
+| Health check | http://localhost:8080/actuator/health |
+| MySQL host port | localhost:13306 |
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:8080
-- Backend health check: http://localhost:8080/actuator/health
-- MySQL host port: `localhost:13306`
-
-Docker service layout:
-
-- `mysql`: MySQL 8.4 database with a persistent Docker volume
-- `backend`: Spring Boot API running with the `docker` profile
-- `frontend`: Vite production build served by Nginx
-
-Stop containers:
+Stop the local stack:
 
 ```powershell
 docker compose down
 ```
 
-Stop containers and remove the MySQL volume:
+### Run Each App
 
-```powershell
-docker compose down -v
-```
-
-## Docker Database
-
-The compose stack creates this database account automatically:
-
-```text
-database: billiards
-username: billiards
-password: billiards
-root password: root
-```
-
-From your host machine, connect to Docker MySQL with:
-
-```text
-host: localhost
-port: 13306
-database: billiards
-```
-
-The backend applies Flyway migrations on startup and validates the schema with Hibernate.
-
-## Local Development Without Docker
-
-Backend:
+Backend requires Java 17 and a local MySQL configuration. See [Backend README](./Backend/README.md) for profiles and database setup.
 
 ```powershell
 cd Backend
@@ -81,7 +192,7 @@ npm install
 npm run dev
 ```
 
-Automated checks:
+## Verification Commands
 
 ```powershell
 cd Backend
@@ -90,6 +201,17 @@ cd Backend
 
 ```powershell
 cd Frontend
+npm run test
 npm run lint
 npm run build
 ```
+
+## Project Documents
+
+- [Backend README](./Backend/README.md): profiles, API modules, Flyway, MCP, optional Gemini configuration
+- [Frontend README](./Frontend/README.md): frontend environment variables and commands
+- [CI workflow](./.github/workflows/ci.yml): automated quality gates
+
+## Current Scope
+
+The project is ready for local Docker-based development and automated CI validation. A production deployment and a real Gemini request are intentionally deferred until a separate budget, provider policy, and operational plan are agreed on.
