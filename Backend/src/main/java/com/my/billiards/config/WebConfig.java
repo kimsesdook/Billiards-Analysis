@@ -1,5 +1,6 @@
 package com.my.billiards.config;
 
+import com.my.billiards.common.logging.RequestIdFilter;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.CorsRegistry;
@@ -17,6 +18,7 @@ public class WebConfig implements WebMvcConfigurer {
 			.allowedOrigins(properties.getCors().getAllowedOrigins().toArray(new String[0]))
 			.allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
 			.allowedHeaders("*")
+			.exposedHeaders(RequestIdFilter.HEADER_NAME)
 			.allowCredentials(true)
 			.maxAge(3600);
 	}

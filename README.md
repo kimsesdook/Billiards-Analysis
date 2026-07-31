@@ -107,6 +107,12 @@ erDiagram
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
 - 요청에 회원 ID를 받지 않아 다른 사용자의 기록을 조회할 수 없게 했습니다.
 
+### Request Tracing
+
+- Every HTTP response returns `X-Request-Id`, and the same value is written to backend logs.
+- A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
+- The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
+
 ### Database Change Management
 
 - Flyway SQL 마이그레이션으로 테이블, 인덱스, 제약조건 변경 이력을 Git에서 관리합니다.
