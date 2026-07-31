@@ -86,6 +86,16 @@ docker compose up --build
 
 The backend runs with `SPRING_PROFILES_ACTIVE=docker`, connects to the Docker MySQL service, applies Flyway migrations, and serves the API on http://localhost:8080.
 
+## MCP Analysis Tools
+
+The backend includes a Streamable HTTP MCP server for read-only billiards analysis tools.
+
+- The server is disabled by default. Set `MCP_ENABLED=true` to expose it at `http://localhost:8080/mcp`.
+- Every MCP request must include the same JWT Bearer token used by the REST APIs.
+- The tools resolve the member from the JWT instead of accepting a member ID, so one member cannot request another member's records.
+- Available tools: `get_weekly_game_report`, `get_recent_game_statistics`, and `get_opponent_statistics`.
+- This module does not call an LLM or configure an AI provider, so it does not require an API key or incur model usage costs.
+
 ## Current Stage
 
 The backend currently includes:
@@ -107,3 +117,4 @@ The backend currently includes:
 - JWT-protected friend list, friend request, and member search APIs
 - Notification REST APIs and realtime WebSocket delivery
 - Docker Compose development environment
+- JWT-protected MCP analysis tools for AI clients
