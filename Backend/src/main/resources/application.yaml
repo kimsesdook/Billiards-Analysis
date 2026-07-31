@@ -4,6 +4,15 @@ spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
   ai:
+    model:
+      chat: ${AI_CHAT_MODEL:none}
+    google:
+      genai:
+        api-key: ${GEMINI_API_KEY:}
+        chat:
+          model: ${GEMINI_MODEL:gemini-2.5-flash}
+          temperature: 0.2
+          max-output-tokens: 350
     mcp:
       server:
         enabled: ${MCP_ENABLED:false}
@@ -33,3 +42,5 @@ app:
   jwt:
     secret: ${JWT_SECRET:local-development-jwt-secret-change-me-please-32bytes}
     access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:60}
+  ai-report:
+    model-name: ${GEMINI_MODEL:gemini-2.5-flash}

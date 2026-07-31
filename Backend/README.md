@@ -31,6 +31,7 @@ The backend uses Flyway to manage database schema changes.
 - `V4__add_member_profile_fields.sql` adds member profile and billiards handicap settings
 - `V5__create_friendships_table.sql` creates friend request and friendship relationships
 - `V6__create_notifications_table.sql` creates user notifications
+- `V7__create_weekly_ai_reports_table.sql` stores one AI analysis per member, game type, and report date
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -96,6 +97,28 @@ The backend includes a Streamable HTTP MCP server for read-only billiards analys
 - Available tools: `get_weekly_game_report`, `get_recent_game_statistics`, and `get_opponent_statistics`.
 - This module does not call an LLM or configure an AI provider, so it does not require an API key or incur model usage costs.
 
+## Gemini Weekly AI Report
+
+The optional AI report feature generates a Korean-language coaching report from aggregate game statistics only. It does not send member IDs, email addresses, opponent names, notes, or individual game records to Gemini.
+
+- AI chat is disabled by default with `AI_CHAT_MODEL=none`, so starting the backend does not call an AI model.
+- `POST /api/ai-reports/weekly?type=3-Cushion` creates a report only when the authenticated user explicitly requests it.
+- A report is cached by member, game type, and report date. Repeating the same request returns the stored report without another model call.
+- Concurrent duplicate requests are serialized inside one backend process before a report is generated.
+- `GET /api/ai-reports/weekly?type=3-Cushion` retrieves today's cached report.
+- Without an API key, an AI request returns `503 AI_001`; the rest of the backend continues to work normally.
+
+To enable it locally after creating a Gemini API key, set terminal-only environment variables before starting the backend. Do not put the key in YAML files, React code, or Git.
+
+```powershell
+$env:AI_CHAT_MODEL="google-genai"
+$env:GEMINI_API_KEY="your_gemini_api_key"
+$env:GEMINI_MODEL="gemini-2.5-flash"
+.\gradlew.bat bootRun
+```
+
+The configured output cap is 350 tokens and no scheduled job invokes the model. Keep the Gemini account on its free tier and do not enable Google Cloud billing unless a later deployment plan explicitly requires it.
+
 ## Current Stage
 
 The backend currently includes:
@@ -118,3 +141,4 @@ The backend currently includes:
 - Notification REST APIs and realtime WebSocket delivery
 - Docker Compose development environment
 - JWT-protected MCP analysis tools for AI clients
+- Optional Gemini-backed weekly coaching report with aggregate-only data and report caching

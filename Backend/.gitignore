@@ -26,6 +26,11 @@ out/
 !**/src/main/**/out/
 !**/src/test/**/out/
 
+### Local secrets ###
+.env
+.env.*
+!.env.example
+
 ### NetBeans ###
 /nbproject/private/
 /nbbuild/
