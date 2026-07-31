@@ -28,6 +28,11 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
 - Signup and login are public. Other REST API groups are marked with the `bearerAuth` JWT scheme in Swagger UI.
 
+## Actuator Access
+
+- `GET /actuator/health` and `GET /actuator/info` are public for health checks.
+- Other Actuator endpoints, including `/actuator/metrics`, require an `ADMIN` JWT role.
+
 ## Database Migration
 
 The backend uses Flyway to manage database schema changes.

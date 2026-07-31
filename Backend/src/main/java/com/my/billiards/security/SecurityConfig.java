@@ -39,6 +39,7 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login").permitAll()
 				.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
+				.requestMatchers("/actuator/**").hasRole("ADMIN")
 				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
 				.requestMatchers("/mcp").authenticated()
 				.requestMatchers("/api/game-records/**").authenticated()
