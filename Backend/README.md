@@ -33,6 +33,12 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 - `GET /actuator/health` and `GET /actuator/info` are public for health checks.
 - Other Actuator endpoints, including `/actuator/metrics`, require an `ADMIN` JWT role.
 
+## Request Tracing
+
+- Every HTTP response includes an `X-Request-Id` header, including authentication failures.
+- A valid inbound `X-Request-Id` is reused; otherwise, the backend generates a UUID.
+- The request ID is included in server logs to connect a client error with its backend log entries.
+
 ## Database Migration
 
 The backend uses Flyway to manage database schema changes.
