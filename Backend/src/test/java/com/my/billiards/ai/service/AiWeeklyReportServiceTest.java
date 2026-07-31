@@ -69,10 +69,8 @@ class AiWeeklyReportServiceTest {
 			weeklyAiReportRepository,
 			gameRecordService,
 			weeklyAiAnalysisGeneratorProvider,
-			objectMapper,
 			properties
 		);
-		when(weeklyAiAnalysisGeneratorProvider.getIfAvailable()).thenReturn(weeklyAiAnalysisGenerator);
 	}
 
 	@Test
@@ -85,6 +83,7 @@ class AiWeeklyReportServiceTest {
 		)).thenReturn(Optional.empty());
 		when(gameRecordService.getWeeklyReport(MEMBER_ID, GameType.THREE_CUSHION, today)).thenReturn(weeklyReport(2));
 		when(gameRecordService.getStatistics(MEMBER_ID, GameType.THREE_CUSHION, 10)).thenReturn(statistics());
+		when(weeklyAiAnalysisGeneratorProvider.getIfAvailable()).thenReturn(weeklyAiAnalysisGenerator);
 		when(weeklyAiAnalysisGenerator.generate(any(), any())).thenReturn(analysis);
 		when(weeklyAiReportRepository.save(any(WeeklyAiReport.class))).thenAnswer(invocation -> invocation.getArgument(0));
 

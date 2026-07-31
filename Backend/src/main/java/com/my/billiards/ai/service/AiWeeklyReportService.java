@@ -32,9 +32,9 @@ public class AiWeeklyReportService {
 	private final WeeklyAiReportRepository weeklyAiReportRepository;
 	private final GameRecordService gameRecordService;
 	private final ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
-	private final ObjectMapper objectMapper;
 	private final AiReportProperties aiReportProperties;
 	private final ConcurrentMap<String, Object> generationLocks = new ConcurrentHashMap<>();
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Transactional(readOnly = true)
 	public AiWeeklyReportResponse findTodayReport(Long memberId, GameType type) {
