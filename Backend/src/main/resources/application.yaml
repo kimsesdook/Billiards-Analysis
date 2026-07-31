@@ -3,6 +3,19 @@ spring:
     name: billiards
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  ai:
+    mcp:
+      server:
+        enabled: ${MCP_ENABLED:false}
+        protocol: STREAMABLE
+        name: billiards-report-mcp
+        version: 1.0.0
+        type: SYNC
+        instructions: >
+          Provide read-only billiards analysis data for the authenticated member.
+          Use the returned statistics as factual grounding for analysis.
+        streamable-http:
+          mcp-endpoint: /mcp
 
 server:
   port: ${SERVER_PORT:8080}
