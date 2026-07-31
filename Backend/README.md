@@ -85,6 +85,8 @@ Run automated tests:
 .\gradlew.bat test
 ```
 
+`UserFlowIntegrationTest` verifies one complete API flow in H2: signup, JWT login, profile lookup, game record creation, statistics lookup, and member-to-member game record isolation.
+
 ## Docker Run
 
 From the project root, run the full stack:
