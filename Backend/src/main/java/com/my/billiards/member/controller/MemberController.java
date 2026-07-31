@@ -6,6 +6,8 @@ import com.my.billiards.member.dto.MemberProfileUpdateRequest;
 import com.my.billiards.member.dto.PasswordChangeRequest;
 import com.my.billiards.member.service.MemberService;
 import com.my.billiards.security.AuthenticatedMember;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/members")
+@Tag(name = "Members", description = "Authenticated member profile and password APIs")
+@SecurityRequirement(name = "bearerAuth")
 public class MemberController {
 
 	private final MemberService memberService;

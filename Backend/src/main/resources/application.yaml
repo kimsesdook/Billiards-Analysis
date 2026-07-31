@@ -35,6 +35,12 @@ management:
       exposure:
         include: health,info,metrics
 
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: alpha
+    tags-sorter: alpha
+
 app:
   cors:
     allowed-origins:

@@ -20,6 +20,14 @@ This backend is designed as a modular monolith first. The package boundaries are
 - `docker`: MySQL-based Docker Compose profile
 - `test`: H2-based test profile for fast context and repository tests
 
+## API Documentation
+
+Springdoc generates OpenAPI documentation from the controllers at runtime.
+
+- Swagger UI: `http://localhost:8080/swagger-ui.html`
+- OpenAPI JSON: `http://localhost:8080/v3/api-docs`
+- Signup and login are public. Other REST API groups are marked with the `bearerAuth` JWT scheme in Swagger UI.
+
 ## Database Migration
 
 The backend uses Flyway to manage database schema changes.

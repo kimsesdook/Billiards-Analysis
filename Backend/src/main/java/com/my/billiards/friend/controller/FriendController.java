@@ -8,6 +8,8 @@ import com.my.billiards.friend.dto.FriendResponse;
 import com.my.billiards.friend.dto.FriendSearchResponse;
 import com.my.billiards.friend.service.FriendService;
 import com.my.billiards.security.AuthenticatedMember;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/friends")
+@Tag(name = "Friends", description = "Authenticated friend search and request APIs")
+@SecurityRequirement(name = "bearerAuth")
 public class FriendController {
 
 	private final FriendService friendService;

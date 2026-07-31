@@ -7,6 +7,8 @@ import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.security.AuthenticatedMember;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,6 +20,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/ai-reports")
 @RequiredArgsConstructor
+@Tag(name = "AI Reports", description = "Authenticated weekly coaching report APIs")
+@SecurityRequirement(name = "bearerAuth")
 public class AiWeeklyReportController {
 
 	private final AiWeeklyReportService aiWeeklyReportService;
