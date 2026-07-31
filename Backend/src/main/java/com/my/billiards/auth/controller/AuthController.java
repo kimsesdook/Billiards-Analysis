@@ -6,6 +6,7 @@ import com.my.billiards.auth.dto.SignUpRequest;
 import com.my.billiards.auth.dto.SignUpResponse;
 import com.my.billiards.auth.service.AuthService;
 import com.my.billiards.common.api.ApiResponse;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -18,6 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
+@Tag(name = "Authentication", description = "Signup and JWT login")
 public class AuthController {
 
 	private final AuthService authService;

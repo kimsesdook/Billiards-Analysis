@@ -14,6 +14,8 @@ import com.my.billiards.game.dto.OpponentStatisticsResponse;
 import com.my.billiards.game.dto.WeeklyGameReportResponse;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
+import io.swagger.v3.oas.annotations.tags.Tag;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
 import java.util.List;
@@ -35,6 +37,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/game-records")
 @RequiredArgsConstructor
+@Tag(name = "Game Records", description = "Authenticated game record, statistics, and weekly report APIs")
+@SecurityRequirement(name = "bearerAuth")
 public class GameRecordController {
 
 	private static final int MAX_PAGE_SIZE = 100;
