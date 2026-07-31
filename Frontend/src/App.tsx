@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { Suspense, lazy, useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { 
   BrowserRouter as Router,
   Routes,
@@ -47,17 +47,6 @@ import {
   Key
 } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameRecordPage, GameRecordSearchParams, GameStatistics, PlayerStats, GameType } from './types';
-import { StatsChart } from './components/StatsChart';
-import { GuidePage } from './components/GuidePage';
-import { LoginPage } from './components/LoginPage';
-import { ContactPage } from './components/ContactPage';
-import { NoticePage } from './components/NoticePage';
-import { SignupPage } from './components/SignupPage';
-import { DashboardPage } from './components/DashboardPage';
-import { CreateGamePage } from './components/CreateGamePage';
-import { GameRecordsPage } from './components/GameRecordsPage';
-import { AnalysisPage } from './components/AnalysisPage';
-import { FriendsPage } from './components/FriendsPage';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'motion/react';
@@ -90,6 +79,18 @@ import {
   saveAuthSession,
   updateStoredAuthMember,
 } from './api/authStorage';
+
+const StatsChart = lazy(() => import('./components/StatsChart').then(({ StatsChart }) => ({ default: StatsChart })));
+const GuidePage = lazy(() => import('./components/GuidePage').then(({ GuidePage }) => ({ default: GuidePage })));
+const LoginPage = lazy(() => import('./components/LoginPage').then(({ LoginPage }) => ({ default: LoginPage })));
+const ContactPage = lazy(() => import('./components/ContactPage').then(({ ContactPage }) => ({ default: ContactPage })));
+const NoticePage = lazy(() => import('./components/NoticePage').then(({ NoticePage }) => ({ default: NoticePage })));
+const SignupPage = lazy(() => import('./components/SignupPage').then(({ SignupPage }) => ({ default: SignupPage })));
+const DashboardPage = lazy(() => import('./components/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })));
+const CreateGamePage = lazy(() => import('./components/CreateGamePage').then(({ CreateGamePage }) => ({ default: CreateGamePage })));
+const GameRecordsPage = lazy(() => import('./components/GameRecordsPage').then(({ GameRecordsPage }) => ({ default: GameRecordsPage })));
+const AnalysisPage = lazy(() => import('./components/AnalysisPage').then(({ AnalysisPage }) => ({ default: AnalysisPage })));
+const FriendsPage = lazy(() => import('./components/FriendsPage').then(({ FriendsPage }) => ({ default: FriendsPage })));
 
 type AppNotificationType = 'match' | 'friend' | 'report' | 'system';
 
@@ -2019,6 +2020,7 @@ function AppContent() {
               ? "px-8 py-8" 
               : "max-w-7xl mx-auto px-4 py-8"
         )}>
+        <Suspense fallback={<RouteLoading />}>
         <Routes>
           <Route path="/guide" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <GuidePage />} />
           <Route path="/login" element={isLoggedIn ? <Navigate to="/dashboard" replace /> : <LoginPage onLogin={handleAuthenticated} />} />
@@ -2323,6 +2325,7 @@ function AppContent() {
             )
           } />
         </Routes>
+        </Suspense>
       </main>
     </div>
 
@@ -2961,6 +2964,14 @@ function AppContent() {
           </div>
         )}
       </AnimatePresence>
+    </div>
+  );
+}
+
+function RouteLoading() {
+  return (
+    <div className="flex min-h-64 items-center justify-center" role="status" aria-label="페이지 불러오는 중">
+      <Activity size={24} className="animate-pulse text-emerald-500" />
     </div>
   );
 }
