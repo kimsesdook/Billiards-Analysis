@@ -8,6 +8,7 @@ import com.my.billiards.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
@@ -18,6 +19,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -45,6 +47,9 @@ class ContactInquiryControllerTest {
 
 	@Autowired
 	private MemberRepository memberRepository;
+
+	@Autowired
+	private JdbcTemplate jdbcTemplate;
 
 	@BeforeEach
 	void setUp() {
@@ -146,6 +151,82 @@ class ContactInquiryControllerTest {
 			.andExpect(jsonPath("$.code").value("COMMON_001"));
 	}
 
+	@Test
+	void letsAnAdminAnswerAnInquiryAndUpdatesItsStatus() throws Exception {
+		String ownerToken = signUpAndLogin("owner@example.com", "Owner");
+		Long inquiryId = createInquiry(ownerToken, "Handicap question", "How is the handicap calculated?", true);
+		String adminToken = createAdminToken("admin@example.com", "Administrator");
+
+		mockMvc.perform(patch("/api/contact-inquiries/{inquiryId}/answer", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "answerContent": "The handicap is calculated from recent game records."
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.status").value("ANSWERED"))
+			.andExpect(jsonPath("$.data.answerContent").value("The handicap is calculated from recent game records."))
+			.andExpect(jsonPath("$.data.answeredByNickname").value("Administrator"))
+			.andExpect(jsonPath("$.data.answeredAt").exists());
+
+		mockMvc.perform(patch("/api/contact-inquiries/{inquiryId}/answer", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "answerContent": "The calculation details have been updated."
+					}
+					"""))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("ANSWERED"))
+			.andExpect(jsonPath("$.data.answerContent").value("The calculation details have been updated."));
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("ANSWERED"))
+			.andExpect(jsonPath("$.data.answerContent").value("The calculation details have been updated."));
+	}
+
+	@Test
+	void preventsRegularMembersFromAnsweringAnInquiry() throws Exception {
+		String ownerToken = signUpAndLogin("owner@example.com", "Owner");
+		String regularMemberToken = signUpAndLogin("player@example.com", "PlayerOne");
+		Long inquiryId = createInquiry(ownerToken, "Private inquiry", "Only the owner can read this", true);
+
+		mockMvc.perform(patch("/api/contact-inquiries/{inquiryId}/answer", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(regularMemberToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "answerContent": "This must not be accepted."
+					}
+					"""))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("AUTH_002"));
+	}
+
+	@Test
+	void rejectsAnEmptyAnswerFromAnAdmin() throws Exception {
+		String ownerToken = signUpAndLogin("owner@example.com", "Owner");
+		Long inquiryId = createInquiry(ownerToken, "Public inquiry", "Public content", false);
+		String adminToken = createAdminToken("admin@example.com", "Administrator");
+
+		mockMvc.perform(patch("/api/contact-inquiries/{inquiryId}/answer", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "answerContent": ""
+					}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
 	private Long createInquiry(String token, String title, String content, boolean isPrivate) throws Exception {
 		String response = mockMvc.perform(post("/api/contact-inquiries")
 				.header(HttpHeaders.AUTHORIZATION, bearer(token))
@@ -171,6 +252,17 @@ class ContactInquiryControllerTest {
 	}
 
 	private String signUpAndLogin(String email, String nickname) throws Exception {
+		signUp(email, nickname);
+		return login(email);
+	}
+
+	private String createAdminToken(String email, String nickname) throws Exception {
+		signUp(email, nickname);
+		jdbcTemplate.update("UPDATE members SET role = ? WHERE email = ?", "ADMIN", email);
+		return login(email);
+	}
+
+	private void signUp(String email, String nickname) throws Exception {
 		mockMvc.perform(post("/api/auth/signup")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
@@ -179,9 +271,11 @@ class ContactInquiryControllerTest {
 					  "password": "%s",
 					  "nickname": "%s"
 					}
-					""".formatted(email, PASSWORD, nickname)))
+				""".formatted(email, PASSWORD, nickname)))
 			.andExpect(status().isCreated());
+	}
 
+	private String login(String email) throws Exception {
 		String response = mockMvc.perform(post("/api/auth/login")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""

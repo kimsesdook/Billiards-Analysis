@@ -1,6 +1,7 @@
 package com.my.billiards.contact.controller;
 
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.contact.dto.ContactInquiryAnswerRequest;
 import com.my.billiards.contact.dto.ContactInquiryCreateRequest;
 import com.my.billiards.contact.dto.ContactInquiryResponse;
 import com.my.billiards.contact.dto.ContactInquirySummaryResponse;
@@ -15,6 +16,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -63,5 +65,15 @@ public class ContactInquiryController {
 		@Valid @RequestBody ContactInquiryCreateRequest request
 	) {
 		return ApiResponse.success(contactInquiryService.create(member.id(), request));
+	}
+
+	@PatchMapping("/{inquiryId}/answer")
+	@SecurityRequirement(name = "bearerAuth")
+	public ApiResponse<ContactInquiryResponse> answer(
+		@PathVariable Long inquiryId,
+		@AuthenticationPrincipal AuthenticatedMember member,
+		@Valid @RequestBody ContactInquiryAnswerRequest request
+	) {
+		return ApiResponse.success(contactInquiryService.answer(inquiryId, member.id(), request));
 	}
 }

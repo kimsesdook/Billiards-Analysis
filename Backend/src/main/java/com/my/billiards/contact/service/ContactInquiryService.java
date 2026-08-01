@@ -3,6 +3,7 @@ package com.my.billiards.contact.service;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.contact.domain.ContactInquiry;
+import com.my.billiards.contact.dto.ContactInquiryAnswerRequest;
 import com.my.billiards.contact.dto.ContactInquiryCreateRequest;
 import com.my.billiards.contact.dto.ContactInquiryResponse;
 import com.my.billiards.contact.dto.ContactInquirySummaryResponse;
@@ -61,6 +62,20 @@ public class ContactInquiryService {
 			throw new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND);
 		}
 
+		return ContactInquiryResponse.from(inquiry);
+	}
+
+	@Transactional
+	public ContactInquiryResponse answer(Long inquiryId, Long administratorId, ContactInquiryAnswerRequest request) {
+		Member administrator = getActiveMember(administratorId);
+		if (administrator.getRole() != MemberRole.ADMIN) {
+			throw new BilliardsException(ErrorCode.FORBIDDEN);
+		}
+
+		ContactInquiry inquiry = contactInquiryRepository.findById(inquiryId)
+			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		inquiry.answer(administrator, request.answerContent().trim());
 		return ContactInquiryResponse.from(inquiry);
 	}
 
