@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  ContactInquiryDetail,
   createContactInquiry,
   getContactInquiry,
   getMyContactInquiries,
@@ -33,6 +34,24 @@ describe('contact inquiry API contract', () => {
     getContactInquiry(42, true);
 
     expect(apiRequest).toHaveBeenCalledWith('/api/contact-inquiries/42', { skipAuth: false });
+  });
+
+  it('keeps the administrator answer metadata returned by the detail API', async () => {
+    const detail: ContactInquiryDetail = {
+      id: 42,
+      title: 'Question about averages',
+      content: 'How is the average calculated?',
+      authorNickname: 'PlayerOne',
+      isPrivate: true,
+      status: 'ANSWERED',
+      createdAt: '2026-08-01T12:00:00',
+      answerContent: 'The average uses the recorded inning count.',
+      answeredByNickname: 'Administrator',
+      answeredAt: '2026-08-01T13:00:00',
+    };
+    apiRequest.mockResolvedValueOnce(detail);
+
+    await expect(getContactInquiry(42, true)).resolves.toEqual(detail);
   });
 
   it('creates an inquiry with the request body expected by the backend', () => {

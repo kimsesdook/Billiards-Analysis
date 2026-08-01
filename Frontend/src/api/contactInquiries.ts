@@ -13,6 +13,9 @@ export type ContactInquirySummary = {
 
 export type ContactInquiryDetail = ContactInquirySummary & {
   content: string;
+  answerContent: string | null;
+  answeredByNickname: string | null;
+  answeredAt: string | null;
 };
 
 export type CreateContactInquiryPayload = {
