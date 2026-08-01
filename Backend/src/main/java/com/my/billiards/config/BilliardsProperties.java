@@ -9,6 +9,7 @@ public class BilliardsProperties {
 
 	private final Cors cors = new Cors();
 	private final Jwt jwt = new Jwt();
+	private final AdminBootstrap adminBootstrap = new AdminBootstrap();
 
 	public Cors getCors() {
 		return cors;
@@ -16,6 +17,10 @@ public class BilliardsProperties {
 
 	public Jwt getJwt() {
 		return jwt;
+	}
+
+	public AdminBootstrap getAdminBootstrap() {
+		return adminBootstrap;
 	}
 
 	public static class Cors {
@@ -50,6 +55,28 @@ public class BilliardsProperties {
 
 		public void setAccessTokenExpirationMinutes(long accessTokenExpirationMinutes) {
 			this.accessTokenExpirationMinutes = accessTokenExpirationMinutes;
+		}
+	}
+
+	public static class AdminBootstrap {
+
+		private boolean enabled;
+		private String email = "";
+
+		public boolean isEnabled() {
+			return enabled;
+		}
+
+		public void setEnabled(boolean enabled) {
+			this.enabled = enabled;
+		}
+
+		public String getEmail() {
+			return email;
+		}
+
+		public void setEmail(String email) {
+			this.email = email;
 		}
 	}
 }

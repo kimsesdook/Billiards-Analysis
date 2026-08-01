@@ -85,4 +85,8 @@ public class Member extends BaseTimeEntity {
 	public void changePassword(String passwordHash) {
 		this.passwordHash = passwordHash;
 	}
+
+	public void grantAdministratorRole() {
+		this.role = MemberRole.ADMIN;
+	}
 }

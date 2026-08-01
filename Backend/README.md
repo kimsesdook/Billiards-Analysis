@@ -88,6 +88,18 @@ Run the backend locally:
 .\gradlew.bat bootRun
 ```
 
+### Local Administrator Demo
+
+There is no public API or default administrator account. For local UI testing only, first sign up with the account you want to use, then set these terminal-only variables and restart the backend:
+
+```powershell
+$env:ADMIN_BOOTSTRAP_ENABLED="true"
+$env:ADMIN_BOOTSTRAP_EMAIL="your_registered_email@example.com"
+.\gradlew.bat bootRun
+```
+
+This bootstrap runs only with the `local` profile, is disabled by default, and does not run in the `docker`, `test`, or future production profiles. It contains no password and does not store an email in Git.
+
 ## H2 Test Run
 
 Use the `test` profile when you want to run the server without MySQL. This uses an in-memory H2 database and still applies Flyway migrations.

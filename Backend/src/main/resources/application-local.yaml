@@ -20,3 +20,8 @@ spring:
 logging:
   level:
     org.hibernate.SQL: debug
+
+app:
+  admin-bootstrap:
+    enabled: ${ADMIN_BOOTSTRAP_ENABLED:false}
+    email: ${ADMIN_BOOTSTRAP_EMAIL:}
