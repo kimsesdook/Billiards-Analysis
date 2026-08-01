@@ -126,6 +126,11 @@ erDiagram
 - Public inquiries can be read without signing in, but private inquiries are visible only to their author or an `ADMIN` role.
 - Inquiry creation and a member's full inquiry history require JWT authentication.
 
+### Contact Inquiry Answer Notifications
+
+- The first administrator answer publishes an application event, and the owner notification is created only after the inquiry transaction commits.
+- An active inquiry owner receives one `SYSTEM` notification through the existing real-time notification flow; answer edits do not create duplicates.
+
 ### Error Observability
 
 - Expected business and validation errors are logged at `WARN` without request values or custom exception messages.

@@ -12,6 +12,7 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -42,6 +43,18 @@ public class NotificationService {
 		NotificationResponse response = NotificationResponse.from(notificationRepository.save(notification));
 		eventPublisher.publishEvent(new NotificationRealtimeEvent(member.getId(), response));
 		return response;
+	}
+
+	@Transactional(propagation = Propagation.REQUIRES_NEW)
+	public NotificationResponse createForMemberAfterCommit(
+		Member member,
+		NotificationType type,
+		String title,
+		String message,
+		String relatedResourceType,
+		Long relatedResourceId
+	) {
+		return createForMember(member, type, title, message, relatedResourceType, relatedResourceId);
 	}
 
 	@Transactional(readOnly = true)
