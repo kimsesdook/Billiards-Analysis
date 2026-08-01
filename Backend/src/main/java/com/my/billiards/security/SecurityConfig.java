@@ -44,6 +44,7 @@ public class SecurityConfig {
 				.requestMatchers(HttpMethod.GET, "/api/contact-inquiries/me").authenticated()
 				.requestMatchers(HttpMethod.GET, "/api/contact-inquiries", "/api/contact-inquiries/*").permitAll()
 				.requestMatchers("/api/contact-inquiries", "/api/contact-inquiries/**").authenticated()
+				.requestMatchers("/api/admin/**").hasRole("ADMIN")
 				.requestMatchers("/mcp").authenticated()
 				.requestMatchers("/api/game-records/**").authenticated()
 				.requestMatchers("/api/ai-reports/**").authenticated()

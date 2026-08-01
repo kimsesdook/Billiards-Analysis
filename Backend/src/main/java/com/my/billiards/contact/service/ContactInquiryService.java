@@ -2,6 +2,7 @@ package com.my.billiards.contact.service;
 
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.api.PageResponse;
 import com.my.billiards.contact.domain.ContactInquiry;
 import com.my.billiards.contact.domain.InquiryStatus;
 import com.my.billiards.contact.dto.ContactInquiryAnswerRequest;
@@ -17,6 +18,8 @@ import com.my.billiards.member.repository.MemberRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -58,6 +61,21 @@ public class ContactInquiryService {
 	}
 
 	@Transactional(readOnly = true)
+	public PageResponse<ContactInquirySummaryResponse> findAllForAdmin(
+		Long administratorId,
+		InquiryStatus status,
+		int page,
+		int size
+	) {
+		getActiveAdministrator(administratorId);
+		Page<ContactInquiry> inquiries = status == null
+			? contactInquiryRepository.findAllByOrderByCreatedAtDescIdDesc(PageRequest.of(page, size))
+			: contactInquiryRepository.findAllByStatusOrderByCreatedAtDescIdDesc(status, PageRequest.of(page, size));
+
+		return PageResponse.from(inquiries, ContactInquirySummaryResponse::from);
+	}
+
+	@Transactional(readOnly = true)
 	public ContactInquiryResponse findById(Long inquiryId, Long viewerId, MemberRole viewerRole) {
 		ContactInquiry inquiry = contactInquiryRepository.findById(inquiryId)
 			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -71,10 +89,7 @@ public class ContactInquiryService {
 
 	@Transactional
 	public ContactInquiryResponse answer(Long inquiryId, Long administratorId, ContactInquiryAnswerRequest request) {
-		Member administrator = getActiveMember(administratorId);
-		if (administrator.getRole() != MemberRole.ADMIN) {
-			throw new BilliardsException(ErrorCode.FORBIDDEN);
-		}
+		Member administrator = getActiveAdministrator(administratorId);
 
 		ContactInquiry inquiry = contactInquiryRepository.findById(inquiryId)
 			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND));
@@ -93,6 +108,15 @@ public class ContactInquiryService {
 			.orElseThrow(() -> new BilliardsException(ErrorCode.UNAUTHORIZED));
 
 		if (member.getStatus() != MemberStatus.ACTIVE) {
+			throw new BilliardsException(ErrorCode.FORBIDDEN);
+		}
+
+		return member;
+	}
+
+	private Member getActiveAdministrator(Long memberId) {
+		Member member = getActiveMember(memberId);
+		if (member.getRole() != MemberRole.ADMIN) {
 			throw new BilliardsException(ErrorCode.FORBIDDEN);
 		}
 
