@@ -14,6 +14,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import java.time.LocalDateTime;
 import lombok.Getter;
 
 @Getter
@@ -34,6 +35,16 @@ public class ContactInquiry extends BaseTimeEntity {
 
 	@Column(nullable = false, columnDefinition = "TEXT")
 	private String content;
+
+	@Column(name = "answer_content", columnDefinition = "TEXT")
+	private String answerContent;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "answered_by_member_id")
+	private Member answeredBy;
+
+	@Column(name = "answered_at")
+	private LocalDateTime answeredAt;
 
 	@Column(name = "is_private", nullable = false)
 	private boolean privateInquiry;
@@ -65,5 +76,12 @@ public class ContactInquiry extends BaseTimeEntity {
 		return viewerId != null && (
 			member.getId().equals(viewerId) || viewerRole == MemberRole.ADMIN
 		);
+	}
+
+	public void answer(Member administrator, String answerContent) {
+		this.answerContent = answerContent;
+		this.answeredBy = administrator;
+		this.answeredAt = LocalDateTime.now();
+		this.status = InquiryStatus.ANSWERED;
 	}
 }
