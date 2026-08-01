@@ -172,6 +172,14 @@ class ContactInquiryControllerTest {
 			.andExpect(jsonPath("$.data.answeredByNickname").value("Administrator"))
 			.andExpect(jsonPath("$.data.answeredAt").exists());
 
+		mockMvc.perform(get("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data", hasSize(1)))
+			.andExpect(jsonPath("$.data[0].type").value("SYSTEM"))
+			.andExpect(jsonPath("$.data[0].relatedResourceType").value("CONTACT_INQUIRY"))
+			.andExpect(jsonPath("$.data[0].relatedResourceId").value(inquiryId));
+
 		mockMvc.perform(patch("/api/contact-inquiries/{inquiryId}/answer", inquiryId)
 				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
 				.contentType(MediaType.APPLICATION_JSON)
@@ -183,6 +191,11 @@ class ContactInquiryControllerTest {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.data.status").value("ANSWERED"))
 			.andExpect(jsonPath("$.data.answerContent").value("The calculation details have been updated."));
+
+		mockMvc.perform(get("/api/notifications")
+				.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data", hasSize(1)));
 
 		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", inquiryId)
 				.header(HttpHeaders.AUTHORIZATION, bearer(ownerToken)))
