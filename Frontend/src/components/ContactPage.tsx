@@ -99,6 +99,7 @@ export function ContactPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
   };
 
   const filteredPosts = posts.filter((post) => activeTab === 'ALL' || post.status === activeTab);
+  const hasAnswer = selectedPost?.status === 'ANSWERED' && Boolean(selectedPost.answerContent);
 
   return (
     <div className="pb-20">
@@ -263,6 +264,32 @@ export function ContactPage({ isLoggedIn = false }: { isLoggedIn?: boolean }) {
               <div className="text-emerald-100/70 leading-relaxed whitespace-pre-wrap min-h-[200px] font-medium">
                 {selectedPost.content}
               </div>
+
+              {hasAnswer && (
+                <section className="mt-10 border-t border-[#1a5d4e] pt-6" aria-label="관리자 답변">
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-emerald-100/40">
+                    <span className="flex items-center gap-1.5 font-bold text-emerald-400">
+                      <MessageSquare size={15} />
+                      관리자 답변
+                    </span>
+                    {selectedPost.answeredByNickname && (
+                      <span className="flex items-center gap-1.5">
+                        <User size={14} />
+                        {selectedPost.answeredByNickname}
+                      </span>
+                    )}
+                    {selectedPost.answeredAt && (
+                      <span className="flex items-center gap-1.5">
+                        <Clock size={14} />
+                        {formatDate(selectedPost.answeredAt)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-4 whitespace-pre-wrap leading-relaxed font-medium text-emerald-50">
+                    {selectedPost.answerContent}
+                  </p>
+                </section>
+              )}
             </motion.div>
           ) : (
             <motion.div
