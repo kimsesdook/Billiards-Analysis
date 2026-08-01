@@ -113,6 +113,11 @@ erDiagram
 - A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
 - The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
 
+### Error Observability
+
+- Expected business and validation errors are logged at `WARN` without request values or custom exception messages.
+- Unexpected errors are logged at `ERROR` with an exception type and source location, not the exception message.
+
 ### Database Change Management
 
 - Flyway SQL 마이그레이션으로 테이블, 인덱스, 제약조건 변경 이력을 Git에서 관리합니다.
