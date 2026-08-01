@@ -1,0 +1,77 @@
+package com.my.billiards.contact.service;
+
+import com.my.billiards.common.error.BilliardsException;
+import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.contact.domain.ContactInquiry;
+import com.my.billiards.contact.dto.ContactInquiryCreateRequest;
+import com.my.billiards.contact.dto.ContactInquiryResponse;
+import com.my.billiards.contact.dto.ContactInquirySummaryResponse;
+import com.my.billiards.contact.repository.ContactInquiryRepository;
+import com.my.billiards.member.domain.Member;
+import com.my.billiards.member.domain.MemberRole;
+import com.my.billiards.member.domain.MemberStatus;
+import com.my.billiards.member.repository.MemberRepository;
+import java.util.List;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+@RequiredArgsConstructor
+public class ContactInquiryService {
+
+	private final ContactInquiryRepository contactInquiryRepository;
+	private final MemberRepository memberRepository;
+
+	@Transactional
+	public ContactInquiryResponse create(Long memberId, ContactInquiryCreateRequest request) {
+		Member member = getActiveMember(memberId);
+		ContactInquiry inquiry = ContactInquiry.create(
+			member,
+			request.title().trim(),
+			request.content().trim(),
+			request.isPrivate()
+		);
+
+		return ContactInquiryResponse.from(contactInquiryRepository.save(inquiry));
+	}
+
+	@Transactional(readOnly = true)
+	public List<ContactInquirySummaryResponse> findPublic() {
+		return contactInquiryRepository.findAllByPrivateInquiryFalseOrderByCreatedAtDescIdDesc()
+			.stream()
+			.map(ContactInquirySummaryResponse::from)
+			.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public List<ContactInquirySummaryResponse> findMine(Long memberId) {
+		return contactInquiryRepository.findAllByMemberIdOrderByCreatedAtDescIdDesc(memberId)
+			.stream()
+			.map(ContactInquirySummaryResponse::from)
+			.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public ContactInquiryResponse findById(Long inquiryId, Long viewerId, MemberRole viewerRole) {
+		ContactInquiry inquiry = contactInquiryRepository.findById(inquiryId)
+			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND));
+
+		if (!inquiry.canBeReadBy(viewerId, viewerRole)) {
+			throw new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND);
+		}
+
+		return ContactInquiryResponse.from(inquiry);
+	}
+
+	private Member getActiveMember(Long memberId) {
+		Member member = memberRepository.findById(memberId)
+			.orElseThrow(() -> new BilliardsException(ErrorCode.UNAUTHORIZED));
+
+		if (member.getStatus() != MemberStatus.ACTIVE) {
+			throw new BilliardsException(ErrorCode.FORBIDDEN);
+		}
+
+		return member;
+	}
+}

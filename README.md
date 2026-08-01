@@ -44,7 +44,7 @@ flowchart LR
 
 ### Domain Boundaries
 
-`auth`, `member`, `game`, `friend`, `notification`, `ai`, `mcp`를 중심으로 패키지를 나눈 모듈형 모놀리스입니다. 현재는 단일 애플리케이션의 단순성을 유지하면서도, 변경 빈도가 높은 도메인은 독립적으로 확장할 수 있게 경계를 분리했습니다.
+`auth`, `member`, `game`, `friend`, `notification`, `contact`, `ai`, `mcp`를 중심으로 패키지를 나눈 모듈형 모놀리스입니다. 현재는 단일 애플리케이션의 단순성을 유지하면서도, 변경 빈도가 높은 도메인은 독립적으로 확장할 수 있게 경계를 분리했습니다.
 
 ## Data Model
 
@@ -56,6 +56,7 @@ erDiagram
     MEMBERS ||--o{ FRIENDSHIPS : receives
     MEMBERS ||--o{ NOTIFICATIONS : receives
     MEMBERS ||--o{ WEEKLY_AI_REPORTS : owns
+    MEMBERS ||--o{ CONTACT_INQUIRIES : writes
 
     MEMBERS {
         bigint id PK
@@ -97,6 +98,13 @@ erDiagram
         date report_end_date
         string model_name
     }
+    CONTACT_INQUIRIES {
+        bigint id PK
+        bigint member_id FK
+        string title
+        boolean is_private
+        string inquiry_status
+    }
 ```
 
 ## Technical Decisions
@@ -112,6 +120,11 @@ erDiagram
 - Every HTTP response returns `X-Request-Id`, and the same value is written to backend logs.
 - A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
 - The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
+
+### Contact Inquiry Privacy
+
+- Public inquiries can be read without signing in, but private inquiries are visible only to their author or an `ADMIN` role.
+- Inquiry creation and a member's full inquiry history require JWT authentication.
 
 ### Error Observability
 

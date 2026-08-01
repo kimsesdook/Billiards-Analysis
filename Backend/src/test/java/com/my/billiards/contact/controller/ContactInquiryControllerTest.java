@@ -1,0 +1,221 @@
+package com.my.billiards.contact.controller;
+
+import com.my.billiards.contact.repository.ContactInquiryRepository;
+import com.my.billiards.friend.repository.FriendshipRepository;
+import com.my.billiards.game.repository.GameRecordRepository;
+import com.my.billiards.member.repository.MemberRepository;
+import com.my.billiards.notification.repository.NotificationRepository;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.web.servlet.MockMvc;
+
+import static org.hamcrest.Matchers.hasSize;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+@SpringBootTest
+@AutoConfigureMockMvc
+@ActiveProfiles("test")
+class ContactInquiryControllerTest {
+
+	private static final String PASSWORD = "password123";
+
+	@Autowired
+	private MockMvc mockMvc;
+
+	@Autowired
+	private ContactInquiryRepository contactInquiryRepository;
+
+	@Autowired
+	private GameRecordRepository gameRecordRepository;
+
+	@Autowired
+	private NotificationRepository notificationRepository;
+
+	@Autowired
+	private FriendshipRepository friendshipRepository;
+
+	@Autowired
+	private MemberRepository memberRepository;
+
+	@BeforeEach
+	void setUp() {
+		contactInquiryRepository.deleteAll();
+		gameRecordRepository.deleteAll();
+		notificationRepository.deleteAll();
+		friendshipRepository.deleteAll();
+		memberRepository.deleteAll();
+	}
+
+	@Test
+	void createsInquiryAndReturnsItInMyInquiryList() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+		Long inquiryId = createInquiry(token, "Handicap question", "How is the handicap calculated?", true);
+
+		mockMvc.perform(get("/api/contact-inquiries/me")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data", hasSize(1)))
+			.andExpect(jsonPath("$.data[0].id").value(inquiryId))
+			.andExpect(jsonPath("$.data[0].title").value("Handicap question"))
+			.andExpect(jsonPath("$.data[0].isPrivate").value(true))
+			.andExpect(jsonPath("$.data[0].content").doesNotExist())
+			.andExpect(jsonPath("$.data[0].status").value("PENDING"));
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content").value("How is the handicap calculated?"));
+	}
+
+	@Test
+	void exposesOnlyPublicInquiriesWithoutAuthentication() throws Exception {
+		String publicToken = signUpAndLogin("public@example.com", "PublicPlayer");
+		String privateToken = signUpAndLogin("private@example.com", "PrivatePlayer");
+		Long publicInquiryId = createInquiry(publicToken, "Public question", "Public content", false);
+		Long privateInquiryId = createInquiry(privateToken, "Private question", "Private content", true);
+
+		mockMvc.perform(get("/api/contact-inquiries"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data", hasSize(1)))
+			.andExpect(jsonPath("$.data[0].id").value(publicInquiryId))
+			.andExpect(jsonPath("$.data[0].authorNickname").value("PublicPlayer"))
+			.andExpect(jsonPath("$.data[0].isPrivate").value(false))
+			.andExpect(jsonPath("$.data[0].content").doesNotExist());
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", publicInquiryId))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content").value("Public content"));
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", privateInquiryId))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+	}
+
+	@Test
+	void preventsOtherMembersFromReadingPrivateInquiry() throws Exception {
+		String ownerToken = signUpAndLogin("owner@example.com", "Owner");
+		String otherToken = signUpAndLogin("other@example.com", "Other");
+		Long inquiryId = createInquiry(ownerToken, "Private inquiry", "Only owner can read this", true);
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", inquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(otherToken)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+	}
+
+	@Test
+	void requiresAuthenticationForCreatingOrListingMyInquiries() throws Exception {
+		mockMvc.perform(post("/api/contact-inquiries")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(inquiryJson("No token", "This request has no token", true)))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+
+		mockMvc.perform(get("/api/contact-inquiries/me"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+	}
+
+	@Test
+	void rejectsInvalidInquiryRequest() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(post("/api/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "title": "",
+					  "content": "",
+					  "isPrivate": null
+					}
+					"""))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+	}
+
+	private Long createInquiry(String token, String title, String content, boolean isPrivate) throws Exception {
+		String response = mockMvc.perform(post("/api/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(inquiryJson(title, content, isPrivate)))
+			.andExpect(status().isCreated())
+			.andExpect(jsonPath("$.success").value(true))
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractLong(response, "id");
+	}
+
+	private String inquiryJson(String title, String content, boolean isPrivate) {
+		return """
+			{
+			  "title": "%s",
+			  "content": "%s",
+			  "isPrivate": %s
+			}
+			""".formatted(title, content, isPrivate);
+	}
+
+	private String signUpAndLogin(String email, String nickname) throws Exception {
+		mockMvc.perform(post("/api/auth/signup")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "%s",
+					  "password": "%s",
+					  "nickname": "%s"
+					}
+					""".formatted(email, PASSWORD, nickname)))
+			.andExpect(status().isCreated());
+
+		String response = mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "%s",
+					  "password": "%s"
+					}
+					""".formatted(email, PASSWORD)))
+			.andExpect(status().isOk())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractString(response, "accessToken");
+	}
+
+	private String bearer(String token) {
+		return "Bearer " + token;
+	}
+
+	private Long extractLong(String content, String fieldName) {
+		String marker = "\"" + fieldName + "\":";
+		int valueStart = content.indexOf(marker) + marker.length();
+		int valueEnd = content.indexOf(",", valueStart);
+		if (valueEnd == -1) {
+			valueEnd = content.indexOf("}", valueStart);
+		}
+		return Long.parseLong(content.substring(valueStart, valueEnd).trim());
+	}
+
+	private String extractString(String content, String fieldName) {
+		String marker = "\"" + fieldName + "\":\"";
+		int valueStart = content.indexOf(marker) + marker.length();
+		int valueEnd = content.indexOf("\"", valueStart);
+		return content.substring(valueStart, valueEnd);
+	}
+}
