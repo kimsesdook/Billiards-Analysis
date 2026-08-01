@@ -21,7 +21,7 @@ public class ContactInquiryAnswerNotificationListener {
 	public void handle(ContactInquiryAnsweredEvent event) {
 		memberRepository.findById(event.memberId())
 			.filter(member -> member.getStatus() == MemberStatus.ACTIVE)
-			.ifPresent(member -> notificationService.createForMember(
+			.ifPresent(member -> notificationService.createForMemberAfterCommit(
 				member,
 				NotificationType.SYSTEM,
 				"문의 답변 등록",
