@@ -39,6 +39,12 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 - A valid inbound `X-Request-Id` is reused; otherwise, the backend generates a UUID.
 - The request ID is included in server logs to connect a client error with its backend log entries.
 
+## Error Observability
+
+- Expected business and validation errors are logged at `WARN` with error codes and error counts only.
+- Unexpected errors are logged at `ERROR` with their exception type and source location.
+- Request bodies, JWT values, passwords, and custom exception messages are intentionally excluded from these logs.
+
 ## Database Migration
 
 The backend uses Flyway to manage database schema changes.
