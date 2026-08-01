@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  answerContactInquiry,
   ContactInquiryDetail,
   createContactInquiry,
+  getAdminContactInquiries,
   getContactInquiry,
   getMyContactInquiries,
   getPublicContactInquiries,
@@ -52,6 +54,21 @@ describe('contact inquiry API contract', () => {
     apiRequest.mockResolvedValueOnce(detail);
 
     await expect(getContactInquiry(42, true)).resolves.toEqual(detail);
+  });
+
+  it('requests an administrator inquiry page with its status filter', () => {
+    getAdminContactInquiries({ status: 'PENDING', page: 1, size: 20 });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/contact-inquiries?page=1&size=20&status=PENDING');
+  });
+
+  it('sends the administrator answer through the protected PATCH endpoint', () => {
+    answerContactInquiry(42, 'The average uses the recorded inning count.');
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/contact-inquiries/42/answer', {
+      method: 'PATCH',
+      body: JSON.stringify({ answerContent: 'The average uses the recorded inning count.' }),
+    });
   });
 
   it('creates an inquiry with the request body expected by the backend', () => {
