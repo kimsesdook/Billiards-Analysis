@@ -12,7 +12,7 @@ This backend is designed as a modular monolith first. The package boundaries are
 - `friend`: friend relationships, requests, and rival search
 - `notification`: notifications and future event delivery
 - `notice`: public announcements
-- `contact`: user inquiries and support board
+- `contact`: public and private user inquiries with owner-based access control
 
 ## Profiles
 
@@ -169,3 +169,4 @@ The backend currently includes:
 - Docker Compose development environment
 - JWT-protected MCP analysis tools for AI clients
 - Optional Gemini-backed weekly coaching report with aggregate-only data and report caching
+- Public and private contact inquiry API with authenticated inquiry creation
