@@ -152,6 +152,69 @@ class ContactInquiryControllerTest {
 	}
 
 	@Test
+	void letsAnAdminPageAllInquiriesByStatus() throws Exception {
+		String firstOwnerToken = signUpAndLogin("first@example.com", "FirstOwner");
+		String secondOwnerToken = signUpAndLogin("second@example.com", "SecondOwner");
+		Long firstInquiryId = createInquiry(firstOwnerToken, "First inquiry", "First content", false);
+		Long secondInquiryId = createInquiry(secondOwnerToken, "Second inquiry", "Second content", true);
+		String adminToken = createAdminToken("admin@example.com", "Administrator");
+
+		mockMvc.perform(get("/api/admin/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.param("status", "PENDING")
+				.param("page", "0")
+				.param("size", "1"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andExpect(jsonPath("$.data.content", hasSize(1)))
+			.andExpect(jsonPath("$.data.content[0].id").value(secondInquiryId))
+			.andExpect(jsonPath("$.data.content[0].isPrivate").value(true))
+			.andExpect(jsonPath("$.data.content[0].content").doesNotExist())
+			.andExpect(jsonPath("$.data.page").value(0))
+			.andExpect(jsonPath("$.data.size").value(1))
+			.andExpect(jsonPath("$.data.totalElements").value(2))
+			.andExpect(jsonPath("$.data.totalPages").value(2))
+			.andExpect(jsonPath("$.data.hasNext").value(true));
+
+		mockMvc.perform(get("/api/admin/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.param("status", "ANSWERED"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content").isEmpty());
+
+		mockMvc.perform(get("/api/admin/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.param("status", "INVALID"))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.code").value("COMMON_001"));
+
+		mockMvc.perform(get("/api/contact-inquiries/{inquiryId}", firstInquiryId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content").value("First content"));
+	}
+
+	@Test
+	void preventsRegularMembersFromListingAdminInquiries() throws Exception {
+		String token = signUpAndLogin("player@example.com", "PlayerOne");
+
+		mockMvc.perform(get("/api/admin/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void rechecksAdministratorRoleFromTheDatabase() throws Exception {
+		String adminToken = createAdminToken("admin@example.com", "Administrator");
+		jdbcTemplate.update("UPDATE members SET role = ? WHERE email = ?", "USER", "admin@example.com");
+
+		mockMvc.perform(get("/api/admin/contact-inquiries")
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("AUTH_002"));
+	}
+
+	@Test
 	void letsAnAdminAnswerAnInquiryAndUpdatesItsStatus() throws Exception {
 		String ownerToken = signUpAndLogin("owner@example.com", "Owner");
 		Long inquiryId = createInquiry(ownerToken, "Handicap question", "How is the handicap calculated?", true);

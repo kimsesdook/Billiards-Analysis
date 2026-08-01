@@ -125,6 +125,7 @@ erDiagram
 
 - Public inquiries can be read without signing in, but private inquiries are visible only to their author or an `ADMIN` role.
 - Inquiry creation and a member's full inquiry history require JWT authentication.
+- Administrator inquiry management returns paginated summaries with optional status filtering, and checks both the JWT role and the current database role.
 
 ### Contact Inquiry Answer Notifications
 
