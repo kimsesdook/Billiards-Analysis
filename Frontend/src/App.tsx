@@ -84,6 +84,7 @@ const StatsChart = lazy(() => import('./components/StatsChart').then(({ StatsCha
 const GuidePage = lazy(() => import('./components/GuidePage').then(({ GuidePage }) => ({ default: GuidePage })));
 const LoginPage = lazy(() => import('./components/LoginPage').then(({ LoginPage }) => ({ default: LoginPage })));
 const ContactPage = lazy(() => import('./components/ContactPage').then(({ ContactPage }) => ({ default: ContactPage })));
+const AdminContactInquiriesPage = lazy(() => import('./components/AdminContactInquiriesPage').then(({ AdminContactInquiriesPage }) => ({ default: AdminContactInquiriesPage })));
 const NoticePage = lazy(() => import('./components/NoticePage').then(({ NoticePage }) => ({ default: NoticePage })));
 const SignupPage = lazy(() => import('./components/SignupPage').then(({ SignupPage }) => ({ default: SignupPage })));
 const DashboardPage = lazy(() => import('./components/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })));
@@ -1386,6 +1387,12 @@ function AppContent() {
     isLoggedIn ? element : <Navigate to="/login" replace />
   );
 
+  const requireAdmin = (element: React.ReactElement) => (
+    isLoggedIn && authSession?.member.role === 'ADMIN'
+      ? element
+      : <Navigate to="/dashboard" replace />
+  );
+
   return (
     <div className="min-h-screen bg-white text-zinc-900 font-sans selection:bg-emerald-100 selection:text-emerald-900">
       {/* Top Bar: Visitor Stats */}
@@ -1986,6 +1993,20 @@ function AppContent() {
                         <Users size={20} />
                         친구 관리
                       </Link>
+                      {authSession?.member.role === 'ADMIN' && (
+                        <Link
+                          to="/admin/contact-inquiries"
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all",
+                            location.pathname === '/admin/contact-inquiries'
+                              ? "bg-[#1a5d4e] text-white shadow-lg shadow-black/10"
+                              : "text-emerald-100/60 hover:text-emerald-100 hover:bg-[#1a5d4e]/50"
+                          )}
+                        >
+                          <Shield size={20} />
+                          문의 관리
+                        </Link>
+                      )}
                     </nav>
                   </div>
 
@@ -2057,6 +2078,7 @@ function AppContent() {
           />
           <Route path="/analysis" element={requireAuth(<AnalysisPage records={records} />)} />
           <Route path="/friends" element={requireAuth(<FriendsPage />)} />
+          <Route path="/admin/contact-inquiries" element={requireAdmin(<AdminContactInquiriesPage />)} />
           <Route path="/" element={
             isLoggedIn ? (
               <Navigate to="/dashboard" replace />

@@ -18,6 +18,21 @@ export type ContactInquiryDetail = ContactInquirySummary & {
   answeredAt: string | null;
 };
 
+export type ContactInquiryPage = {
+  content: ContactInquirySummary[];
+  page: number;
+  size: number;
+  totalElements: number;
+  totalPages: number;
+  hasNext: boolean;
+};
+
+export type AdminContactInquirySearchParams = {
+  status?: InquiryStatus;
+  page: number;
+  size: number;
+};
+
 export type CreateContactInquiryPayload = {
   title: string;
   content: string;
@@ -33,6 +48,21 @@ export const getMyContactInquiries = () =>
 export const getContactInquiry = (inquiryId: number, includeAuth = false) =>
   apiRequest<ContactInquiryDetail>(`/api/contact-inquiries/${inquiryId}`, {
     skipAuth: !includeAuth,
+  });
+
+export const getAdminContactInquiries = ({ status, page, size }: AdminContactInquirySearchParams) => {
+  const query = new URLSearchParams({ page: String(page), size: String(size) });
+  if (status) {
+    query.set('status', status);
+  }
+
+  return apiRequest<ContactInquiryPage>(`/api/admin/contact-inquiries?${query}`);
+};
+
+export const answerContactInquiry = (inquiryId: number, answerContent: string) =>
+  apiRequest<ContactInquiryDetail>(`/api/contact-inquiries/${inquiryId}/answer`, {
+    method: 'PATCH',
+    body: JSON.stringify({ answerContent }),
   });
 
 export const createContactInquiry = (payload: CreateContactInquiryPayload) =>
