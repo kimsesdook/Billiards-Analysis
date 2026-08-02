@@ -59,6 +59,7 @@ The backend uses Flyway to manage database schema changes.
 - `V6__create_notifications_table.sql` creates user notifications
 - `V7__create_weekly_ai_reports_table.sql` stores one AI analysis per member, game type, and report date
 - `V12__create_game_invitations_table.sql` creates friend-to-friend game invitations with expiration and response status
+- `V13__create_game_room_tables.sql` creates server-managed game rooms and room participants
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -173,6 +174,13 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `PATCH /api/game-invitations/{invitationId}/accept` and `PATCH /api/game-invitations/{invitationId}/decline` can be called only by the receiver.
 - Invitation creation and acceptance create `MATCH` notifications through the existing real-time notification flow.
 - The service checks the member's current database role again before publishing, editing, or deleting, so a stale administrator token cannot modify notices.
+
+## Game Room APIs
+
+- `POST /api/game-rooms` creates a waiting game room with the authenticated member as its host and first participant.
+- `GET /api/game-rooms` returns rooms the authenticated member participates in.
+- `GET /api/game-rooms/{roomId}` returns a room only to one of its participants.
+- `PATCH /api/game-rooms/{roomId}/cancel` lets only the host cancel a waiting room.
 
 ## Current Stage
 

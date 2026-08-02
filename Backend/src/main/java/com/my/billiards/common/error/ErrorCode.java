@@ -14,6 +14,7 @@ public enum ErrorCode {
 	GAME_INVITATION_ONLY_FOR_FRIENDS("INVITATION_002", HttpStatus.FORBIDDEN, "친구에게만 경기 초대를 보낼 수 있습니다."),
 	GAME_INVITATION_ALREADY_PENDING("INVITATION_003", HttpStatus.CONFLICT, "이미 대기 중인 경기 초대가 있습니다."),
 	GAME_INVITATION_EXPIRED("INVITATION_004", HttpStatus.CONFLICT, "만료된 경기 초대입니다."),
+	GAME_ROOM_NOT_WAITING("ROOM_001", HttpStatus.CONFLICT, "대기 중인 게임방만 취소할 수 있습니다."),
 	UNAUTHORIZED("AUTH_001", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
 	FORBIDDEN("AUTH_002", HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
 	INTERNAL_SERVER_ERROR("COMMON_999", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
