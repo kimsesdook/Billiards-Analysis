@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.repository.MemberRepository;
+import com.my.billiards.notice.repository.NoticeRepository;
 import com.my.billiards.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,10 +48,14 @@ class UserFlowIntegrationTest {
 	@Autowired
 	private NotificationRepository notificationRepository;
 
+	@Autowired
+	private NoticeRepository noticeRepository;
+
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@BeforeEach
 	void setUp() {
+		noticeRepository.deleteAll();
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();
 		friendshipRepository.deleteAll();

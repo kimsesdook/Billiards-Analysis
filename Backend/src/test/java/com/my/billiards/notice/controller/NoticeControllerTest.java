@@ -1,6 +1,8 @@
 package com.my.billiards.notice.controller;
 
 import static org.hamcrest.Matchers.hasSize;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -133,6 +135,46 @@ class NoticeControllerTest {
 	}
 
 	@Test
+	void softDeletesANoticeWithoutRemovingItsAuditRecord() throws Exception {
+		String adminToken = createAdminToken("admin@example.com", "Administrator");
+		Long noticeId = createNotice(
+			adminToken,
+			"Scheduled maintenance",
+			"The service will be unavailable for one hour.",
+			"NOTICE",
+			true
+		);
+
+		mockMvc.perform(delete("/api/admin/notices/{noticeId}", noticeId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true));
+
+		mockMvc.perform(get("/api/notices"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.content").isEmpty())
+			.andExpect(jsonPath("$.data.totalElements").value(0));
+
+		mockMvc.perform(get("/api/notices/{noticeId}", noticeId))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+
+		mockMvc.perform(patch("/api/admin/notices/{noticeId}", noticeId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(noticeJson("Restored title", "This must not restore the notice.", "NOTICE", false)))
+			.andExpect(status().isNotFound())
+			.andExpect(jsonPath("$.code").value("COMMON_002"));
+
+		assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM notices WHERE id = ?", Integer.class, noticeId))
+			.isEqualTo(1);
+		assertThat(jdbcTemplate.queryForObject("SELECT deleted_at FROM notices WHERE id = ?", Object.class, noticeId))
+			.isNotNull();
+		assertThat(jdbcTemplate.queryForObject("SELECT deleted_by_member_id FROM notices WHERE id = ?", Object.class, noticeId))
+			.isNotNull();
+	}
+
+	@Test
 	void preventsRegularMembersFromPublishingOrUpdatingNotices() throws Exception {
 		String adminToken = createAdminToken("admin@example.com", "Administrator");
 		Long noticeId = createNotice(adminToken, "Service update", "Content", "UPDATE", false);
@@ -149,17 +191,27 @@ class NoticeControllerTest {
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(noticeJson("Unauthorized", "This must not be updated.", "NOTICE", false)))
 			.andExpect(status().isForbidden());
+
+		mockMvc.perform(delete("/api/admin/notices/{noticeId}", noticeId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(memberToken)))
+			.andExpect(status().isForbidden());
 	}
 
 	@Test
 	void rechecksAdministratorRoleFromTheDatabaseBeforePublishing() throws Exception {
 		String adminToken = createAdminToken("admin@example.com", "Administrator");
+		Long noticeId = createNotice(adminToken, "Role check", "The database role is authoritative.", "NOTICE", true);
 		jdbcTemplate.update("UPDATE members SET role = ? WHERE email = ?", "USER", "admin@example.com");
 
 		mockMvc.perform(post("/api/admin/notices")
 				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken))
 				.contentType(MediaType.APPLICATION_JSON)
 				.content(noticeJson("Role check", "The database role is authoritative.", "NOTICE", true)))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("AUTH_002"));
+
+		mockMvc.perform(delete("/api/admin/notices/{noticeId}", noticeId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(adminToken)))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("AUTH_002"));
 	}

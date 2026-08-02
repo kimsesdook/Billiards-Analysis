@@ -28,7 +28,7 @@ public class NoticeService {
 
 	@Transactional(readOnly = true)
 	public PageResponse<NoticeSummaryResponse> findAll(int page, int size) {
-		Page<Notice> notices = noticeRepository.findAllByOrderByImportantDescPublishedAtDescIdDesc(
+		Page<Notice> notices = noticeRepository.findAllByDeletedAtIsNullOrderByImportantDescPublishedAtDescIdDesc(
 			PageRequest.of(page, size)
 		);
 
@@ -37,7 +37,7 @@ public class NoticeService {
 
 	@Transactional(readOnly = true)
 	public NoticeResponse findById(Long noticeId) {
-		return NoticeResponse.from(getNotice(noticeId));
+		return NoticeResponse.from(getVisibleNotice(noticeId));
 	}
 
 	@Transactional
@@ -57,7 +57,7 @@ public class NoticeService {
 	@Transactional
 	public NoticeResponse update(Long noticeId, Long administratorId, NoticeUpdateRequest request) {
 		getActiveAdministrator(administratorId);
-		Notice notice = getNotice(noticeId);
+		Notice notice = getVisibleNotice(noticeId);
 		notice.update(
 			request.title().trim(),
 			request.content().trim(),
@@ -68,8 +68,14 @@ public class NoticeService {
 		return NoticeResponse.from(notice);
 	}
 
-	private Notice getNotice(Long noticeId) {
-		return noticeRepository.findById(noticeId)
+	@Transactional
+	public void delete(Long noticeId, Long administratorId) {
+		Member administrator = getActiveAdministrator(administratorId);
+		getVisibleNotice(noticeId).softDelete(administrator);
+	}
+
+	private Notice getVisibleNotice(Long noticeId) {
+		return noticeRepository.findByIdAndDeletedAtIsNull(noticeId)
 			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND));
 	}
 

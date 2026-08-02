@@ -45,6 +45,13 @@ public class Notice extends BaseTimeEntity {
 	@Column(name = "published_at", nullable = false)
 	private LocalDateTime publishedAt;
 
+	@Column(name = "deleted_at")
+	private LocalDateTime deletedAt;
+
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "deleted_by_member_id")
+	private Member deletedBy;
+
 	protected Notice() {
 	}
 
@@ -66,5 +73,10 @@ public class Notice extends BaseTimeEntity {
 		this.content = content;
 		this.category = category;
 		this.important = important;
+	}
+
+	public void softDelete(Member administrator) {
+		this.deletedAt = LocalDateTime.now();
+		this.deletedBy = administrator;
 	}
 }

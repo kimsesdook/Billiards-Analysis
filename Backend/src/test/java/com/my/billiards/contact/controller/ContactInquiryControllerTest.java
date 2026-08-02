@@ -4,6 +4,7 @@ import com.my.billiards.contact.repository.ContactInquiryRepository;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.member.repository.MemberRepository;
+import com.my.billiards.notice.repository.NoticeRepository;
 import com.my.billiards.notification.repository.NotificationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -49,10 +50,14 @@ class ContactInquiryControllerTest {
 	private MemberRepository memberRepository;
 
 	@Autowired
+	private NoticeRepository noticeRepository;
+
+	@Autowired
 	private JdbcTemplate jdbcTemplate;
 
 	@BeforeEach
 	void setUp() {
+		noticeRepository.deleteAll();
 		contactInquiryRepository.deleteAll();
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();

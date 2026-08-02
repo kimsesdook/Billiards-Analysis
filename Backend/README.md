@@ -161,8 +161,9 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 ## Notice APIs
 
 - `GET /api/notices` and `GET /api/notices/{noticeId}` are public and return notices with important notices first.
-- `POST /api/admin/notices` and `PATCH /api/admin/notices/{noticeId}` require an `ADMIN` JWT role.
-- The service checks the member's current database role again before publishing or editing, so a stale administrator token cannot modify notices.
+- `POST /api/admin/notices`, `PATCH /api/admin/notices/{noticeId}`, and `DELETE /api/admin/notices/{noticeId}` require an `ADMIN` JWT role.
+- Deletion is a soft delete: the notice remains in the database with the deletion timestamp and administrator, but public and administrator lists no longer expose it.
+- The service checks the member's current database role again before publishing, editing, or deleting, so a stale administrator token cannot modify notices.
 
 ## Current Stage
 
