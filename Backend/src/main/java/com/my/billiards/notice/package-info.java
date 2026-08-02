@@ -1,4 +1,4 @@
 /**
- * Public notice and service announcement modules.
+ * Public notice publishing and administrator management modules.
  */
 package com.my.billiards.notice;
