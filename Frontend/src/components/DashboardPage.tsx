@@ -1,30 +1,22 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Trophy, 
   Target, 
   Activity, 
   TrendingUp, 
   Award, 
-  Calendar,
-  ChevronRight,
   ArrowUpRight,
   ArrowDownRight,
   History,
   Users,
   User,
-  UserPlus,
-  Flame,
-  Minus,
-  ChevronLeft,
   ChevronDown,
-  Search,
-  Medal,
-  Plus,
   RefreshCw
 } from 'lucide-react';
-import { GameRecord, GameStatistics, GameType } from '../types';
+import { getApiErrorMessage } from '../api/client';
+import { getOpponentStatistics } from '../api/gameRecords';
+import { GameRecord, GameStatistics, GameType, OpponentStatistics } from '../types';
 import { StatsChart } from './StatsChart';
 import { cn } from '../lib/utils';
 
@@ -52,46 +44,31 @@ export function DashboardPage({
   onRetryStatistics,
 }: DashboardPageProps) {
   const [winRateView, setWinRateView] = useState<'2p' | '3p' | '4p'>('2p');
-  const [friendSearch, setFriendSearch] = useState('');
+  const [opponentStatistics, setOpponentStatistics] = useState<OpponentStatistics[]>([]);
+  const [isOpponentStatisticsLoading, setIsOpponentStatisticsLoading] = useState(true);
+  const [opponentStatisticsError, setOpponentStatisticsError] = useState<string | null>(null);
   const recentRecords = useMemo(
     () => records.filter((record) => record.type === filter).slice(0, 5),
     [filter, records]
   );
 
-  // Mock Friend Data
-  const friends = [
-    { name: '김당구', dama3: 25, dama4: 300, lastResult: 'WIN', vs: '3:1', winRate: 75 },
-    { name: '이초보', dama3: 15, dama4: 150, lastResult: 'LOSS', vs: '1:2', winRate: 33 },
-    { name: '박프로', dama3: 35, dama4: 500, lastResult: 'WIN', vs: '5:4', winRate: 55 },
-  ];
+  const loadOpponentStatistics = useCallback(async () => {
+    setIsOpponentStatisticsLoading(true);
+    setOpponentStatisticsError(null);
 
-  const searchedFriend = useMemo(() => {
-    if (!friendSearch) return null;
-    return friends.find(f => f.name.includes(friendSearch));
-  }, [friendSearch]);
+    try {
+      setOpponentStatistics(await getOpponentStatistics());
+    } catch (error) {
+      setOpponentStatistics([]);
+      setOpponentStatisticsError(getApiErrorMessage(error));
+    } finally {
+      setIsOpponentStatisticsLoading(false);
+    }
+  }, []);
 
-  const trendIcon = {
-    '상승세': <ArrowUpRight className="text-emerald-400" />,
-    '하락세': <ArrowDownRight className="text-orange-400" />,
-    '유지': <Minus className="text-zinc-400" />,
-  };
-
-  const trendColor = {
-    '상승세': 'text-emerald-400',
-    '하락세': 'text-orange-400',
-    '유지': 'text-zinc-400',
-  };
-
-  // Player Count Stats (Average Rank for 3/4 players)
-  const playerCountStats = useMemo(() => {
-    const counts = [3, 4] as const;
-    return counts.map(count => {
-      const games = records.filter(r => r.playerCount === count);
-      const totalRank = games.reduce((acc, r) => acc + (r.rank || 0), 0);
-      const avgRank = games.length > 0 ? (totalRank / games.length).toFixed(1) : '0.0';
-      return { count, games: games.length, avgRank };
-    });
-  }, [records]);
+  useEffect(() => {
+    void loadOpponentStatistics();
+  }, [loadOpponentStatistics]);
 
   return (
     <div className="space-y-10">
@@ -336,6 +313,59 @@ export function DashboardPage({
               )}
             </div>
           </div>
+
+          <section className="overflow-hidden rounded-[2.5rem] border border-[#1a5d4e] bg-[#0d4d3b] shadow-2xl shadow-black/20" aria-label="상대 전적">
+            <div className="flex items-center justify-between border-b border-[#1a5d4e] p-6">
+              <div>
+                <h2 className="flex items-center gap-2 text-xl font-bold text-emerald-50">
+                  <Users size={20} className="text-emerald-400" />
+                  상대 전적
+                </h2>
+                <p className="mt-1 text-xs font-medium text-emerald-100/40">전체 경기 기록 기준</p>
+              </div>
+              <span className="text-xs font-bold text-emerald-400/70">{opponentStatistics.length}명</span>
+            </div>
+
+            {isOpponentStatisticsLoading ? (
+              <div className="flex min-h-36 items-center justify-center gap-2 text-sm text-emerald-100/55">
+                <Activity size={16} className="animate-spin" />
+                상대 전적을 불러오는 중입니다.
+              </div>
+            ) : opponentStatisticsError ? (
+              <div className="p-5">
+                <p className="text-sm text-rose-100">{opponentStatisticsError}</p>
+                <button
+                  type="button"
+                  onClick={() => void loadOpponentStatistics()}
+                  className="mt-3 inline-flex items-center gap-2 text-xs font-bold text-emerald-300 transition-colors hover:text-emerald-100"
+                >
+                  <RefreshCw size={14} />
+                  다시 시도
+                </button>
+              </div>
+            ) : opponentStatistics.length === 0 ? (
+              <div className="min-h-36 px-6 py-10 text-center text-sm text-emerald-100/45">
+                상대 이름을 기록한 경기가 아직 없습니다.
+              </div>
+            ) : (
+              <div className="divide-y divide-[#1a5d4e]">
+                {opponentStatistics.slice(0, 3).map((opponent) => (
+                  <div key={opponent.opponentName} className="flex items-center justify-between gap-3 px-6 py-4">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-bold text-emerald-50">{opponent.opponentName}</p>
+                      <p className="mt-1 text-xs text-emerald-100/45">
+                        {opponent.totalGames}경기 · {opponent.winRate}% 승률
+                      </p>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-xs font-bold text-emerald-200">{opponent.wins}승 {opponent.losses}패</p>
+                      <p className="mt-1 text-[11px] text-emerald-100/45">Avg. {opponent.overallAverage.toFixed(3)}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
         </div>
       </div>
     </div>
