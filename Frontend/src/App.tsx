@@ -60,6 +60,17 @@ import {
 	searchGameRecords,
   updateGameRecord,
 } from './api/gameRecords';
+import {
+  acceptFriendRequest,
+  declineFriendRequest,
+  getFriendRequests,
+  getFriends,
+  searchFriends,
+  sendFriendRequest,
+  type FriendRequest,
+  type FriendSearchResult,
+  type FriendSearchStatus,
+} from './api/friends';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
 import {
@@ -111,6 +122,13 @@ const notificationTypeMap: Record<NotificationItem['type'], AppNotificationType>
   MATCH: 'match',
   REPORT: 'report',
   SYSTEM: 'system',
+};
+
+const friendRelationshipLabel: Record<FriendSearchStatus, string> = {
+  NONE: '친구 아님',
+  FRIEND: '친구',
+  PENDING_INCOMING: '받은 요청',
+  PENDING_OUTGOING: '요청 대기 중',
 };
 
 const formatNotificationTime = (createdAt: string) => {
@@ -621,108 +639,16 @@ function AppContent() {
 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
 
-  const [headerFriendsCount, setHeaderFriendsCount] = useState(6);
-  const [headerRequests, setHeaderRequests] = useState<any[]>([
-    { id: 'r-1', name: '강태윤', dama3: 180, dama4: 200 },
-    { id: 'r-2', name: '윤시우', dama3: 300, dama4: 400 },
-  ]);
-
-  // Sync Header Friend status from storage and custom reactive triggers
-  useEffect(() => {
-    const updateFromStorage = () => {
-      const cachedFriends = localStorage.getItem('billiards_friends');
-      const cachedRequests = localStorage.getItem('billiards_friend_requests');
-      if (cachedFriends) {
-        try {
-          const parsed = JSON.parse(cachedFriends);
-          setHeaderFriendsCount(parsed.length);
-        } catch (_) {}
-      }
-      if (cachedRequests) {
-        try {
-          const parsed = JSON.parse(cachedRequests);
-          setHeaderRequests(parsed.filter((r: any) => !r.sentByMe));
-        } catch (_) {}
-      }
-    };
-
-    updateFromStorage();
-
-    const handleFriendsUpdated = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail && detail.friends) {
-        setHeaderFriendsCount(detail.friends.length);
-      }
-    };
-
-    const handleRequestsUpdated = (e: Event) => {
-      const detail = (e as CustomEvent).detail;
-      if (detail && detail.requests) {
-        setHeaderRequests(detail.requests.filter((r: any) => !r.sentByMe));
-      }
-    };
-
-    window.addEventListener('billiards_friends_updated', handleFriendsUpdated);
-    window.addEventListener('billiards_requests_updated', handleRequestsUpdated);
-    window.addEventListener('storage', updateFromStorage);
-
-    return () => {
-      window.removeEventListener('billiards_friends_updated', handleFriendsUpdated);
-      window.removeEventListener('billiards_requests_updated', handleRequestsUpdated);
-      window.removeEventListener('storage', updateFromStorage);
-    };
-  }, []);
-
-  const handleHeaderAccept = (reqId: string) => {
-    const cachedFriends = localStorage.getItem('billiards_friends');
-    const cachedRequests = localStorage.getItem('billiards_friend_requests');
-
-    let currentFriends = [];
-    let currentRequests = [];
-
-    try { currentFriends = cachedFriends ? JSON.parse(cachedFriends) : []; } catch (_) {}
-    try { currentRequests = cachedRequests ? JSON.parse(cachedRequests) : []; } catch (_) {}
-
-    const reqItem = currentRequests.find((r: any) => r.id === reqId);
-    if (!reqItem) return;
-
-    const newFriend = {
-      id: `f-${Date.now()}`,
-      name: reqItem.name,
-      dama3: reqItem.dama3 || 150,
-      dama4: reqItem.dama4 || 200,
-      status: 'online' as const,
-      winRate: 50,
-      recentForm: ['W' as const],
-      addedAt: new Date().toISOString().split('T')[0]
-    };
-
-    const updatedFriends = [...currentFriends, newFriend];
-    const updatedRequests = currentRequests.filter((r: any) => r.id !== reqId);
-
-    localStorage.setItem('billiards_friends', JSON.stringify(updatedFriends));
-    localStorage.setItem('billiards_friend_requests', JSON.stringify(updatedRequests));
-
-    setHeaderFriendsCount(updatedFriends.length);
-    setHeaderRequests(updatedRequests.filter((r: any) => !r.sentByMe));
-
-    window.dispatchEvent(new CustomEvent('billiards_friends_updated', { detail: { friends: updatedFriends } }));
-    window.dispatchEvent(new CustomEvent('billiards_requests_updated', { detail: { requests: updatedRequests } }));
-  };
-
-  const handleHeaderDecline = (reqId: string) => {
-    const cachedRequests = localStorage.getItem('billiards_friend_requests');
-    let currentRequests = [];
-    try { currentRequests = cachedRequests ? JSON.parse(cachedRequests) : []; } catch (_) {}
-
-    const updatedRequests = currentRequests.filter((r: any) => r.id !== reqId);
-
-    localStorage.setItem('billiards_friend_requests', JSON.stringify(updatedRequests));
-    setHeaderRequests(updatedRequests.filter((r: any) => !r.sentByMe));
-
-    window.dispatchEvent(new CustomEvent('billiards_requests_updated', { detail: { requests: updatedRequests } }));
-  };
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [headerFriendsCount, setHeaderFriendsCount] = useState(0);
+  const [headerRequests, setHeaderRequests] = useState<FriendRequest[]>([]);
+  const [isHeaderFriendsLoading, setIsHeaderFriendsLoading] = useState(false);
+  const [headerFriendsError, setHeaderFriendsError] = useState<string | null>(null);
+  const [headerFriendActionKey, setHeaderFriendActionKey] = useState<string | null>(null);
+  const [searchResult, setSearchResult] = useState<FriendSearchResult | null>(null);
+  const [isHeaderSearchLoading, setIsHeaderSearchLoading] = useState(false);
+  const [headerSearchError, setHeaderSearchError] = useState<string | null>(null);
+  const headerFriendStateRequestIdRef = useRef(0);
+  const headerFriendSearchRequestIdRef = useRef(0);
   const [isGameActive, setIsGameActive] = useState(false);
   const location = useLocation();
 
@@ -842,6 +768,182 @@ function AppContent() {
     navigate('/login');
   }, [navigate]);
 
+  const loadHeaderFriendState = useCallback(async () => {
+    const requestId = ++headerFriendStateRequestIdRef.current;
+
+    if (!isLoggedIn) {
+      setHeaderFriendsCount(0);
+      setHeaderRequests([]);
+      setHeaderFriendsError(null);
+      setIsHeaderFriendsLoading(false);
+      return;
+    }
+
+    setIsHeaderFriendsLoading(true);
+    setHeaderFriendsError(null);
+
+    try {
+      const [friends, requests] = await Promise.all([getFriends(), getFriendRequests()]);
+
+      if (headerFriendStateRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setHeaderFriendsCount(friends.length);
+      setHeaderRequests(requests.incoming);
+    } catch (error) {
+      if (headerFriendStateRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setHeaderFriendsError(getApiErrorMessage(error));
+    } finally {
+      if (headerFriendStateRequestIdRef.current === requestId) {
+        setIsHeaderFriendsLoading(false);
+      }
+    }
+  }, [handleAuthExpired, isLoggedIn]);
+
+  useEffect(() => {
+    void loadHeaderFriendState();
+  }, [loadHeaderFriendState]);
+
+  useEffect(() => {
+    const refreshHeaderFriendState = () => {
+      void loadHeaderFriendState();
+    };
+
+    window.addEventListener('billiards_friends_updated', refreshHeaderFriendState);
+    window.addEventListener('billiards_requests_updated', refreshHeaderFriendState);
+
+    return () => {
+      window.removeEventListener('billiards_friends_updated', refreshHeaderFriendState);
+      window.removeEventListener('billiards_requests_updated', refreshHeaderFriendState);
+    };
+  }, [loadHeaderFriendState]);
+
+  const handleHeaderAccept = async (requestId: number) => {
+    setHeaderFriendActionKey(`accept-${requestId}`);
+    setHeaderFriendsError(null);
+
+    try {
+      await acceptFriendRequest(requestId);
+      await loadHeaderFriendState();
+      window.dispatchEvent(new CustomEvent('billiards_notifications_updated'));
+    } catch (error) {
+      setHeaderFriendsError(getApiErrorMessage(error));
+    } finally {
+      setHeaderFriendActionKey(null);
+    }
+  };
+
+  const handleHeaderDecline = async (requestId: number) => {
+    setHeaderFriendActionKey(`decline-${requestId}`);
+    setHeaderFriendsError(null);
+
+    try {
+      await declineFriendRequest(requestId);
+      await loadHeaderFriendState();
+    } catch (error) {
+      setHeaderFriendsError(getApiErrorMessage(error));
+    } finally {
+      setHeaderFriendActionKey(null);
+    }
+  };
+
+  const performSearch = useCallback(async (query: string) => {
+    const keyword = query.trim();
+    const requestId = ++headerFriendSearchRequestIdRef.current;
+
+    if (!keyword) {
+      setSearchResult(null);
+      setHeaderSearchError(null);
+      setIsHeaderSearchLoading(false);
+      return;
+    }
+
+    setIsHeaderSearchLoading(true);
+    setHeaderSearchError(null);
+
+    try {
+      const results = await searchFriends(keyword);
+
+      if (headerFriendSearchRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      setSearchResult(results[0] ?? null);
+    } catch (error) {
+      if (headerFriendSearchRequestIdRef.current !== requestId) {
+        return;
+      }
+
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setSearchResult(null);
+      setHeaderSearchError(getApiErrorMessage(error));
+    } finally {
+      if (headerFriendSearchRequestIdRef.current === requestId) {
+        setIsHeaderSearchLoading(false);
+      }
+    }
+  }, [handleAuthExpired]);
+
+  useEffect(() => {
+    if (!isLoggedIn) {
+      setSearchResult(null);
+      setHeaderSearchError(null);
+      setIsHeaderSearchLoading(false);
+      return;
+    }
+
+    const keyword = searchQuery.trim();
+    if (!keyword) {
+      void performSearch('');
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      void performSearch(keyword);
+    }, 300);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoggedIn, performSearch, searchQuery]);
+
+  const handleSearch = (event: React.FormEvent) => {
+    event.preventDefault();
+    void performSearch(searchQuery);
+  };
+
+  const handleHeaderSendRequest = async (recipient: FriendSearchResult) => {
+    if (recipient.relationshipStatus !== 'NONE') {
+      return;
+    }
+
+    setHeaderFriendActionKey(`send-${recipient.memberId}`);
+    setHeaderSearchError(null);
+
+    try {
+      await sendFriendRequest(recipient.memberId);
+      setSearchResult((current) => current
+        ? { ...current, relationshipStatus: 'PENDING_OUTGOING' }
+        : current);
+      await loadHeaderFriendState();
+    } catch (error) {
+      setHeaderSearchError(getApiErrorMessage(error));
+    } finally {
+      setHeaderFriendActionKey(null);
+    }
+  };
+
   const loadNotifications = useCallback(async () => {
     if (!isLoggedIn) {
       setNotifications([]);
@@ -891,6 +993,10 @@ function AppContent() {
             nextNotification,
             ...prev.filter((item) => item.id !== nextNotification.id),
           ]);
+
+          if (notification.type === 'FRIEND') {
+            void loadHeaderFriendState();
+          }
         },
         onClose: (event) => {
           if (closedByClient) {
@@ -916,7 +1022,7 @@ function AppContent() {
       }
       socket?.close();
     };
-  }, [authSession?.accessToken, handleAuthExpired, isLoggedIn]);
+  }, [authSession?.accessToken, handleAuthExpired, isLoggedIn, loadHeaderFriendState]);
 
   const handleMarkAllNotificationsRead = useCallback(async () => {
     setNotifications((prev) => prev.map((notification) => ({ ...notification, isNew: false })));
@@ -1104,145 +1210,6 @@ function AppContent() {
     const timeoutId = window.setTimeout(handleAuthExpired, getAuthSessionRemainingMs(authSession));
     return () => window.clearTimeout(timeoutId);
   }, [authSession, handleAuthExpired]);
-
-  // Robust real-time search logic
-  const performSearch = (queryStr: string) => {
-    const query = queryStr.trim().toLowerCase();
-    if (!query) {
-      setSearchResult(null);
-      return;
-    }
-
-    const defaultSystemFriends = [
-      { id: 'f-1', name: '김동우', nickname: '신림동3구왕', dama3: 200, dama4: 250, status: 'online', winRate: 54, recentForm: ['W', 'W', 'L'], lastMatchAt: '2026-06-11' },
-      { id: 'f-2', name: '이재욱', nickname: '죽빵킬러', dama3: 150, dama4: 200, status: 'offline', winRate: 48, recentForm: ['L', 'W', 'L'], lastMatchAt: '2026-06-08' },
-      { id: 'f-3', name: '최성민', nickname: '예각의마술사', dama3: 400, dama4: 500, status: 'playing', winRate: 65, recentForm: ['W', 'W', 'W'], lastMatchAt: '2026-06-12' },
-      { id: 'f-4', name: '박한솔', nickname: '무회전샷', dama3: 120, dama4: 150, status: 'offline', winRate: 42, recentForm: ['L', 'L', 'W'], lastMatchAt: '2026-05-30' },
-      { id: 'f-5', name: '정유안', nickname: '황오시', dama3: 250, dama4: 300, status: 'online', winRate: 58, recentForm: ['W', 'L', 'W'], lastMatchAt: '2026-06-10' },
-      { id: 'f-6', name: '임채원', nickname: '빈쿠션달인', dama3: 300, dama4: 400, status: 'online', winRate: 61, recentForm: ['W', 'W', 'L'], lastMatchAt: '2026-06-05' },
-    ];
-
-    const otherPotentialUsers = [
-      { id: 'pot-1', name: '황준혁', nickname: '밀어치기달인', dama3: 200, dama4: 250, status: 'online', winRate: 51, recentForm: ['W', 'L', 'L'] },
-      { id: 'pot-2', name: '송지호', nickname: '오시대장', dama3: 180, dama4: 200, status: 'online', winRate: 46, recentForm: ['L', 'W', 'W'] },
-      { id: 'pot-3', name: '조현우', nickname: '더블레일', dama3: 300, dama4: 400, status: 'offline', winRate: 59, recentForm: ['W', 'L', 'W'] },
-      { id: 'pot-4', name: '강태윤', nickname: '끌어치기고수', dama3: 180, dama4: 200, status: 'offline', winRate: 45, recentForm: ['L'] },
-      { id: 'pot-5', name: '윤시우', nickname: '원쿠션제왕', dama3: 300, dama4: 400, status: 'offline', winRate: 55, recentForm: ['W', 'L'] },
-      { id: 'pot-6', name: '김당구', nickname: '당구의신', dama3: 250, dama4: 300, status: 'online', winRate: 75, recentForm: ['W', 'W'] },
-      { id: 'pot-7', name: '이초보', nickname: '하점자클럽', dama3: 150, dama4: 180, status: 'offline', winRate: 33, recentForm: ['L', 'L'] },
-      { id: 'pot-8', name: '박프로', nickname: '예술구전설', dama3: 350, dama4: 500, status: 'playing', winRate: 80, recentForm: ['W', 'W', 'W'] }
-    ];
-
-    let currentFriendsList = [];
-    try {
-      const cached = localStorage.getItem('billiards_friends');
-      const parsed = cached ? JSON.parse(cached) : defaultSystemFriends;
-      currentFriendsList = parsed.map((f: any) => {
-        if (!f.nickname) {
-          const defaultFriend = defaultSystemFriends.find((df: any) => df.name === f.name);
-          if (defaultFriend) {
-            return { ...f, nickname: defaultFriend.nickname };
-          }
-          const potRival = otherPotentialUsers.find((p: any) => p.name === f.name);
-          if (potRival) {
-            return { ...f, nickname: potRival.nickname };
-          }
-          return { ...f, nickname: `${f.name}마스터` };
-        }
-        return f;
-      });
-    } catch (_) {
-      currentFriendsList = defaultSystemFriends;
-    }
-
-    // 1. Look up in current friends list (match name or nickname)
-    const matchedFriend = currentFriendsList.find((f: any) => 
-      f.name.toLowerCase().includes(query) || (f.nickname && f.nickname.toLowerCase().includes(query))
-    );
-
-    if (matchedFriend) {
-      setSearchResult({
-        ...matchedFriend,
-        isFriend: true
-      });
-      return;
-    }
-
-    // 2. Look up in potential other users (match name or nickname)
-    const matchedPotential = otherPotentialUsers.find((u: any) => 
-      u.name.toLowerCase().includes(query) || u.nickname.toLowerCase().includes(query)
-    );
-
-    if (matchedPotential) {
-      let requestsList = [];
-      try {
-        const cachedReq = localStorage.getItem('billiards_friend_requests');
-        requestsList = cachedReq ? JSON.parse(cachedReq) : [];
-      } catch (_) {}
-
-      const isAlreadyRequested = requestsList.some((r: any) => r.name === matchedPotential.name);
-
-      setSearchResult({
-        ...matchedPotential,
-        isFriend: false,
-        isPending: isAlreadyRequested
-      });
-      return;
-    }
-
-    // 3. Fallback dynamically generated card
-    setSearchResult({
-      id: `dyn-${Date.now()}`,
-      name: queryStr.trim(),
-      nickname: '당구동호인',
-      isFriend: false,
-      dama3: 150,
-      dama4: 200,
-      status: 'offline',
-      winRate: 50,
-      isPending: false,
-      isDynamic: true
-    });
-  };
-
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    performSearch(searchQuery);
-  };
-
-  const handleHeaderSendRequest = (recipient: any) => {
-    let currentRequests = [];
-    try {
-      const cached = localStorage.getItem('billiards_friend_requests');
-      currentRequests = cached ? JSON.parse(cached) : [];
-    } catch (_) {}
-
-    const alreadyRequested = currentRequests.some((r: any) => r.name === recipient.name);
-    if (alreadyRequested) {
-      alert('이미 대기 중인 친구 요청입니다.');
-      return;
-    }
-
-    const newRequest = {
-      id: `r-${Date.now()}`,
-      name: recipient.name,
-      dama3: recipient.dama3 || 150,
-      dama4: recipient.dama4 || 200,
-      sentByMe: true
-    };
-
-    const updated = [...currentRequests, newRequest];
-    localStorage.setItem('billiards_friend_requests', JSON.stringify(updated));
-
-    window.dispatchEvent(new CustomEvent('billiards_requests_updated', { detail: { requests: updated } }));
-
-    alert(`${recipient.name}님에게 친구 요청을 보냈습니다!`);
-    
-    setSearchResult({
-      ...recipient,
-      isPending: true
-    });
-  };
 
   const addRecord = async (newRecord: GameRecordDraft) => {
     const payload = fillMissingInningScores(newRecord);
@@ -1453,19 +1420,22 @@ function AppContent() {
                       type="text"
                       placeholder="이름(닉네임) 검색"
                       value={searchQuery}
-                      onChange={(e) => {
-                        setSearchQuery(e.target.value);
-                        performSearch(e.target.value);
-                      }}
+                      onChange={(event) => setSearchQuery(event.target.value)}
                       className="w-full bg-[#1a5d4e] text-emerald-50 placeholder:text-emerald-100/30 pl-4 pr-10 py-2 rounded-xl border border-[#2d8a75] focus:ring-2 focus:ring-emerald-500/50 transition-all text-sm font-bold"
                     />
                     <Search size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-emerald-100/30 group-focus-within:text-emerald-400 transition-colors" />
                   </form>
 
                   <AnimatePresence>
-                    {searchResult && (
+                    {searchQuery.trim() && (
                       <>
-                        <div className="fixed inset-0 z-40" onClick={() => setSearchResult(null)} />
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => {
+                            setSearchQuery('');
+                            setSearchResult(null);
+                          }}
+                        />
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -1473,68 +1443,65 @@ function AppContent() {
                           onClick={(e) => e.stopPropagation()}
                           className="absolute top-full left-0 right-0 mt-2 bg-[#0d4d3b] border border-[#1a5d4e] rounded-2xl shadow-2xl z-50 p-4"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3">
-                              <div className="w-10 h-10 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                                <User size={20} className="text-emerald-400" />
-                              </div>
-                              <div className="text-left">
-                                <div className="flex items-center gap-2">
-                                  <span className="font-bold text-emerald-50">
-                                    {searchResult.name}
-                                    {searchResult.nickname && (
-                                      <span className="text-xs text-emerald-400 font-bold ml-1.5">({searchResult.nickname})</span>
-                                    )}
-                                  </span>
-                                  {searchResult.isFriend && (
-                                    <span className={cn(
-                                      "w-2 h-2 rounded-full",
-                                      searchResult.status === 'playing' ? "bg-amber-400 animate-pulse" : "bg-emerald-500"
-                                    )} />
-                                  )}
+                          {isHeaderSearchLoading ? (
+                            <div className="flex min-h-24 items-center justify-center gap-2 text-sm font-bold text-emerald-100/60">
+                              <Activity size={16} className="animate-spin" />
+                              회원을 검색하는 중입니다.
+                            </div>
+                          ) : headerSearchError ? (
+                            <p className="text-sm font-bold text-rose-100">{headerSearchError}</p>
+                          ) : searchResult ? (
+                            <>
+                              <div className="flex items-center justify-between gap-3">
+                                <div className="flex min-w-0 items-center gap-3">
+                                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-500/10">
+                                    <User size={20} className="text-emerald-400" />
+                                  </div>
+                                  <div className="min-w-0 text-left">
+                                    <span className="block truncate font-bold text-emerald-50">
+                                      {searchResult.name}
+                                      <span className="ml-1.5 text-xs font-bold text-emerald-400">({searchResult.nickname})</span>
+                                    </span>
+                                    <p className="mt-1 text-[10px] font-bold uppercase tracking-wider text-emerald-100/40">
+                                      {friendRelationshipLabel[searchResult.relationshipStatus]}
+                                    </p>
+                                  </div>
                                 </div>
-                                <p className="text-[10px] text-emerald-100/40 font-bold uppercase tracking-wider">
-                                  {searchResult.isFriend 
-                                    ? (searchResult.status === 'playing' ? '경기 중' : '대기 중') 
-                                    : '비친구'}
-                                </p>
-                              </div>
-                            </div>
-                            {!searchResult.isFriend && (
-                              <button
-                                onClick={() => {
-                                  if (!searchResult.isPending) {
-                                    handleHeaderSendRequest(searchResult);
-                                  }
-                                }}
-                                disabled={searchResult.isPending}
-                                className={cn(
-                                  "flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors",
-                                  searchResult.isPending 
-                                    ? "bg-emerald-500/10 border border-emerald-500/20 text-emerald-400" 
-                                    : "bg-emerald-500 text-[#0a3d2e] hover:bg-emerald-400"
+                                {searchResult.relationshipStatus === 'NONE' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleHeaderSendRequest(searchResult)}
+                                    disabled={headerFriendActionKey === `send-${searchResult.memberId}`}
+                                    className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold text-[#0a3d2e] transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60"
+                                  >
+                                    <UserPlus size={14} />
+                                    {headerFriendActionKey === `send-${searchResult.memberId}` ? '요청 중...' : '친구 요청'}
+                                  </button>
+                                ) : (
+                                  <span className="shrink-0 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300">
+                                    {friendRelationshipLabel[searchResult.relationshipStatus]}
+                                  </span>
                                 )}
-                              >
-                                <UserPlus size={14} />
-                                {searchResult.isPending ? '요청 대기 중' : '친구 요청'}
-                              </button>
-                            )}
-                          </div>
-                          
-                          <div className="grid grid-cols-3 gap-2 mt-4">
-                            <div className="bg-[#1a5d4e]/50 p-2 rounded-xl text-center">
-                              <p className="text-[8px] font-bold text-emerald-500/50 uppercase">3구 다마</p>
-                              <p className="text-sm font-black text-emerald-50">{searchResult.dama3}</p>
-                            </div>
-                            <div className="bg-[#1a5d4e]/50 p-2 rounded-xl text-center">
-                              <p className="text-[8px] font-bold text-emerald-500/50 uppercase">4구 다마</p>
-                              <p className="text-sm font-black text-emerald-50">{searchResult.dama4}</p>
-                            </div>
-                            <div className="bg-[#1a5d4e]/50 p-2 rounded-xl text-center">
-                              <p className="text-[8px] font-bold text-emerald-500/50 uppercase">상대 승률</p>
-                              <p className="text-sm font-black text-emerald-50">{searchResult.isFriend ? `${searchResult.winRate}%` : '-'}</p>
-                            </div>
-                          </div>
+                              </div>
+
+                              <div className="mt-4 grid grid-cols-3 gap-2">
+                                <div className="rounded-xl bg-[#1a5d4e]/50 p-2 text-center">
+                                  <p className="text-[8px] font-bold uppercase text-emerald-500/50">3구 수지</p>
+                                  <p className="text-sm font-black text-emerald-50">{searchResult.threeBallHandicap}</p>
+                                </div>
+                                <div className="rounded-xl bg-[#1a5d4e]/50 p-2 text-center">
+                                  <p className="text-[8px] font-bold uppercase text-emerald-500/50">4구 수지</p>
+                                  <p className="text-sm font-black text-emerald-50">{searchResult.fourBallHandicap}</p>
+                                </div>
+                                <div className="rounded-xl bg-[#1a5d4e]/50 p-2 text-center">
+                                  <p className="text-[8px] font-bold uppercase text-emerald-500/50">목표 쿠션</p>
+                                  <p className="text-sm font-black text-emerald-50">{searchResult.targetCushionCount}</p>
+                                </div>
+                              </div>
+                            </>
+                          ) : (
+                            <p className="py-4 text-center text-sm font-bold text-emerald-100/45">검색 결과가 없습니다.</p>
+                          )}
                         </motion.div>
                       </>
                     )}
@@ -1570,9 +1537,13 @@ function AppContent() {
                   <div className="relative">
                     <button 
                       onClick={() => {
-                        setIsFriendsOpen(!isFriendsOpen);
+                        const willOpen = !isFriendsOpen;
+                        setIsFriendsOpen(willOpen);
                         setIsNotificationsOpen(false);
                         setIsUserMenuOpen(false);
+                        if (willOpen) {
+                          void loadHeaderFriendState();
+                        }
                       }}
                       className={cn(
                         "p-2.5 rounded-xl transition-all relative",
@@ -1602,34 +1573,56 @@ function AppContent() {
                             <div className="p-4 space-y-4">
                               <div className="flex justify-between items-center text-left">
                                 <span className="text-xs text-emerald-100/50">내 친구</span>
-                                <span className="text-xs font-bold text-emerald-50">{headerFriendsCount}명</span>
+                                <span className="text-xs font-bold text-emerald-50">
+                                  {isHeaderFriendsLoading ? '불러오는 중...' : `${headerFriendsCount}명`}
+                                </span>
                               </div>
+                              {headerFriendsError && (
+                                <div className="border border-rose-400/30 bg-rose-500/10 px-3 py-2 text-[11px] font-bold text-rose-100">
+                                  <p>{headerFriendsError}</p>
+                                  <button
+                                    type="button"
+                                    onClick={() => void loadHeaderFriendState()}
+                                    className="mt-2 text-emerald-200 hover:text-white"
+                                  >
+                                    다시 시도
+                                  </button>
+                                </div>
+                              )}
                               <div className="space-y-2 text-left">
                                 <p className="text-[10px] font-bold text-emerald-500/50 uppercase tracking-wider">대기 중인 요청</p>
                                 <div className="space-y-2">
-                                  {headerRequests.length === 0 ? (
+                                  {isHeaderFriendsLoading ? (
+                                    <div className="flex justify-center py-3 text-emerald-100/45">
+                                      <Activity size={16} className="animate-spin" />
+                                    </div>
+                                  ) : headerRequests.length === 0 ? (
                                     <p className="text-[10px] text-emerald-100/30 text-center py-2 font-bold">도착한 요청이 없습니다.</p>
                                   ) : (
                                     headerRequests.map((req) => (
-                                      <div key={req.id} className="flex items-center justify-between bg-[#1a5d4e]/30 p-2 rounded-xl border border-[#1a5d4e]">
-                                        <div className="flex items-center gap-2">
+                                      <div key={req.requestId} className="flex items-center justify-between gap-2 bg-[#1a5d4e]/30 p-2 rounded-xl border border-[#1a5d4e]">
+                                        <div className="flex min-w-0 items-center gap-2">
                                           <div className="w-6 h-6 rounded-full bg-emerald-500/10 flex items-center justify-center text-[10px] font-bold text-emerald-400">
-                                            {req.name.substring(0, 1)}
+                                            {req.member.nickname.substring(0, 1)}
                                           </div>
-                                          <span className="text-xs font-medium text-emerald-50">{req.name}</span>
+                                          <span className="truncate text-xs font-medium text-emerald-50">{req.member.nickname}</span>
                                         </div>
                                         <div className="flex gap-1 shrink-0">
                                           <button 
-                                            onClick={() => handleHeaderAccept(req.id)}
-                                            className="px-2 py-1 hover:bg-emerald-500/20 rounded text-[10px] font-bold text-emerald-400 transition-colors"
+                                            type="button"
+                                            onClick={() => void handleHeaderAccept(req.requestId)}
+                                            disabled={headerFriendActionKey !== null}
+                                            className="rounded px-2 py-1 text-[10px] font-bold text-emerald-400 transition-colors hover:bg-emerald-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                           >
-                                            승인
+                                            {headerFriendActionKey === `accept-${req.requestId}` ? '처리 중' : '승인'}
                                           </button>
                                           <button 
-                                            onClick={() => handleHeaderDecline(req.id)}
-                                            className="px-2 py-1 hover:bg-orange-500/20 rounded text-[10px] font-bold text-orange-400 transition-colors"
+                                            type="button"
+                                            onClick={() => void handleHeaderDecline(req.requestId)}
+                                            disabled={headerFriendActionKey !== null}
+                                            className="rounded px-2 py-1 text-[10px] font-bold text-orange-400 transition-colors hover:bg-orange-500/20 disabled:cursor-not-allowed disabled:opacity-50"
                                           >
-                                            거절
+                                            {headerFriendActionKey === `decline-${req.requestId}` ? '처리 중' : '거절'}
                                           </button>
                                         </div>
                                       </div>
