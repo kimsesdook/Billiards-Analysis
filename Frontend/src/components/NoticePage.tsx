@@ -1,82 +1,114 @@
-import React, { useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Megaphone, ChevronRight, Clock, ArrowLeft, Calendar, Tag } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import {
+  ArrowLeft,
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  LoaderCircle,
+  Megaphone,
+} from 'lucide-react';
+import { getApiErrorMessage } from '../api/client';
+import {
+  getNotice,
+  getNotices,
+  NoticeCategory,
+  NoticeDetail,
+  NoticePageResponse,
+} from '../api/notices';
 
-interface Notice {
-  id: string;
-  title: string;
-  date: string;
-  category: '공지' | '업데이트' | '이벤트';
-  content: string;
-  isImportant: boolean;
-}
+const PAGE_SIZE = 20;
 
-const MOCK_NOTICES: Notice[] = [
-  {
-    id: '1',
-    title: 'Billiards Analytics 정식 서비스 런칭 안내',
-    date: '2026-04-15',
-    category: '공지',
-    isImportant: true,
-    content: `안녕하세요. Billiards Analytics 팀입니다.
+const categoryLabels: Record<NoticeCategory, string> = {
+  NOTICE: '공지',
+  UPDATE: '업데이트',
+  EVENT: '이벤트',
+};
 
-오랜 준비 끝에 당구 데이터 분석의 새로운 기준, Billiards Analytics가 정식으로 서비스를 시작하게 되었습니다.
+const categoryClassNames: Record<NoticeCategory, string> = {
+  NOTICE: 'bg-blue-500/20 text-blue-300',
+  UPDATE: 'bg-emerald-500/20 text-emerald-300',
+  EVENT: 'bg-amber-500/20 text-amber-300',
+};
 
-저희 서비스는 다음과 같은 핵심 기능을 제공합니다:
-- 3구 및 4구 경기 기록 및 정밀 다마 측정
-- 실시간 경기 방 시스템을 통한 동시 기록
-- 데이터 기반의 스마트 대시보드 분석
-- 친구 관리 및 상대 전적 분석
-
-앞으로도 여러분의 당구 실력 향상을 위해 최선을 다하는 서비스가 되겠습니다.
-많은 이용 부탁드립니다.
-
-감사합니다.`
-  },
-  {
-    id: '2',
-    title: '실시간 경기 방 시스템 업데이트 (v1.1.0)',
-    date: '2026-04-10',
-    category: '업데이트',
-    isImportant: false,
-    content: `실시간 경기 방 시스템에 '되돌리기' 기능이 추가되었습니다.
-
-[업데이트 내용]
-1. 되돌리기(Undo) 기능 추가: 실수로 입력한 점수를 즉시 취소할 수 있습니다.
-2. 경기 방 로딩 속도 개선: 데이터 동기화 알고리즘 최적화로 더 빠른 반응 속도를 제공합니다.
-3. UI 개선: 모바일 환경에서 점수 입력 버튼의 가독성을 높였습니다.
-
-더욱 쾌적한 경기 환경을 위해 항상 노력하겠습니다.`
-  },
-  {
-    id: '3',
-    title: '베타 테스트 참여 감사 이벤트 당첨자 발표',
-    date: '2026-04-05',
-    category: '이벤트',
-    isImportant: false,
-    content: `베타 테스트 기간 동안 소중한 의견을 주신 모든 분들께 감사드립니다.
-
-이벤트 당첨자 분들께는 가입 시 등록하신 이메일로 개별 안내를 드렸습니다.
-경품은 이번 주 내로 순차 발송될 예정입니다.
-
-참여해주신 모든 분들께 다시 한번 감사 인사를 전합니다.`
+const formatDate = (value: string) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
   }
-];
+
+  return new Intl.DateTimeFormat('ko-KR', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+};
 
 export function NoticePage() {
-  const [selectedNotice, setSelectedNotice] = useState<Notice | null>(null);
+  const [noticePage, setNoticePage] = useState<NoticePageResponse | null>(null);
+  const [selectedNotice, setSelectedNotice] = useState<NoticeDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const loadNotices = async (page: number) => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      setNoticePage(await getNotices({ page, size: PAGE_SIZE }));
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadNotices(0);
+  }, []);
+
+  const openNotice = async (noticeId: number) => {
+    setIsDetailLoading(true);
+    setErrorMessage(null);
+
+    try {
+      setSelectedNotice(await getNotice(noticeId));
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
+  const currentPage = noticePage?.page ?? 0;
+  const notices = noticePage?.content ?? [];
 
   return (
     <div className="pb-20">
-      <div className="max-w-4xl mx-auto">
-        {/* Header */}
+      <div className="mx-auto max-w-4xl">
         <div className="mb-10 text-center">
-          <div className="inline-flex items-center justify-center p-3 bg-[#1a5d4e] rounded-2xl text-emerald-400 mb-4 mx-auto">
+          <div className="mx-auto mb-4 inline-flex items-center justify-center rounded-lg bg-[#1a5d4e] p-3 text-emerald-400">
             <Megaphone size={28} />
           </div>
-          <h1 className="text-3xl font-black text-emerald-50 tracking-tight mix-blend-difference">공지사항</h1>
-          <p className="text-emerald-100/60 mt-2 font-medium mix-blend-difference">Billiards Analytics의 새로운 소식을 전해드립니다.</p>
+          <h1 className="text-3xl font-black tracking-tight text-emerald-50 mix-blend-difference">공지사항</h1>
+          <p className="mt-2 font-medium text-emerald-100/60 mix-blend-difference">
+            Billiards Analytics의 새로운 소식을 확인하세요.
+          </p>
         </div>
+
+        {errorMessage && (
+          <div className="mb-4 flex items-center justify-between gap-4 rounded-lg border border-red-400/30 bg-red-950/30 px-4 py-3 text-sm text-red-100" role="alert">
+            <span>{errorMessage}</span>
+            <button
+              type="button"
+              onClick={() => void loadNotices(currentPage)}
+              className="shrink-0 font-bold text-red-200 underline underline-offset-4 hover:text-white"
+            >
+              다시 시도
+            </button>
+          </div>
+        )}
 
         <AnimatePresence mode="wait">
           {selectedNotice ? (
@@ -85,39 +117,35 @@ export function NoticePage() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -20 }}
-              className="bg-[#0d4d3b] rounded-[2.5rem] border border-[#1a5d4e] p-8 shadow-2xl shadow-black/20"
+              className="rounded-lg border border-[#1a5d4e] bg-[#0d4d3b] p-8 shadow-2xl shadow-black/20"
             >
-              <div className="flex items-center gap-4 mb-8">
-                <button 
+              <div className="mb-8 flex items-center gap-4">
+                <button
+                  type="button"
+                  title="공지 목록으로"
+                  aria-label="공지 목록으로"
                   onClick={() => setSelectedNotice(null)}
-                  className="p-2 hover:bg-[#1a5d4e] rounded-full transition-colors text-emerald-100"
+                  className="rounded-md p-2 text-emerald-100 transition-colors hover:bg-[#1a5d4e]"
                 >
                   <ArrowLeft size={20} />
                 </button>
-                <div className="flex items-center gap-2">
-                  <span className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                    selectedNotice.category === '공지' ? 'bg-blue-500/20 text-blue-400' : 
-                    selectedNotice.category === '업데이트' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                  }`}>
-                    {selectedNotice.category}
-                  </span>
-                </div>
+                <span className={`rounded-md px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${categoryClassNames[selectedNotice.category]}`}>
+                  {categoryLabels[selectedNotice.category]}
+                </span>
               </div>
 
-              <div className="border-b border-[#1a5d4e] pb-6 mb-6">
-                <h2 className="text-2xl font-bold text-emerald-50 mb-4">
-                  {selectedNotice.isImportant && <span className="text-red-400 mr-2">[중요]</span>}
+              <div className="mb-6 border-b border-[#1a5d4e] pb-6">
+                <h2 className="mb-4 text-2xl font-bold text-emerald-50">
+                  {selectedNotice.isImportant && <span className="mr-2 text-red-400">[중요]</span>}
                   {selectedNotice.title}
                 </h2>
-                <div className="flex items-center gap-4 text-sm text-emerald-100/40">
-                  <span className="flex items-center gap-1.5">
-                    <Calendar size={14} />
-                    {selectedNotice.date}
-                  </span>
+                <div className="flex items-center gap-1.5 text-sm text-emerald-100/40">
+                  <Calendar size={14} />
+                  {formatDate(selectedNotice.publishedAt)}
                 </div>
               </div>
 
-              <div className="text-emerald-100/70 leading-relaxed whitespace-pre-wrap min-h-[300px] font-medium">
+              <div className="whitespace-pre-wrap font-medium leading-relaxed text-emerald-100/70">
                 {selectedNotice.content}
               </div>
             </motion.div>
@@ -126,36 +154,71 @@ export function NoticePage() {
               key="list"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="bg-[#0d4d3b] rounded-[2.5rem] border border-[#1a5d4e] overflow-hidden shadow-2xl shadow-black/20"
+              className="overflow-hidden rounded-lg border border-[#1a5d4e] bg-[#0d4d3b] shadow-2xl shadow-black/20"
             >
-              <div className="divide-y divide-[#1a5d4e]">
-                {MOCK_NOTICES.map((notice) => (
-                  <button
-                    key={notice.id}
-                    onClick={() => setSelectedNotice(notice)}
-                    className="w-full p-6 flex items-center justify-between hover:bg-[#1a5d4e]/30 transition-colors text-left group"
-                  >
-                    <div className="flex-1 min-w-0 pr-4">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider ${
-                          notice.category === '공지' ? 'bg-blue-500/20 text-blue-400' : 
-                          notice.category === '업데이트' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'
-                        }`}>
-                          {notice.category}
-                        </span>
-                        <span className="text-xs text-emerald-500/50">{notice.date}</span>
+              {isLoading || isDetailLoading ? (
+                <div className="flex min-h-48 items-center justify-center gap-3 text-sm font-medium text-emerald-100/60">
+                  <LoaderCircle size={20} className="animate-spin" />
+                  공지사항을 불러오는 중입니다.
+                </div>
+              ) : notices.length === 0 ? (
+                <div className="flex min-h-48 items-center justify-center text-sm font-medium text-emerald-100/60">
+                  등록된 공지사항이 없습니다.
+                </div>
+              ) : (
+                <div className="divide-y divide-[#1a5d4e]">
+                  {notices.map((notice) => (
+                    <button
+                      key={notice.id}
+                      type="button"
+                      onClick={() => void openNotice(notice.id)}
+                      className="group flex w-full items-center justify-between p-6 text-left transition-colors hover:bg-[#1a5d4e]/30"
+                    >
+                      <div className="min-w-0 flex-1 pr-4">
+                        <div className="mb-2 flex items-center gap-3">
+                          <span className={`rounded-md px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider ${categoryClassNames[notice.category]}`}>
+                            {categoryLabels[notice.category]}
+                          </span>
+                          <span className="text-xs text-emerald-500/50">{formatDate(notice.publishedAt)}</span>
+                        </div>
+                        <h3 className={`flex items-center gap-2 truncate text-lg font-bold ${notice.isImportant ? 'text-emerald-50' : 'text-emerald-100/80'}`}>
+                          {notice.isImportant && <span className="shrink-0 text-red-400">[중요]</span>}
+                          {notice.title}
+                        </h3>
                       </div>
-                      <h3 className={`text-lg font-bold truncate flex items-center gap-2 ${
-                        notice.isImportant ? 'text-emerald-50' : 'text-emerald-100/80'
-                      }`}>
-                        {notice.isImportant && <span className="text-red-400 shrink-0">[중요]</span>}
-                        {notice.title}
-                      </h3>
-                    </div>
-                    <ChevronRight size={20} className="text-emerald-500/30 group-hover:text-emerald-400 transition-colors shrink-0" />
+                      <ChevronRight size={20} className="shrink-0 text-emerald-500/30 transition-colors group-hover:text-emerald-400" />
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {noticePage && noticePage.totalPages > 1 && !isLoading && (
+                <div className="flex items-center justify-between border-t border-[#1a5d4e] px-5 py-3">
+                  <button
+                    type="button"
+                    title="이전 페이지"
+                    aria-label="이전 페이지"
+                    onClick={() => void loadNotices(currentPage - 1)}
+                    disabled={currentPage === 0}
+                    className="rounded-md p-2 text-emerald-100 transition-colors hover:bg-[#1a5d4e] disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <ChevronLeft size={18} />
                   </button>
-                ))}
-              </div>
+                  <span className="text-xs font-medium text-emerald-100/60">
+                    {currentPage + 1} / {noticePage.totalPages}
+                  </span>
+                  <button
+                    type="button"
+                    title="다음 페이지"
+                    aria-label="다음 페이지"
+                    onClick={() => void loadNotices(currentPage + 1)}
+                    disabled={!noticePage.hasNext}
+                    className="rounded-md p-2 text-emerald-100 transition-colors hover:bg-[#1a5d4e] disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <ChevronRight size={18} />
+                  </button>
+                </div>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
