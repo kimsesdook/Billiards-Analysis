@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   createAdminNotice,
+  deleteAdminNotice,
   getNotice,
   getNotices,
   NoticeDetail,
@@ -59,6 +60,14 @@ describe('notice API contract', () => {
     expect(apiRequest).toHaveBeenCalledWith('/api/admin/notices/42', {
       method: 'PATCH',
       body: JSON.stringify(payload),
+    });
+  });
+
+  it('deletes a notice through the protected administrator endpoint', () => {
+    deleteAdminNotice(42);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/notices/42', {
+      method: 'DELETE',
     });
   });
 
