@@ -10,6 +10,7 @@ This backend is designed as a modular monolith first. The package boundaries are
 - `member`: member profile, account, and security preferences
 - `game`: game records, match rooms, scoring, and analysis
 - `friend`: friend relationships, requests, and rival search
+- `invitation`: friend-to-friend game invitation lifecycle and invitation status transitions
 - `notification`: notifications and future event delivery
 - `notice`: public announcements
 - `contact`: public and private user inquiries with owner-based access control
@@ -57,6 +58,7 @@ The backend uses Flyway to manage database schema changes.
 - `V5__create_friendships_table.sql` creates friend request and friendship relationships
 - `V6__create_notifications_table.sql` creates user notifications
 - `V7__create_weekly_ai_reports_table.sql` stores one AI analysis per member, game type, and report date
+- `V12__create_game_invitations_table.sql` creates friend-to-friend game invitations with expiration and response status
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -163,6 +165,13 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `GET /api/notices` and `GET /api/notices/{noticeId}` are public and return notices with important notices first.
 - `POST /api/admin/notices`, `PATCH /api/admin/notices/{noticeId}`, and `DELETE /api/admin/notices/{noticeId}` require an `ADMIN` JWT role.
 - Deletion is a soft delete: the notice remains in the database with the deletion timestamp and administrator, but public and administrator lists no longer expose it.
+
+## Game Invitation APIs
+
+- `POST /api/game-invitations` creates a 10-minute invitation for an accepted friend only.
+- `GET /api/game-invitations` returns the authenticated member's pending incoming and outgoing invitations.
+- `PATCH /api/game-invitations/{invitationId}/accept` and `PATCH /api/game-invitations/{invitationId}/decline` can be called only by the receiver.
+- Invitation creation and acceptance create `MATCH` notifications through the existing real-time notification flow.
 - The service checks the member's current database role again before publishing, editing, or deleting, so a stale administrator token cannot modify notices.
 
 ## Current Stage
@@ -184,6 +193,7 @@ The backend currently includes:
 - JWT-protected game record APIs scoped to the authenticated member
 - JWT-protected member profile/password APIs
 - JWT-protected friend list, friend request, and member search APIs
+- JWT-protected game invitation APIs with friend-only authorization and expiration handling
 - Notification REST APIs and realtime WebSocket delivery
 - Docker Compose development environment
 - JWT-protected MCP analysis tools for AI clients

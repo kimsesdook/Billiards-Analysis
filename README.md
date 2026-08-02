@@ -16,6 +16,7 @@
 - 3쿠션과 4구 경기 기록 생성, 조회, 수정, 삭제, 검색, 페이지네이션
 - 종목별 통계, 평균 추세, 상대 전적, 주간 경기 리포트
 - 친구 요청과 친구 관리
+- 친구 기반 경기 초대와 수락·거절 상태 관리
 - 알림 REST API와 WebSocket 기반 실시간 알림
 - 명시적 요청 기반 Gemini 주간 AI 코칭 리포트
 - JWT로 보호된 읽기 전용 MCP 경기 분석 도구
@@ -44,7 +45,7 @@ flowchart LR
 
 ### Domain Boundaries
 
-`auth`, `member`, `game`, `friend`, `notification`, `contact`, `ai`, `mcp`를 중심으로 패키지를 나눈 모듈형 모놀리스입니다. 현재는 단일 애플리케이션의 단순성을 유지하면서도, 변경 빈도가 높은 도메인은 독립적으로 확장할 수 있게 경계를 분리했습니다.
+`auth`, `member`, `game`, `friend`, `invitation`, `notification`, `contact`, `ai`, `mcp`를 중심으로 패키지를 나눈 모듈형 모놀리스입니다. 현재는 단일 애플리케이션의 단순성을 유지하면서도, 변경 빈도가 높은 도메인은 독립적으로 확장할 수 있게 경계를 분리했습니다.
 
 ## Data Model
 
@@ -54,6 +55,8 @@ erDiagram
     GAME_RECORDS ||--o{ GAME_RECORD_INNING_SCORES : contains
     MEMBERS ||--o{ FRIENDSHIPS : requests
     MEMBERS ||--o{ FRIENDSHIPS : receives
+    MEMBERS ||--o{ GAME_INVITATIONS : sends
+    MEMBERS ||--o{ GAME_INVITATIONS : receives
     MEMBERS ||--o{ NOTIFICATIONS : receives
     MEMBERS ||--o{ WEEKLY_AI_REPORTS : owns
     MEMBERS ||--o{ CONTACT_INQUIRIES : writes
@@ -84,6 +87,14 @@ erDiagram
         bigint requester_id FK
         bigint receiver_id FK
         string status
+    }
+    GAME_INVITATIONS {
+        bigint id PK
+        bigint requester_id FK
+        bigint receiver_id FK
+        string game_type
+        string invitation_status
+        datetime expires_at
     }
     NOTIFICATIONS {
         bigint id PK

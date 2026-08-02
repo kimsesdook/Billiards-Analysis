@@ -2,6 +2,7 @@ package com.my.billiards.notification.controller;
 
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
+import com.my.billiards.invitation.repository.GameInvitationRepository;
 import com.my.billiards.member.repository.MemberRepository;
 import com.my.billiards.notice.repository.NoticeRepository;
 import com.my.billiards.notification.repository.NotificationRepository;
@@ -42,6 +43,9 @@ class NotificationControllerTest {
 	private FriendshipRepository friendshipRepository;
 
 	@Autowired
+	private GameInvitationRepository gameInvitationRepository;
+
+	@Autowired
 	private NotificationRepository notificationRepository;
 
 	@Autowired
@@ -52,6 +56,7 @@ class NotificationControllerTest {
 		noticeRepository.deleteAll();
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();
+		gameInvitationRepository.deleteAll();
 		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}
