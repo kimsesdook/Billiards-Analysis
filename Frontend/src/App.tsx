@@ -26,6 +26,7 @@ import {
   Search,
   Users,
   Info,
+  Megaphone,
   BarChart3,
   Monitor,
   Github,
@@ -85,6 +86,7 @@ const GuidePage = lazy(() => import('./components/GuidePage').then(({ GuidePage 
 const LoginPage = lazy(() => import('./components/LoginPage').then(({ LoginPage }) => ({ default: LoginPage })));
 const ContactPage = lazy(() => import('./components/ContactPage').then(({ ContactPage }) => ({ default: ContactPage })));
 const AdminContactInquiriesPage = lazy(() => import('./components/AdminContactInquiriesPage').then(({ AdminContactInquiriesPage }) => ({ default: AdminContactInquiriesPage })));
+const AdminNoticesPage = lazy(() => import('./components/AdminNoticesPage').then(({ AdminNoticesPage }) => ({ default: AdminNoticesPage })));
 const NoticePage = lazy(() => import('./components/NoticePage').then(({ NoticePage }) => ({ default: NoticePage })));
 const SignupPage = lazy(() => import('./components/SignupPage').then(({ SignupPage }) => ({ default: SignupPage })));
 const DashboardPage = lazy(() => import('./components/DashboardPage').then(({ DashboardPage }) => ({ default: DashboardPage })));
@@ -2007,6 +2009,20 @@ function AppContent() {
                           문의 관리
                         </Link>
                       )}
+                      {authSession?.member.role === 'ADMIN' && (
+                        <Link
+                          to="/admin/notices"
+                          className={cn(
+                            "flex items-center gap-3 px-4 py-3 rounded-xl font-bold transition-all",
+                            location.pathname === '/admin/notices'
+                              ? "bg-[#1a5d4e] text-white shadow-lg shadow-black/10"
+                              : "text-emerald-100/60 hover:text-emerald-100 hover:bg-[#1a5d4e]/50"
+                          )}
+                        >
+                          <Megaphone size={20} />
+                          공지 관리
+                        </Link>
+                      )}
                     </nav>
                   </div>
 
@@ -2079,6 +2095,7 @@ function AppContent() {
           <Route path="/analysis" element={requireAuth(<AnalysisPage records={records} />)} />
           <Route path="/friends" element={requireAuth(<FriendsPage />)} />
           <Route path="/admin/contact-inquiries" element={requireAdmin(<AdminContactInquiriesPage />)} />
+          <Route path="/admin/notices" element={requireAdmin(<AdminNoticesPage />)} />
           <Route path="/" element={
             isLoggedIn ? (
               <Navigate to="/dashboard" replace />

@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { getNotice, getNotices, NoticeDetail } from './notices';
+import {
+  createAdminNotice,
+  getNotice,
+  getNotices,
+  NoticeDetail,
+  updateAdminNotice,
+} from './notices';
 
 const apiRequest = vi.hoisted(() => vi.fn());
 
@@ -22,6 +28,38 @@ describe('notice API contract', () => {
     getNotice(42);
 
     expect(apiRequest).toHaveBeenCalledWith('/api/notices/42', { skipAuth: true });
+  });
+
+  it('creates a notice through the protected administrator endpoint', () => {
+    const payload = {
+      title: 'Scheduled maintenance',
+      content: 'The service will be unavailable for one hour.',
+      category: 'NOTICE' as const,
+      isImportant: true,
+    };
+
+    createAdminNotice(payload);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/notices', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+  });
+
+  it('updates a notice through the protected administrator endpoint', () => {
+    const payload = {
+      title: 'Release update',
+      content: 'Updated notice content.',
+      category: 'UPDATE' as const,
+      isImportant: false,
+    };
+
+    updateAdminNotice(42, payload);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/admin/notices/42', {
+      method: 'PATCH',
+      body: JSON.stringify(payload),
+    });
   });
 
   it('keeps the detail fields returned by the backend', async () => {
