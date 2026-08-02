@@ -48,6 +48,7 @@ public class SecurityConfig {
 				.requestMatchers("/api/admin/**").hasRole("ADMIN")
 				.requestMatchers("/mcp").authenticated()
 				.requestMatchers("/api/game-records/**").authenticated()
+				.requestMatchers("/api/game-invitations/**").authenticated()
 				.requestMatchers("/api/ai-reports/**").authenticated()
 				.requestMatchers("/api/members/**").authenticated()
 				.requestMatchers("/api/friends/**").authenticated()
