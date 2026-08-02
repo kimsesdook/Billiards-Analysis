@@ -57,6 +57,9 @@ erDiagram
     MEMBERS ||--o{ FRIENDSHIPS : receives
     MEMBERS ||--o{ GAME_INVITATIONS : sends
     MEMBERS ||--o{ GAME_INVITATIONS : receives
+    MEMBERS ||--o{ GAME_ROOMS : hosts
+    GAME_ROOMS ||--o{ GAME_ROOM_PARTICIPANTS : contains
+    MEMBERS ||--o{ GAME_ROOM_PARTICIPANTS : joins
     MEMBERS ||--o{ NOTIFICATIONS : receives
     MEMBERS ||--o{ WEEKLY_AI_REPORTS : owns
     MEMBERS ||--o{ CONTACT_INQUIRIES : writes
@@ -95,6 +98,18 @@ erDiagram
         string game_type
         string invitation_status
         datetime expires_at
+    }
+    GAME_ROOMS {
+        bigint id PK
+        bigint host_member_id FK
+        string join_code UK
+        string room_status
+    }
+    GAME_ROOM_PARTICIPANTS {
+        bigint id PK
+        bigint game_room_id FK
+        bigint member_id FK
+        string participant_role
     }
     NOTIFICATIONS {
         bigint id PK

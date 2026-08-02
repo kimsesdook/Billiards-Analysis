@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
+import com.my.billiards.game.repository.GameRoomParticipantRepository;
+import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.invitation.repository.GameInvitationRepository;
 import com.my.billiards.member.repository.MemberRepository;
 import com.my.billiards.notice.repository.NoticeRepository;
@@ -50,6 +52,12 @@ class UserFlowIntegrationTest {
 	private GameInvitationRepository gameInvitationRepository;
 
 	@Autowired
+	private GameRoomParticipantRepository gameRoomParticipantRepository;
+
+	@Autowired
+	private GameRoomRepository gameRoomRepository;
+
+	@Autowired
 	private NotificationRepository notificationRepository;
 
 	@Autowired
@@ -63,6 +71,8 @@ class UserFlowIntegrationTest {
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();
 		gameInvitationRepository.deleteAll();
+		gameRoomParticipantRepository.deleteAll();
+		gameRoomRepository.deleteAll();
 		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}

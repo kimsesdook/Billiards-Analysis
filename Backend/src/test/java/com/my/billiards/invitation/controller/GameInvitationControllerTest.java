@@ -9,6 +9,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
+import com.my.billiards.game.repository.GameRoomParticipantRepository;
+import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.invitation.domain.GameInvitationStatus;
 import com.my.billiards.invitation.repository.GameInvitationRepository;
 import com.my.billiards.member.repository.MemberRepository;
@@ -44,6 +46,12 @@ class GameInvitationControllerTest {
 	private GameInvitationRepository gameInvitationRepository;
 
 	@Autowired
+	private GameRoomParticipantRepository gameRoomParticipantRepository;
+
+	@Autowired
+	private GameRoomRepository gameRoomRepository;
+
+	@Autowired
 	private GameRecordRepository gameRecordRepository;
 
 	@Autowired
@@ -58,6 +66,8 @@ class GameInvitationControllerTest {
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();
 		gameInvitationRepository.deleteAll();
+		gameRoomParticipantRepository.deleteAll();
+		gameRoomRepository.deleteAll();
 		friendshipRepository.deleteAll();
 		memberRepository.deleteAll();
 	}
