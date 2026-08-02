@@ -158,6 +158,12 @@ $env:GEMINI_MODEL="gemini-2.5-flash"
 
 The configured output cap is 350 tokens and no scheduled job invokes the model. Keep the Gemini account on its free tier and do not enable Google Cloud billing unless a later deployment plan explicitly requires it.
 
+## Notice APIs
+
+- `GET /api/notices` and `GET /api/notices/{noticeId}` are public and return notices with important notices first.
+- `POST /api/admin/notices` and `PATCH /api/admin/notices/{noticeId}` require an `ADMIN` JWT role.
+- The service checks the member's current database role again before publishing or editing, so a stale administrator token cannot modify notices.
+
 ## Current Stage
 
 The backend currently includes:
@@ -182,3 +188,4 @@ The backend currently includes:
 - JWT-protected MCP analysis tools for AI clients
 - Optional Gemini-backed weekly coaching report with aggregate-only data and report caching
 - Public and private contact inquiry API with authenticated inquiry creation
+- Public notice API with administrator-only publishing and editing
