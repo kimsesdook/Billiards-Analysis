@@ -169,9 +169,10 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 
 ## Game Invitation APIs
 
-- `POST /api/game-invitations` creates a 10-minute invitation for an accepted friend only.
+- `POST /api/game-invitations` creates a 10-minute invitation for an accepted friend only. An optional `gameRoomId` links the invitation to a waiting room hosted by the requester.
 - `GET /api/game-invitations` returns the authenticated member's pending incoming and outgoing invitations.
 - `PATCH /api/game-invitations/{invitationId}/accept` and `PATCH /api/game-invitations/{invitationId}/decline` can be called only by the receiver.
+- A linked invitation validates the host, room status, game type, and capacity. Accepting it adds the receiver as a game room participant.
 - Invitation creation and acceptance create `MATCH` notifications through the existing real-time notification flow.
 - The service checks the member's current database role again before publishing, editing, or deleting, so a stale administrator token cannot modify notices.
 

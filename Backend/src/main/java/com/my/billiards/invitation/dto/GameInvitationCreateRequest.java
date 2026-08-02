@@ -9,6 +9,8 @@ public record GameInvitationCreateRequest(
 	@Positive(message = "경기 초대 대상이 올바르지 않습니다.")
 	Long receiverMemberId,
 	@NotNull(message = "경기 종류는 필수입니다.")
-	GameType gameType
+	GameType gameType,
+	@Positive(message = "게임방 ID가 올바르지 않습니다.")
+	Long gameRoomId
 ) {
 }

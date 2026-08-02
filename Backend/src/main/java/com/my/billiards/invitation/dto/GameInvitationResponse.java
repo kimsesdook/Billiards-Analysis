@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 
 public record GameInvitationResponse(
 	Long invitationId,
+	Long gameRoomId,
 	GameInvitationMemberResponse member,
 	GameType gameType,
 	GameInvitationStatus status,
@@ -32,6 +33,7 @@ public record GameInvitationResponse(
 	) {
 		return new GameInvitationResponse(
 			invitation.getId(),
+			invitation.getGameRoom() == null ? null : invitation.getGameRoom().getId(),
 			GameInvitationMemberResponse.from(member),
 			invitation.getGameType(),
 			invitation.getStatus(),
