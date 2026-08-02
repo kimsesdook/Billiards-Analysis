@@ -15,6 +15,7 @@ public interface GameInvitationRepository extends JpaRepository<GameInvitation, 
 		from GameInvitation invitation
 		join fetch invitation.requester
 		join fetch invitation.receiver
+		left join fetch invitation.gameRoom
 		where invitation.status = :status
 		  and (invitation.requester.id = :memberId or invitation.receiver.id = :memberId)
 		order by invitation.createdAt desc
@@ -35,6 +36,7 @@ public interface GameInvitationRepository extends JpaRepository<GameInvitation, 
 		from GameInvitation invitation
 		join fetch invitation.requester
 		join fetch invitation.receiver
+		left join fetch invitation.gameRoom
 		where invitation.id = :invitationId
 		""")
 	Optional<GameInvitation> findDetailById(@Param("invitationId") Long invitationId);

@@ -14,6 +14,7 @@ class GameInvitationTest {
 		GameInvitation invitation = GameInvitation.create(
 			Member.create("requester@example.com", "password-hash", "Requester"),
 			Member.create("receiver@example.com", "password-hash", "Receiver"),
+			null,
 			GameType.THREE_CUSHION,
 			LocalDateTime.of(2026, 8, 2, 10, 0)
 		);
@@ -28,6 +29,7 @@ class GameInvitationTest {
 		GameInvitation invitation = GameInvitation.create(
 			Member.create("requester@example.com", "password-hash", "Requester"),
 			Member.create("receiver@example.com", "password-hash", "Receiver"),
+			null,
 			GameType.FOUR_BALL,
 			LocalDateTime.of(2026, 8, 2, 10, 0)
 		);

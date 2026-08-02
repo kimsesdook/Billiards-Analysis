@@ -100,6 +100,18 @@ public class GameRoom extends BaseTimeEntity {
         return participants.stream().anyMatch(participant -> participant.getMember().getId().equals(memberId));
     }
 
+    public boolean isWaiting() {
+        return status == GameRoomStatus.WAITING;
+    }
+
+    public boolean hasVacancy() {
+        return participants.size() < playerCapacity;
+    }
+
+    public void addPlayer(Member member, int targetScore) {
+        this.participants.add(GameRoomParticipant.player(this, member, targetScore));
+    }
+
     public void cancel() {
         this.status = GameRoomStatus.CANCELED;
     }

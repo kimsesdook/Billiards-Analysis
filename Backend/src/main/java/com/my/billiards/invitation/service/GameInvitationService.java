@@ -4,6 +4,9 @@ import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.friend.domain.FriendshipStatus;
 import com.my.billiards.friend.repository.FriendshipRepository;
+import com.my.billiards.game.domain.GameRoom;
+import com.my.billiards.game.domain.GameType;
+import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.invitation.domain.GameInvitation;
 import com.my.billiards.invitation.domain.GameInvitationStatus;
 import com.my.billiards.invitation.dto.GameInvitationCreateRequest;
@@ -29,6 +32,7 @@ public class GameInvitationService {
 
 	private final GameInvitationRepository gameInvitationRepository;
 	private final FriendshipRepository friendshipRepository;
+	private final GameRoomRepository gameRoomRepository;
 	private final MemberRepository memberRepository;
 	private final NotificationService notificationService;
 
@@ -41,6 +45,7 @@ public class GameInvitationService {
 		Member requester = getActiveMember(memberId);
 		Member receiver = getActiveMember(request.receiverMemberId());
 		validateAcceptedFriendship(memberId, receiver.getId());
+		GameRoom gameRoom = getInvitationGameRoom(request, requester);
 
 		LocalDateTime now = LocalDateTime.now();
 		List<GameInvitation> pendingInvitations = gameInvitationRepository
@@ -58,6 +63,7 @@ public class GameInvitationService {
 		GameInvitation invitation = gameInvitationRepository.save(GameInvitation.create(
 			requester,
 			receiver,
+			gameRoom,
 			request.gameType(),
 			now.plusMinutes(INVITATION_EXPIRATION_MINUTES)
 		));
@@ -99,6 +105,7 @@ public class GameInvitationService {
 		GameInvitation invitation = getInvitation(invitationId);
 		validateReceiver(memberId, invitation);
 		validatePendingInvitation(invitation);
+		joinGameRoomIfLinked(invitation);
 
 		invitation.accept(LocalDateTime.now());
 		notificationService.createForMember(
@@ -133,6 +140,56 @@ public class GameInvitationService {
 		if (!isAcceptedFriendship) {
 			throw new BilliardsException(ErrorCode.GAME_INVITATION_ONLY_FOR_FRIENDS);
 		}
+	}
+
+	private GameRoom getInvitationGameRoom(GameInvitationCreateRequest request, Member requester) {
+		if (request.gameRoomId() == null) {
+			return null;
+		}
+
+		GameRoom gameRoom = gameRoomRepository.findDetailById(request.gameRoomId())
+			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND, "게임방을 찾을 수 없습니다."));
+		if (!gameRoom.isHost(requester.getId())) {
+			throw new BilliardsException(ErrorCode.FORBIDDEN);
+		}
+		if (!gameRoom.isWaiting()) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_WAITING);
+		}
+		if (gameRoom.getGameType() != request.gameType()) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_GAME_TYPE_MISMATCH);
+		}
+		if (!gameRoom.hasVacancy()) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_FULL);
+		}
+
+		return gameRoom;
+	}
+
+	private void joinGameRoomIfLinked(GameInvitation invitation) {
+		if (invitation.getGameRoom() == null) {
+			return;
+		}
+
+		GameRoom gameRoom = gameRoomRepository.findDetailById(invitation.getGameRoom().getId())
+			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND, "게임방을 찾을 수 없습니다."));
+		if (!gameRoom.isWaiting()) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_WAITING);
+		}
+		if (gameRoom.hasParticipant(invitation.getReceiver().getId())) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_ALREADY_JOINED);
+		}
+		if (!gameRoom.hasVacancy()) {
+			throw new BilliardsException(ErrorCode.GAME_ROOM_FULL);
+		}
+
+		gameRoom.addPlayer(invitation.getReceiver(), calculateTargetScore(gameRoom, invitation.getReceiver()));
+	}
+
+	private int calculateTargetScore(GameRoom gameRoom, Member member) {
+		int handicap = gameRoom.getGameType() == GameType.THREE_CUSHION
+			? member.getThreeBallHandicap()
+			: member.getFourBallHandicap();
+		return Math.max(5, handicap / 10);
 	}
 
 	private void validateReceiver(Long memberId, GameInvitation invitation) {

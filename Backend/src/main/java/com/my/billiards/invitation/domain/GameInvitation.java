@@ -1,6 +1,7 @@
 package com.my.billiards.invitation.domain;
 
 import com.my.billiards.common.model.BaseTimeEntity;
+import com.my.billiards.game.domain.GameRoom;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.member.domain.Member;
 import jakarta.persistence.Column;
@@ -34,6 +35,10 @@ public class GameInvitation extends BaseTimeEntity {
 	@JoinColumn(name = "receiver_id", nullable = false)
 	private Member receiver;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "game_room_id")
+	private GameRoom gameRoom;
+
 	@Enumerated(EnumType.STRING)
 	@Column(name = "game_type", nullable = false, length = 30)
 	private GameType gameType;
@@ -51,9 +56,16 @@ public class GameInvitation extends BaseTimeEntity {
 	protected GameInvitation() {
 	}
 
-	private GameInvitation(Member requester, Member receiver, GameType gameType, LocalDateTime expiresAt) {
+	private GameInvitation(
+		Member requester,
+		Member receiver,
+		GameRoom gameRoom,
+		GameType gameType,
+		LocalDateTime expiresAt
+	) {
 		this.requester = requester;
 		this.receiver = receiver;
+		this.gameRoom = gameRoom;
 		this.gameType = gameType;
 		this.status = GameInvitationStatus.PENDING;
 		this.expiresAt = expiresAt;
@@ -62,10 +74,11 @@ public class GameInvitation extends BaseTimeEntity {
 	public static GameInvitation create(
 		Member requester,
 		Member receiver,
+		GameRoom gameRoom,
 		GameType gameType,
 		LocalDateTime expiresAt
 	) {
-		return new GameInvitation(requester, receiver, gameType, expiresAt);
+		return new GameInvitation(requester, receiver, gameRoom, gameType, expiresAt);
 	}
 
 	public void accept(LocalDateTime respondedAt) {

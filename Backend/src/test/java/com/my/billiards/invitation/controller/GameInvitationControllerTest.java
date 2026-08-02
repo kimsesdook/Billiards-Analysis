@@ -144,6 +144,48 @@ class GameInvitationControllerTest {
 	}
 
 	@Test
+	void receiverAcceptingLinkedInvitationJoinsGameRoom() throws Exception {
+		String requesterToken = signUpAndLogin("requester@example.com", "Requester");
+		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
+		Long receiverId = memberId("receiver@example.com");
+		createAcceptedFriendship(requesterToken, receiverToken, receiverId);
+		Long gameRoomId = createGameRoom(requesterToken, "3-Cushion");
+		Long invitationId = createInvitation(requesterToken, receiverId, "3-Cushion", gameRoomId);
+
+		mockMvc.perform(patch("/api/game-invitations/{invitationId}/accept", invitationId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.status").value("ACCEPTED"))
+			.andExpect(jsonPath("$.data.gameRoomId").value(gameRoomId));
+
+		mockMvc.perform(get("/api/game-rooms/{roomId}", gameRoomId)
+				.header(HttpHeaders.AUTHORIZATION, bearer(receiverToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.participants.length()").value(2))
+			.andExpect(jsonPath("$.data.participants[1].nickname").value("Receiver"))
+			.andExpect(jsonPath("$.data.participants[1].role").value("PLAYER"))
+			.andExpect(jsonPath("$.data.participants[1].targetScore").value(20))
+			.andExpect(jsonPath("$.data.participants[1].ready").value(false));
+	}
+
+	@Test
+	void rejectsLinkedInvitationWhenGameTypesDoNotMatch() throws Exception {
+		String requesterToken = signUpAndLogin("requester@example.com", "Requester");
+		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
+		Long receiverId = memberId("receiver@example.com");
+		createAcceptedFriendship(requesterToken, receiverToken, receiverId);
+		Long gameRoomId = createGameRoom(requesterToken, "3-Cushion");
+
+		mockMvc.perform(post("/api/game-invitations")
+				.header(HttpHeaders.AUTHORIZATION, bearer(requesterToken))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content(invitationRequest(receiverId, "4-Ball", gameRoomId)))
+			.andExpect(status().isBadRequest())
+			.andExpect(jsonPath("$.success").value(false))
+			.andExpect(jsonPath("$.code").value("ROOM_003"));
+	}
+
+	@Test
 	void rejectInvitationResponseByMemberWhoIsNotReceiver() throws Exception {
 		String requesterToken = signUpAndLogin("requester@example.com", "Requester");
 		String receiverToken = signUpAndLogin("receiver@example.com", "Receiver");
@@ -203,10 +245,14 @@ class GameInvitationControllerTest {
 	}
 
 	private Long createInvitation(String token, Long receiverId, String gameType) throws Exception {
+		return createInvitation(token, receiverId, gameType, null);
+	}
+
+	private Long createInvitation(String token, Long receiverId, String gameType, Long gameRoomId) throws Exception {
 		String response = mockMvc.perform(post("/api/game-invitations")
 				.header(HttpHeaders.AUTHORIZATION, bearer(token))
 				.contentType(MediaType.APPLICATION_JSON)
-				.content(invitationRequest(receiverId, gameType)))
+				.content(invitationRequest(receiverId, gameType, gameRoomId)))
 			.andExpect(status().isCreated())
 			.andExpect(jsonPath("$.success").value(true))
 			.andReturn()
@@ -217,12 +263,47 @@ class GameInvitationControllerTest {
 	}
 
 	private String invitationRequest(Long receiverId, String gameType) {
+		return invitationRequest(receiverId, gameType, null);
+	}
+
+	private String invitationRequest(Long receiverId, String gameType, Long gameRoomId) {
+		if (gameRoomId != null) {
+			return """
+				{
+				  "receiverMemberId": %d,
+				  "gameType": "%s",
+				  "gameRoomId": %d
+				}
+				""".formatted(receiverId, gameType, gameRoomId);
+		}
+
 		return """
 			{
 			  "receiverMemberId": %d,
 			  "gameType": "%s"
 			}
 			""".formatted(receiverId, gameType);
+	}
+
+	private Long createGameRoom(String token, String gameType) throws Exception {
+		String response = mockMvc.perform(post("/api/game-rooms")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token))
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "name": "Invitation Room",
+					  "gameType": "%s",
+					  "gameMode": "Individual",
+					  "playerCapacity": 2,
+					  "hostTargetScore": 20
+					}
+					""".formatted(gameType)))
+			.andExpect(status().isCreated())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractLong(response, "roomId");
 	}
 
 	private String signUpAndLogin(String email, String nickname) throws Exception {
