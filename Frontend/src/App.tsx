@@ -71,6 +71,12 @@ import {
   type FriendSearchResult,
   type FriendSearchStatus,
 } from './api/friends';
+import {
+  acceptGameInvitation,
+  declineGameInvitation,
+  getGameInvitations,
+  type GameInvitation,
+} from './api/gameInvitations';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
 import {
@@ -218,8 +224,9 @@ export default function App() {
 
 function AppContent() {
   const navigate = useNavigate();
-  const [incomingInvitation, setIncomingInvitation] = useState<any | null>(null);
-  const [invitedAutoTriggered, setInvitedAutoTriggered] = useState(false);
+  const [incomingInvitation, setIncomingInvitation] = useState<GameInvitation | null>(null);
+  const [gameInvitationAction, setGameInvitationAction] = useState<'accept' | 'decline' | null>(null);
+  const [gameInvitationError, setGameInvitationError] = useState<string | null>(null);
   const [records, setRecords] = useState<GameRecord[]>([]);
   const [isRecordsLoading, setIsRecordsLoading] = useState(false);
   const [recordsError, setRecordsError] = useState<string | null>(null);
@@ -670,54 +677,6 @@ function AppContent() {
     }
   }, [location.pathname]);
 
-  const triggerMockInvitation = () => {
-    setIncomingInvitation({
-      id: `inv-${Date.now()}`,
-      name: '최성민 (프로 3구)',
-      dama3: 250,
-      dama4: 300,
-      gameType: '3구',
-      message: '친선 매치 한 판 어떠신가요? AI 정밀 수지 보정이 완료되었습니다! 🎱'
-    });
-  };
-
-  const handleDeclineInvitation = () => {
-    const decNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      title: '경기 초대 거절함',
-      message: `${incomingInvitation?.name || '동호인'}님의 경기 초대를 거절하였습니다.`,
-      time: '방금 전',
-      isNew: true,
-      type: 'system'
-    };
-    setNotifications(prev => [decNotif, ...prev]);
-    setIncomingInvitation(null);
-  };
-
-  const handleAcceptInvitation = () => {
-    // Save accepted state to local storage so CreateGamePage can catch it
-    localStorage.setItem('game_invitation_accepted', JSON.stringify({
-      opponent: incomingInvitation?.name || '최성민',
-      dama: incomingInvitation?.dama4 || 300,
-      gameType: incomingInvitation?.gameType || '3구'
-    }));
-    
-    const accNotif: AppNotification = {
-      id: `notif-${Date.now()}`,
-      title: '대국 매치 이동 중',
-      message: `${incomingInvitation?.name || '동호인'}님의 초대를 수락하여 대국방에 입장합니다.`,
-      time: '방금 전',
-      isNew: true,
-      type: 'match'
-    };
-    setNotifications(prev => [accNotif, ...prev]);
-    setIncomingInvitation(null);
-    setIsNotificationsOpen(false);
-    
-    // Redirect to CreateGamePage
-    navigate('/create-game');
-  };
-
   // Mock visitor counts
   const [visitors] = useState({ today: 124, total: 15420, active: 42 });
 
@@ -767,6 +726,93 @@ function AppContent() {
     setRecordsError('로그인이 만료되었습니다. 다시 로그인해 주세요.');
     navigate('/login');
   }, [navigate]);
+
+  const loadIncomingGameInvitations = useCallback(async () => {
+    if (!isLoggedIn) {
+      setIncomingInvitation(null);
+      setGameInvitationError(null);
+      return;
+    }
+
+    try {
+      const invitations = await getGameInvitations();
+      setIncomingInvitation(invitations.incoming[0] ?? null);
+      setGameInvitationError(null);
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setGameInvitationError(getApiErrorMessage(error));
+    }
+  }, [handleAuthExpired, isLoggedIn]);
+
+  useEffect(() => {
+    void loadIncomingGameInvitations();
+  }, [loadIncomingGameInvitations]);
+
+  const handleDeclineInvitation = async () => {
+    if (!incomingInvitation || gameInvitationAction) {
+      return;
+    }
+
+    setGameInvitationAction('decline');
+    setGameInvitationError(null);
+
+    try {
+      await declineGameInvitation(incomingInvitation.invitationId);
+      await loadIncomingGameInvitations();
+      window.dispatchEvent(new CustomEvent('billiards_notifications_updated'));
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setGameInvitationError(getApiErrorMessage(error));
+    } finally {
+      setGameInvitationAction(null);
+    }
+  };
+
+  const handleAcceptInvitation = async () => {
+    if (!incomingInvitation || gameInvitationAction) {
+      return;
+    }
+
+    setGameInvitationAction('accept');
+    setGameInvitationError(null);
+
+    try {
+      const acceptedInvitation = await acceptGameInvitation(incomingInvitation.invitationId);
+      const opponentHandicap = acceptedInvitation.gameType === '3-Cushion'
+        ? acceptedInvitation.member.threeBallHandicap
+        : acceptedInvitation.member.fourBallHandicap;
+
+      setIncomingInvitation(null);
+      setIsNotificationsOpen(false);
+      window.dispatchEvent(new CustomEvent('billiards_notifications_updated'));
+      navigate('/create-game', {
+        state: {
+          acceptedInvitation: {
+            opponentName: acceptedInvitation.member.nickname,
+            opponentTargetScore: Math.max(5, Math.floor(opponentHandicap / 10)),
+            gameType: acceptedInvitation.gameType,
+          },
+        },
+      });
+    } catch (error) {
+      if (error instanceof ApiClientError && error.status === 401) {
+        handleAuthExpired();
+        return;
+      }
+
+      setGameInvitationError(getApiErrorMessage(error));
+    } finally {
+      setGameInvitationAction(null);
+    }
+  };
 
   const loadHeaderFriendState = useCallback(async () => {
     const requestId = ++headerFriendStateRequestIdRef.current;
@@ -997,6 +1043,10 @@ function AppContent() {
           if (notification.type === 'FRIEND') {
             void loadHeaderFriendState();
           }
+
+          if (notification.type === 'MATCH') {
+            void loadIncomingGameInvitations();
+          }
         },
         onClose: (event) => {
           if (closedByClient) {
@@ -1022,7 +1072,13 @@ function AppContent() {
       }
       socket?.close();
     };
-  }, [authSession?.accessToken, handleAuthExpired, isLoggedIn, loadHeaderFriendState]);
+  }, [
+    authSession?.accessToken,
+    handleAuthExpired,
+    isLoggedIn,
+    loadHeaderFriendState,
+    loadIncomingGameInvitations,
+  ]);
 
   const handleMarkAllNotificationsRead = useCallback(async () => {
     setNotifications((prev) => prev.map((notification) => ({ ...notification, isNew: false })));
@@ -1736,29 +1792,19 @@ function AppContent() {
                                 ))
                               )}
                             </div>
-                            <div className="flex border-t border-[#1a5d4e]">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setIsNotificationsOpen(false);
-                                  setTimeout(triggerMockInvitation, 200);
-                                }}
-                                className="flex-1 text-center py-3 text-[10px] font-black text-emerald-400 bg-emerald-500/5 hover:bg-emerald-500/10 transition-colors uppercase tracking-wider border-r border-[#1a5d4e]/40"
-                              >
-                                경기 초대 시뮬레이터 🎱
-                              </button>
-                              {notifications.length > 0 && (
+                            {notifications.length > 0 && (
+                              <div className="flex border-t border-[#1a5d4e]">
                                 <button
                                   type="button"
                                   onClick={() => {
                                     void handleDeleteAllNotifications();
                                   }}
-                                  className="flex-1 text-center py-3 text-[10px] font-black text-orange-400 hover:bg-orange-500/10 transition-colors uppercase tracking-wider"
+                                  className="w-full text-center py-3 text-[10px] font-black text-orange-400 hover:bg-orange-500/10 transition-colors uppercase tracking-wider"
                                 >
                                   전체 삭제
                                 </button>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </motion.div>
                         </>
                       )}
@@ -2934,7 +2980,6 @@ function AppContent() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-[#041d15]/85 backdrop-blur-md"
-              onClick={() => handleDeclineInvitation()}
             />
             
             {/* Invitation Box */}
@@ -2965,31 +3010,39 @@ function AppContent() {
               <div className="my-5 bg-[#0a3d2e]/90 border border-[#1a5d4e]/80 p-4 rounded-2xl text-left">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-400 to-teal-500 flex items-center justify-center font-black text-[#0a3d2e] text-sm shadow-md">
-                    {incomingInvitation.name.substring(0, 1)}
+                    {incomingInvitation.member.nickname.substring(0, 1)}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h4 className="text-xs font-black text-emerald-100 truncate">{incomingInvitation.name}</h4>
+                    <h4 className="text-xs font-black text-emerald-100 truncate">{incomingInvitation.member.nickname}</h4>
                     <span className="text-[10px] text-emerald-300 font-bold block">
-                      3구 수지: {incomingInvitation.dama3}점 | 4구 수지: {incomingInvitation.dama4}점
+                      {incomingInvitation.gameType === '3-Cushion' ? '3구' : '4구'} 경기 · 3구 수지 {incomingInvitation.member.threeBallHandicap}점 · 4구 수지 {incomingInvitation.member.fourBallHandicap}점
                     </span>
                   </div>
                 </div>
               </div>
 
+              {gameInvitationError && (
+                <p className="mb-3 text-left text-xs font-semibold text-rose-200" role="alert">
+                  {gameInvitationError}
+                </p>
+              )}
+
               <div className="grid grid-cols-2 gap-2.5 pt-1">
                 <button
                   type="button"
                   onClick={() => handleDeclineInvitation()}
-                  className="py-3 bg-red-600/80 hover:bg-red-500 text-white font-extrabold rounded-xl hover:shadow-lg transition-all text-xs cursor-pointer active:scale-95"
+                  disabled={Boolean(gameInvitationAction)}
+                  className="py-3 bg-red-600/80 hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-60 text-white font-extrabold rounded-xl hover:shadow-lg transition-all text-xs cursor-pointer active:scale-95"
                 >
-                  거절하기
+                  {gameInvitationAction === 'decline' ? '처리 중...' : '거절하기'}
                 </button>
                 <button
                   type="button"
                   onClick={() => handleAcceptInvitation()}
-                  className="py-3 bg-emerald-500 text-[#0a3d2e] font-extrabold rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-xs cursor-pointer active:scale-95"
+                  disabled={Boolean(gameInvitationAction)}
+                  className="py-3 bg-emerald-500 text-[#0a3d2e] disabled:cursor-not-allowed disabled:opacity-60 font-extrabold rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 transition-all text-xs cursor-pointer active:scale-95"
                 >
-                  수락 및 참가
+                  {gameInvitationAction === 'accept' ? '처리 중...' : '수락 및 참가'}
                 </button>
               </div>
             </motion.div>

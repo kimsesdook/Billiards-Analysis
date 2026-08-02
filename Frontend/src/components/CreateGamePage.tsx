@@ -1,11 +1,14 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useCallback, useState, useEffect, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Play, Plus, Minus, RotateCcw, Target, User, Sparkles, ChevronRight, 
   Settings, AlertCircle, ArrowLeft, ArrowRight, Trophy, Timer, Volume2, VolumeX, Eye, HelpCircle, RefreshCw, CheckCircle2, Award,
   Copy, Users, MessageSquare, Hourglass, Activity, Check, Info
 } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
+import { getFriends } from '../api/friends';
+import { createGameInvitation } from '../api/gameInvitations';
+import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -30,8 +33,24 @@ interface ActivePlayer {
   isMe?: boolean;
 }
 
+type BilliardFriend = {
+  id: number;
+  name: string;
+  threeBallHandicap: number;
+  fourBallHandicap: number;
+};
+
+type GameInvitationNavigationState = {
+  acceptedInvitation?: {
+    opponentName: string;
+    opponentTargetScore: number;
+    gameType: GameType;
+  };
+};
+
 export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // --- Sound Effects Helper using Web Audio API ---
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -83,16 +102,11 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [lobbyLogs, setLobbyLogs] = useState<any[]>([]);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
-  // --- Billiard Friends to invite manually ---
-  const [billiardFriends, setBilliardFriends] = useState([
-    { id: 'f-1', name: '김당구', targetScore: 30, isOnline: true },
-    { id: 'f-2', name: '박마세', targetScore: 25, isOnline: true },
-    { id: 'f-3', name: '최시네루', targetScore: 20, isOnline: true },
-    { id: 'f-4', name: '이끌어치기', targetScore: 18, isOnline: true },
-    { id: 'f-5', name: '정오시', targetScore: 15, isOnline: true },
-    { id: 'f-6', name: '홍밀어치기', targetScore: 12, isOnline: true },
-  ]);
-  const [invitedFriendIds, setInvitedFriendIds] = useState<string[]>([]);
+  const [billiardFriends, setBilliardFriends] = useState<BilliardFriend[]>([]);
+  const [isBilliardFriendsLoading, setIsBilliardFriendsLoading] = useState(false);
+  const [billiardFriendsError, setBilliardFriendsError] = useState<string | null>(null);
+  const [invitedFriendIds, setInvitedFriendIds] = useState<number[]>([]);
+  const [invitationSendingMemberId, setInvitationSendingMemberId] = useState<number | null>(null);
 
   // Custom Iframe-Safe Confirmation states
   const [showExitLobbyConfirm, setShowExitLobbyConfirm] = useState<boolean>(false);
@@ -105,6 +119,30 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [playerCount, setPlayerCount] = useState<2 | 3 | 4>(2);
   const [lastThreeCushions, setLastThreeCushions] = useState<0 | 1 | 2>(0);
   const [notes, setNotes] = useState<string>('');
+
+  const loadBilliardFriends = useCallback(async () => {
+    setIsBilliardFriendsLoading(true);
+    setBilliardFriendsError(null);
+
+    try {
+      const friends = await getFriends();
+      setBilliardFriends(friends.map(({ friend }) => ({
+        id: friend.id,
+        name: friend.nickname,
+        threeBallHandicap: friend.threeBallHandicap,
+        fourBallHandicap: friend.fourBallHandicap,
+      })));
+    } catch (error) {
+      setBilliardFriends([]);
+      setBilliardFriendsError(getApiErrorMessage(error));
+    } finally {
+      setIsBilliardFriendsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadBilliardFriends();
+  }, [loadBilliardFriends]);
 
   // Individual player information setup in room creation
   const [p1Name, setP1Name] = useState<string>(() => {
@@ -159,59 +197,56 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     }
   }, []);
 
-  // Check if an incoming game invitation was accepted, and auto-trigger a lobby with that matched opponent
   useEffect(() => {
-    const acceptedStr = localStorage.getItem('game_invitation_accepted');
-    if (acceptedStr) {
-      try {
-        const accepted = JSON.parse(acceptedStr);
-        if (accepted && accepted.opponent) {
-          // Clear it so it doesn't trigger again on subsequent re-mounts
-          localStorage.removeItem('game_invitation_accepted');
-
-          const userNickname = localStorage.getItem('billiards_nickname') || '사용자';
-          
-          // Setup players for lobby
-          const p1Name = userNickname;
-          const userDama3 = parseInt(localStorage.getItem('billiards_dama3') || '200', 10);
-          
-          const initialLobby = [
-            {
-              id: 1,
-              name: p1Name,
-              role: '방장',
-              isJoined: true,
-              isReady: true,
-              cueBallColor: 'white',
-              targetScore: Math.max(5, Math.floor(userDama3 / 10)), // e.g. 200 dama turns into 20 points
-              isMe: true
-            },
-            {
-              id: 2,
-              name: accepted.opponent,
-              role: '참가자',
-              isJoined: true,
-              isReady: true,
-              cueBallColor: 'yellow',
-              targetScore: Math.max(5, Math.floor((accepted.dama || 250) / 10)),
-              isMe: false
-            }
-          ];
-
-          setLobbyPlayers(initialLobby);
-          setLobbyCode(Math.floor(1000 + Math.random() * 9000).toString());
-          setLobbyLogs([
-            { id: 1, text: '🎉 대국 방이 생성되었습니다.', time: '방금 전' },
-            { id: 2, text: `👥 ${accepted.opponent}님이 대국 초대를 수락하고 입장했습니다.`, time: '방금 전' },
-            { id: 3, text: '✅ 모든 대국 준비가 완료되었습니다. 경기를 시작해보세요!', time: '방금 전' }
-          ]);
-          setIsLobby(true);
-        }
-      } catch (e) {
-        localStorage.removeItem('game_invitation_accepted');
-      }
+    const acceptedInvitation = (location.state as GameInvitationNavigationState | null)?.acceptedInvitation;
+    if (!acceptedInvitation) {
+      return;
     }
-  }, []);
+
+    const userNickname = localStorage.getItem('billiards_nickname') || '사용자';
+    const userHandicap = acceptedInvitation.gameType === '3-Cushion'
+      ? parseInt(localStorage.getItem('billiards_dama3') || '200', 10)
+      : parseInt(localStorage.getItem('billiards_dama4') || '250', 10);
+    const userTargetScore = Math.max(5, Math.floor(userHandicap / 10));
+
+    setType(acceptedInvitation.gameType);
+    setMode('Individual');
+    setPlayerCount(2);
+    setP1Name(userNickname);
+    setP1Target(userTargetScore);
+    setP2Name(acceptedInvitation.opponentName);
+    setP2Target(acceptedInvitation.opponentTargetScore);
+    setLobbyPlayers([
+      {
+        id: 1,
+        name: userNickname,
+        role: '방장',
+        isJoined: true,
+        isReady: true,
+        cueBallColor: 'white',
+        targetScore: userTargetScore,
+        isMe: true,
+      },
+      {
+        id: 2,
+        name: acceptedInvitation.opponentName,
+        role: '참가자',
+        isJoined: true,
+        isReady: true,
+        cueBallColor: 'yellow',
+        targetScore: acceptedInvitation.opponentTargetScore,
+        isMe: false,
+      },
+    ]);
+    setLobbyCode(`B-${Math.floor(100 + Math.random() * 900)}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setLobbyLogs([
+      { id: 1, text: '대국 방이 생성되었습니다.', time: '방금 전' },
+      { id: 2, text: `${acceptedInvitation.opponentName}님이 경기 초대를 수락했습니다.`, time: '방금 전' },
+      { id: 3, text: '대국 준비가 완료되었습니다. 경기를 시작해보세요!', time: '방금 전' },
+    ]);
+    setIsLobby(true);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location.pathname, location.state, navigate]);
 
   const handleConfirmResume = () => {
     if (!resumeData) return;
@@ -495,76 +530,35 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setShowOrderSelection(true);
   };
 
-  // Invite a specific friend from the online list to fill an open lobby slot
-  const handleInviteFriend = (friend: { id: string; name: string; targetScore: number }) => {
-    // Find first slot where isJoined is false
-    const openSlot = lobbyPlayers.find(p => !p.isJoined);
-    if (!openSlot) {
-      alert('대기방 빈자리가 없습니다! (지정한 경기 인원이 모두 입장했습니다)');
+  const handleInviteFriend = async (friend: BilliardFriend) => {
+    const openSlotCount = lobbyPlayers.filter((player) => !player.isJoined).length;
+    if (invitedFriendIds.length >= openSlotCount) {
+      alert('초대를 보낸 친구의 응답을 기다리고 있습니다.');
       return;
     }
 
     cueClickSound();
-    setInvitedFriendIds(prev => [...prev, friend.id]);
+    setInvitationSendingMemberId(friend.id);
+    setBilliardFriendsError(null);
 
-    // Send invitation request log
-    setLobbyLogs(prev => [
-      ...prev,
-      {
-        id: 'invite-req-' + Date.now(),
-        text: `✉️ '${friend.name}'님에게 게임방 초대장을 발송했습니다.`,
-        type: 'announcement',
-        time: '방금'
-      }
-    ]);
-    playSound(400, 0.1, 'triangle');
-
-    // 1. Simulate acceptance & connection after 1.2s
-    setTimeout(() => {
-      setLobbyPlayers(prev => prev.map(p => {
-        if (p.id === openSlot.id) {
-          return {
-            ...p,
-            name: friend.name,
-            isJoined: true,
-            targetScore: friend.targetScore
-          };
-        }
-        return p;
-      }));
-
-      setLobbyLogs(prev => [
-        ...prev,
+    try {
+      await createGameInvitation(friend.id, type);
+      setInvitedFriendIds((current) => [...current, friend.id]);
+      setLobbyLogs((current) => [
+        ...current,
         {
-          id: 'invite-join-' + Date.now(),
-          text: `👋 '${friend.name}'님이 대기방에 참여했습니다.`,
-          type: 'chat',
-          time: '방금'
-        }
+          id: `invite-req-${Date.now()}`,
+          text: `${friend.name}님에게 경기 초대를 보냈습니다. 수락을 기다리고 있습니다.`,
+          type: 'announcement',
+          time: '방금',
+        },
       ]);
-      playSound(440, 0.15, 'sine');
-    }, 1200);
-
-    // 2. Simulate ready state after 2.4s
-    setTimeout(() => {
-      setLobbyPlayers(prev => prev.map(p => {
-        if (p.id === openSlot.id) {
-          return { ...p, isReady: true };
-        }
-        return p;
-      }));
-
-      setLobbyLogs(prev => [
-        ...prev,
-        {
-          id: 'invite-ready-' + Date.now(),
-          text: `✅ '${friend.name}'님이 경기 세팅을 완료하고 [준비 완료] 상태입니다.`,
-          type: 'system',
-          time: '방금'
-        }
-      ]);
-      playSound(554, 0.12, 'sine');
-    }, 2400);
+      playSound(400, 0.1, 'triangle');
+    } catch (error) {
+      setBilliardFriendsError(getApiErrorMessage(error));
+    } finally {
+      setInvitationSendingMemberId(null);
+    }
   };
 
   // State recording function to allow Undo functionality
@@ -1127,7 +1121,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                             </span>
                           </div>
                           <span className="text-[10px] text-emerald-300/35 mt-1">
-                            우측 하단 [온라인 당구 친구 목록]에서 초대해 주세요.
+                            우측 하단 친구 목록에서 초대해 주세요.
                           </span>
                         </div>
                       );
@@ -1308,99 +1302,103 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 })()}
               </div>
 
-              {/* Online friends list area */}
+              {/* Friends eligible for a server-backed game invitation */}
               <div className="bg-[#0b3c2e]/60 p-5 rounded-[2rem] border border-[#1d6352]/50 text-left">
                 <div className="flex items-center justify-between mb-3 border-b border-[#1a5d4e]/40 pb-2">
                   <div className="flex items-center gap-2">
-                    <span className="flex h-2 w-2 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                    </span>
                     <h3 className="text-xs uppercase font-extrabold text-[#ffd6aa] tracking-widest flex items-center gap-1.5 font-sans">
                       <Users size={14} className="text-emerald-400" />
-                      초대 가능 온라인 당구 친구 ({billiardFriends.length}명)
+                      초대 가능한 당구 친구 ({billiardFriends.length}명)
                     </h3>
                   </div>
-                  <span className="text-[10px] text-emerald-300/40 font-sans">클릭하여 게임 초대를 보냅니다</span>
+                  <span className="text-[10px] text-emerald-300/40 font-sans">친구에게 경기 초대를 보냅니다</span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
-                  {billiardFriends.map((friend) => {
-                    const isInvited = invitedFriendIds.includes(friend.id);
-                    const isJoined = lobbyPlayers.some(p => p.isJoined && p.name.startsWith(friend.name));
-                    const isLobbyFull = lobbyPlayers.every(p => p.isJoined);
+                {isBilliardFriendsLoading ? (
+                  <div className="flex min-h-24 items-center justify-center gap-2 text-xs font-semibold text-emerald-200/70">
+                    <Activity size={15} className="animate-pulse" />
+                    친구 목록을 불러오는 중입니다.
+                  </div>
+                ) : billiardFriendsError ? (
+                  <div className="flex min-h-24 flex-col items-center justify-center gap-3 text-center">
+                    <p className="text-xs font-semibold text-rose-200">{billiardFriendsError}</p>
+                    <button
+                      type="button"
+                      onClick={() => void loadBilliardFriends()}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-300 hover:text-emerald-100"
+                    >
+                      <RefreshCw size={13} />
+                      다시 불러오기
+                    </button>
+                  </div>
+                ) : billiardFriends.length === 0 ? (
+                  <div className="flex min-h-24 items-center justify-center text-xs font-semibold text-emerald-200/60">
+                    초대할 친구가 없습니다.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
+                    {billiardFriends.map((friend) => {
+                      const isInvited = invitedFriendIds.includes(friend.id);
+                      const isSending = invitationSendingMemberId === friend.id;
+                      const openSlotCount = lobbyPlayers.filter((player) => !player.isJoined).length;
+                      const isInvitationLimitReached = invitedFriendIds.length >= openSlotCount;
 
-                    return (
-                      <div 
-                        key={friend.id}
-                        className={cn(
-                          "flex items-center justify-between p-2.5 rounded-xl border transition-all text-xs",
-                          isJoined 
-                            ? "bg-emerald-950/20 border-emerald-500/10 opacity-70"
-                            : isInvited
+                      return (
+                        <div
+                          key={friend.id}
+                          className={cn(
+                            "flex items-center justify-between p-2.5 rounded-xl border transition-all text-xs",
+                            isInvited
                               ? "bg-[#144b3c]/20 border-amber-500/20"
                               : "bg-[#0a3327]/60 border-[#1a5d4e]/30 hover:border-[#22725e]"
-                        )}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {/* Colored Cue ball as mini avatar */}
-                          <div className={cn(
-                            "w-5 h-5 rounded-full border flex items-center justify-center font-bold text-[9px] text-[#0a3d2e] shadow-sm",
-                            friend.id === 'f-1' ? "bg-white border-zinc-200" :
-                            friend.id === 'f-2' ? "bg-yellow-400 border-yellow-300" :
-                            friend.id === 'f-3' ? "bg-red-500 border-red-400 text-white" : "bg-sky-500 border-sky-400 text-white"
-                          )}>
-                            🎱
-                          </div>
-                          <div className="text-left font-sans">
-                            <p className="font-bold text-white flex items-center gap-1.5 leading-none mb-0.5">
-                              {friend.name}
-                            </p>
-                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold font-sans">
-                              <span className="relative flex h-2 w-2">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400 shadow-[0_0_8px_#34d399]"></span>
-                              </span>
-                              온라인
-                            </span>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          disabled={isInvited || isJoined || isLobbyFull}
-                          onClick={() => handleInviteFriend(friend)}
-                          className={cn(
-                            "px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer active:scale-95 flex items-center gap-1 font-sans",
-                            isJoined
-                              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/10 cursor-default"
-                              : isInvited
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/10 animate-pulse cursor-default"
-                                : isLobbyFull
-                                  ? "bg-zinc-800 text-zinc-500 border border-zinc-700/40 cursor-not-allowed"
-                                  : "bg-emerald-500 hover:bg-emerald-400 text-[#0a3d2e] shadow-sm font-black"
                           )}
                         >
-                          {isJoined ? (
-                            <>
-                              <Check size={10} />
-                              수락 완료
-                            </>
-                          ) : isInvited ? (
-                            <>
-                              <Hourglass size={10} className="animate-spin" />
-                              수락 대기중
-                            </>
-                          ) : isLobbyFull ? (
-                            "대기방 초과"
-                          ) : (
-                            "초대"
-                          )}
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-5 h-5 rounded-full border border-emerald-300 bg-emerald-300 flex items-center justify-center font-bold text-[9px] text-[#0a3d2e] shadow-sm">
+                              🎱
+                            </div>
+                            <div className="text-left font-sans">
+                              <p className="font-bold text-white leading-none mb-0.5">{friend.name}</p>
+                              <span className="inline-flex px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold font-sans">
+                                친구
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={isInvited || isSending || isInvitationLimitReached}
+                            onClick={() => void handleInviteFriend(friend)}
+                            className={cn(
+                              "px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer active:scale-95 flex items-center gap-1 font-sans",
+                              isInvited || isSending
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/10 cursor-default"
+                                : isInvitationLimitReached
+                                  ? "bg-zinc-800 text-zinc-500 border border-zinc-700/40 cursor-not-allowed"
+                                  : "bg-emerald-500 hover:bg-emerald-400 text-[#0a3d2e] shadow-sm font-black"
+                            )}
+                          >
+                            {isSending ? (
+                              <>
+                                <Hourglass size={10} className="animate-spin" />
+                                전송 중
+                              </>
+                            ) : isInvited ? (
+                              <>
+                                <Hourglass size={10} />
+                                응답 대기
+                              </>
+                            ) : isInvitationLimitReached ? (
+                              "초대 대기 중"
+                            ) : (
+                              "초대"
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
             </div>
