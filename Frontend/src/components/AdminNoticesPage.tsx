@@ -11,10 +11,12 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Trash2,
 } from 'lucide-react';
 import { getApiErrorMessage } from '../api/client';
 import {
   createAdminNotice,
+  deleteAdminNotice,
   getNotice,
   getNotices,
   NoticeCategory,
@@ -68,6 +70,8 @@ export function AdminNoticesPage() {
   const [isListLoading, setIsListLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadNotices = useCallback(async (nextPage: number) => {
@@ -91,6 +95,7 @@ export function AdminNoticesPage() {
   const handleCreate = () => {
     setSelectedNotice(null);
     setForm(EMPTY_FORM);
+    setIsDeleteDialogOpen(false);
     setErrorMessage(null);
   };
 
@@ -145,6 +150,34 @@ export function AdminNoticesPage() {
       setErrorMessage(getApiErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!selectedNotice) {
+      return;
+    }
+
+    const deletedLastNoticeOnPage = notices.length === 1 && page > 0;
+
+    setIsDeleting(true);
+    setErrorMessage(null);
+
+    try {
+      await deleteAdminNotice(selectedNotice.id);
+      setIsDeleteDialogOpen(false);
+      setSelectedNotice(null);
+      setForm(EMPTY_FORM);
+
+      if (deletedLastNoticeOnPage) {
+        setPage((current) => current - 1);
+      } else {
+        await loadNotices(page);
+      }
+    } catch (error) {
+      setErrorMessage(getApiErrorMessage(error));
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -331,10 +364,24 @@ export function AdminNoticesPage() {
                 />
               </label>
 
-              <div className="mt-5 flex items-center justify-end border-t border-[#1a5d4e] pt-5">
+              <div className="mt-5 flex items-center justify-between gap-3 border-t border-[#1a5d4e] pt-5">
+                {selectedNotice ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setErrorMessage(null);
+                      setIsDeleteDialogOpen(true);
+                    }}
+                    disabled={isSubmitting || isDeleting}
+                    className="inline-flex min-h-10 items-center gap-2 rounded-md border border-rose-400/50 px-4 text-sm font-bold text-rose-200 transition-colors hover:bg-rose-400/10 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 size={16} />
+                    공지 삭제
+                  </button>
+                ) : <span />}
                 <button
                   type="submit"
-                  disabled={isSubmitting || !form.title.trim() || !form.content.trim()}
+                  disabled={isSubmitting || isDeleting || !form.title.trim() || !form.content.trim()}
                   className="inline-flex min-h-10 items-center gap-2 rounded-md bg-emerald-500 px-4 text-sm font-bold text-[#0a3d2e] transition-colors hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   {isSubmitting ? <LoaderCircle size={16} className="animate-spin" /> : <Save size={16} />}
@@ -345,6 +392,54 @@ export function AdminNoticesPage() {
           )}
         </section>
       </div>
+
+      {isDeleteDialogOpen && selectedNotice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm" />
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-notice-title"
+            className="relative w-full max-w-md rounded-lg border border-rose-400/40 bg-[#0d4d3b] p-6 shadow-2xl"
+          >
+            <div className="flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-rose-400/15 text-rose-200">
+                <Trash2 size={19} />
+              </div>
+              <div>
+                <h2 id="delete-notice-title" className="text-lg font-bold text-emerald-50">공지를 삭제할까요?</h2>
+                <p className="mt-2 break-words text-sm leading-6 text-emerald-100/65">
+                  &quot;{selectedNotice.title}&quot; 공지가 공개 목록에서 사라집니다.
+                </p>
+              </div>
+            </div>
+            {errorMessage && (
+              <p className="mt-4 border border-rose-400/30 bg-rose-400/10 px-3 py-2 text-sm text-rose-100" role="alert">
+                {errorMessage}
+              </p>
+            )}
+            <div className="mt-6 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteDialogOpen(false)}
+                disabled={isDeleting}
+                className="min-h-10 rounded-md border border-[#1a5d4e] px-4 text-sm font-bold text-emerald-100/75 transition-colors hover:bg-[#1a5d4e] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDelete()}
+                disabled={isDeleting}
+                className="inline-flex min-h-10 items-center gap-2 rounded-md bg-rose-500 px-4 text-sm font-bold text-white transition-colors hover:bg-rose-400 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isDeleting && <LoaderCircle size={16} className="animate-spin" />}
+                {isDeleting ? '삭제 중...' : '삭제'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

@@ -55,3 +55,8 @@ export const updateAdminNotice = (noticeId: number, payload: NoticeUpsertPayload
     method: 'PATCH',
     body: JSON.stringify(payload),
   });
+
+export const deleteAdminNotice = (noticeId: number) =>
+  apiRequest<void>(`/api/admin/notices/${noticeId}`, {
+    method: 'DELETE',
+  });
