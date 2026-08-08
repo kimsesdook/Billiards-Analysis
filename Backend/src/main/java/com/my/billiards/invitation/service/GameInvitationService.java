@@ -6,6 +6,9 @@ import com.my.billiards.friend.domain.FriendshipStatus;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.domain.GameRoom;
 import com.my.billiards.game.domain.GameType;
+import com.my.billiards.game.dto.GameRoomResponse;
+import com.my.billiards.game.event.GameRoomRealtimeEvent;
+import com.my.billiards.game.event.GameRoomRealtimeEventType;
 import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.invitation.domain.GameInvitation;
 import com.my.billiards.invitation.domain.GameInvitationStatus;
@@ -21,6 +24,7 @@ import com.my.billiards.notification.service.NotificationService;
 import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,6 +39,7 @@ public class GameInvitationService {
 	private final GameRoomRepository gameRoomRepository;
 	private final MemberRepository memberRepository;
 	private final NotificationService notificationService;
+	private final ApplicationEventPublisher eventPublisher;
 
 	@Transactional
 	public GameInvitationResponse create(Long memberId, GameInvitationCreateRequest request) {
@@ -183,6 +188,12 @@ public class GameInvitationService {
 		}
 
 		gameRoom.addPlayer(invitation.getReceiver(), calculateTargetScore(gameRoom, invitation.getReceiver()));
+		GameRoomResponse response = GameRoomResponse.from(gameRoom);
+		eventPublisher.publishEvent(new GameRoomRealtimeEvent(
+			gameRoom.getId(),
+			GameRoomRealtimeEventType.PARTICIPANT_JOINED,
+			response
+		));
 	}
 
 	private int calculateTargetScore(GameRoom gameRoom, Member member) {

@@ -184,6 +184,7 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `PATCH /api/game-rooms/{roomId}/cancel` lets only the host cancel a waiting room.
 - `PATCH /api/game-rooms/{roomId}/ready` lets a participant set their ready state while the room is waiting.
 - `PATCH /api/game-rooms/{roomId}/start` lets only the host start a full room after every participant is ready.
+- `GET /ws/game-rooms/{roomId}?token=...` opens a WebSocket for authenticated room participants and broadcasts join, ready, start, and cancel events after database commit.
 
 ## Current Stage
 
@@ -206,6 +207,7 @@ The backend currently includes:
 - JWT-protected friend list, friend request, and member search APIs
 - JWT-protected game invitation APIs with friend-only authorization and expiration handling
 - Notification REST APIs and realtime WebSocket delivery
+- Authenticated game room WebSocket events scoped to each room's participants
 - Docker Compose development environment
 - JWT-protected MCP analysis tools for AI clients
 - Optional Gemini-backed weekly coaching report with aggregate-only data and report caching
