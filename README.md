@@ -157,6 +157,13 @@ erDiagram
 - A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
 - The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
 
+### Transactional Game Completion
+
+- Only the room host can finish an in-progress game, and the request must match the latest scoreboard `stateVersion`.
+- Room completion and all participant records are committed in one transaction, so partial record creation cannot remain in the database.
+- Each generated record is linked to its source room with a database uniqueness constraint, making finish retries idempotent.
+- The `GAME_FINISHED` WebSocket event is published only after the completion transaction commits.
+
 ### Contact Inquiry Privacy
 
 - Public inquiries can be read without signing in, but private inquiries are visible only to their author or an `ADMIN` role.

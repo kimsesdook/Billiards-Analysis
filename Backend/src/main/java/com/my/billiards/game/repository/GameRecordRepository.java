@@ -20,6 +20,8 @@ public interface GameRecordRepository extends JpaRepository<GameRecord, Long> {
 
 	Optional<GameRecord> findByIdAndMemberId(Long id, Long memberId);
 
+	List<GameRecord> findAllByGameRoomIdOrderByIdAsc(Long gameRoomId);
+
 	@Query("""
 		select gameRecord
 		from GameRecord gameRecord

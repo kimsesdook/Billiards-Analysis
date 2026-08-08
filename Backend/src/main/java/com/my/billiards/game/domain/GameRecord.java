@@ -36,6 +36,10 @@ public class GameRecord extends BaseTimeEntity {
 	@JoinColumn(name = "member_id")
 	private Member member;
 
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "game_room_id")
+	private GameRoom gameRoom;
+
 	@Column(name = "played_at", nullable = false)
 	private OffsetDateTime playedAt;
 
@@ -209,6 +213,49 @@ public class GameRecord extends BaseTimeEntity {
 			myCushionScore,
 			opponentCushionScore
 		);
+	}
+
+	public static GameRecord createFromGameRoom(
+		GameRoom gameRoom,
+		Member member,
+		OffsetDateTime playedAt,
+		GameType type,
+		GameMode mode,
+		int myScore,
+		int opponentScore,
+		int innings,
+		int highRun,
+		boolean win,
+		int playerCount,
+		Integer rank,
+		Integer lastThreeCushions,
+		String notes,
+		String opponentName,
+		List<Integer> inningScores,
+		Integer myCushionScore,
+		Integer opponentCushionScore
+	) {
+		GameRecord gameRecord = create(
+			member,
+			playedAt,
+			type,
+			mode,
+			myScore,
+			opponentScore,
+			innings,
+			highRun,
+			playerCount,
+			rank,
+			lastThreeCushions,
+			notes,
+			opponentName,
+			inningScores,
+			myCushionScore,
+			opponentCushionScore
+		);
+		gameRecord.gameRoom = gameRoom;
+		gameRecord.win = win;
+		return gameRecord;
 	}
 
 	private static BigDecimal calculateAverage(int myScore, int innings) {

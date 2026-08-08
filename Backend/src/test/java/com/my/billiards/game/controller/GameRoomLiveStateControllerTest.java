@@ -1,5 +1,6 @@
 package com.my.billiards.game.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -161,6 +162,95 @@ class GameRoomLiveStateControllerTest {
             .andExpect(jsonPath("$.code").value("ROOM_009"));
     }
 
+    @Test
+    void hostFinishesRoomAndRetryReturnsSameRecordsWithoutDuplicates() throws Exception {
+        StartedRoom room = createStartedRoom();
+        updateLiveState(room);
+        String finishRequest = finishRequest(1, room.hostId(), room.playerId(), 3, 5);
+
+        String firstResponse = mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.hostToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(finishRequest))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("FINISHED"))
+            .andExpect(jsonPath("$.data.stateVersion").value(2))
+            .andExpect(jsonPath("$.data.playedAt").isNotEmpty())
+            .andExpect(jsonPath("$.data.records.length()").value(2))
+            .andExpect(jsonPath("$.data.records[0].memberId").value(room.hostId()))
+            .andExpect(jsonPath("$.data.records[0].score").value(3))
+            .andExpect(jsonPath("$.data.records[0].opponentScore").value(5))
+            .andExpect(jsonPath("$.data.records[0].win").value(false))
+            .andExpect(jsonPath("$.data.records[1].memberId").value(room.playerId()))
+            .andExpect(jsonPath("$.data.records[1].score").value(5))
+            .andExpect(jsonPath("$.data.records[1].win").value(true))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+        Long firstRecordId = extractLong(firstResponse, "gameRecordId");
+
+        String retryResponse = mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.hostToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(finishRequest))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("FINISHED"))
+            .andExpect(jsonPath("$.data.records.length()").value(2))
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+        assertThat(extractLong(retryResponse, "gameRecordId")).isEqualTo(firstRecordId);
+        assertThat(gameRecordRepository.count()).isEqualTo(2);
+        assertThat(gameRoomRepository.findById(room.roomId()).orElseThrow().getStatus().name())
+            .isEqualTo("FINISHED");
+    }
+
+    @Test
+    void rejectsFinishFromParticipantWhoIsNotHost() throws Exception {
+        StartedRoom room = createStartedRoom();
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.playerToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(finishRequest(0, room.hostId(), room.playerId(), 0, 0)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_002"));
+    }
+
+    @Test
+    void rejectsFinishWithStaleStateVersion() throws Exception {
+        StartedRoom room = createStartedRoom();
+        updateLiveState(room);
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.hostToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(finishRequest(0, room.hostId(), room.playerId(), 3, 5)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ROOM_008"));
+
+        assertThat(gameRecordRepository.count()).isZero();
+    }
+
+    @Test
+    void invalidInningScoresRollbackRoomCompletion() throws Exception {
+        StartedRoom room = createStartedRoom();
+        updateLiveState(room);
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.hostToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(finishRequest(1, room.hostId(), room.playerId(), 2, 5)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.code").value("ROOM_010"));
+
+        assertThat(gameRecordRepository.count()).isZero();
+        assertThat(gameRoomRepository.findById(room.roomId()).orElseThrow().getStatus().name())
+            .isEqualTo("IN_PROGRESS");
+    }
+
     private StartedRoom createStartedRoom() throws Exception {
         String hostToken = signUpAndLogin("host@example.com", "Host");
         String playerToken = signUpAndLogin("player@example.com", "Player");
@@ -307,6 +397,45 @@ class GameRoomLiveStateControllerTest {
               ]
             }
             """.formatted(memberId, memberId);
+    }
+
+    private void updateLiveState(StartedRoom room) throws Exception {
+        mockMvc.perform(put("/api/game-rooms/{roomId}/live-state", room.roomId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(room.hostToken()))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(liveStateRequest(0, 2, room.playerId(), room.hostId(), room.playerId())))
+            .andExpect(status().isOk());
+    }
+
+    private String finishRequest(
+        long stateVersion,
+        Long hostId,
+        Long playerId,
+        int hostInningTotal,
+        int playerInningTotal
+    ) {
+        return """
+            {
+              "stateVersion": %d,
+              "lastThreeCushions": 0,
+              "participants": [
+                {
+                  "memberId": %d,
+                  "inningScores": [1, %d]
+                },
+                {
+                  "memberId": %d,
+                  "inningScores": [1, %d]
+                }
+              ]
+            }
+            """.formatted(
+                stateVersion,
+                hostId,
+                Math.max(0, hostInningTotal - 1),
+                playerId,
+                Math.max(0, playerInningTotal - 1)
+            );
     }
 
     private String signUpAndLogin(String email, String nickname) throws Exception {

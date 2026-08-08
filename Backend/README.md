@@ -62,6 +62,7 @@ The backend uses Flyway to manage database schema changes.
 - `V13__create_game_room_tables.sql` creates server-managed game rooms and room participants
 - `V14__link_game_invitations_to_game_rooms.sql` links accepted invitations to persisted game rooms
 - `V15__add_game_room_live_state.sql` adds versioned live scores, inning, and active-player state
+- `V16__link_game_records_to_game_rooms.sql` links automatically generated records to their source room and prevents duplicate records per member
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -188,8 +189,10 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `PATCH /api/game-rooms/{roomId}/start` lets only the host start a full room after every participant is ready.
 - `GET /api/game-rooms/{roomId}/live-state` returns the versioned scoreboard to room participants.
 - `PUT /api/game-rooms/{roomId}/live-state` lets only the host replace the in-progress scoreboard with the expected `stateVersion`.
+- `PATCH /api/game-rooms/{roomId}/finish` lets only the host atomically finish the current state version and create one game record per participant.
+- A repeated finish request returns the existing completion result without creating duplicate records. Invalid participant or inning data rolls back the entire transaction.
 - A stale `stateVersion` returns `409 ROOM_008` instead of overwriting a newer score update.
-- `GET /ws/game-rooms/{roomId}?token=...` opens a WebSocket for authenticated room participants and broadcasts join, ready, start, cancel, and live-state events after database commit.
+- `GET /ws/game-rooms/{roomId}?token=...` opens a WebSocket for authenticated room participants and broadcasts join, ready, start, finish, cancel, and live-state events after database commit.
 
 ## Current Stage
 
@@ -214,6 +217,7 @@ The backend currently includes:
 - Notification REST APIs and realtime WebSocket delivery
 - Authenticated game room WebSocket events scoped to each room's participants
 - Versioned live game state with host-only updates and stale-write conflict detection
+- Transactional game-room completion with participant record generation and idempotent retries
 - Docker Compose development environment
 - JWT-protected MCP analysis tools for AI clients
 - Optional Gemini-backed weekly coaching report with aggregate-only data and report caching

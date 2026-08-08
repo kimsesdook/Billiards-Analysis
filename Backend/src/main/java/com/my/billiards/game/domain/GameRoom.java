@@ -149,6 +149,12 @@ public class GameRoom extends BaseTimeEntity {
         this.status = GameRoomStatus.CANCELED;
     }
 
+    public void finish() {
+        this.status = GameRoomStatus.FINISHED;
+        this.activeMemberId = null;
+        this.stateVersion += 1;
+    }
+
     public void updateParticipantScore(Long memberId, int currentScore, int cushionScore, int highRun) {
         participants.stream()
             .filter(participant -> participant.getMember().getId().equals(memberId))

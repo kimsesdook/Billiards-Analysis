@@ -150,6 +150,15 @@ class GameRoomWebSocketIntegrationTest {
             assertThat(hostLiveState.path("liveState").path("currentInning").asInt()).isEqualTo(2);
             assertThat(hostLiveState.path("liveState").path("activeMemberId").asLong()).isEqualTo(playerId);
             assertThat(playerLiveState).isEqualTo(hostLiveState);
+
+            CompletableFuture<JsonNode> hostFinishedFuture = hostHandler.await("GAME_FINISHED");
+            CompletableFuture<JsonNode> playerFinishedFuture = playerHandler.await("GAME_FINISHED");
+            finishRoom(hostToken, roomId, hostId, playerId);
+
+            JsonNode hostFinished = hostFinishedFuture.get(5, TimeUnit.SECONDS);
+            JsonNode playerFinished = playerFinishedFuture.get(5, TimeUnit.SECONDS);
+            assertThat(hostFinished.path("gameRoom").path("status").asText()).isEqualTo("FINISHED");
+            assertThat(playerFinished).isEqualTo(hostFinished);
         } finally {
             if (playerSession != null) {
                 playerSession.close();
@@ -322,6 +331,29 @@ class GameRoomWebSocketIntegrationTest {
                       ]
                     }
                     """.formatted(playerId, hostId, playerId)))
+            .andExpect(status().isOk());
+    }
+
+    private void finishRoom(String token, Long roomId, Long hostId, Long playerId) throws Exception {
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/finish", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "stateVersion": 1,
+                      "lastThreeCushions": 0,
+                      "participants": [
+                        {
+                          "memberId": %d,
+                          "inningScores": [1, 2]
+                        },
+                        {
+                          "memberId": %d,
+                          "inningScores": [1, 4]
+                        }
+                      ]
+                    }
+                    """.formatted(hostId, playerId)))
             .andExpect(status().isOk());
     }
 
