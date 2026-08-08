@@ -18,6 +18,8 @@ public enum ErrorCode {
 	GAME_ROOM_FULL("ROOM_002", HttpStatus.CONFLICT, "게임방 정원이 모두 찼습니다."),
 	GAME_ROOM_GAME_TYPE_MISMATCH("ROOM_003", HttpStatus.BAD_REQUEST, "게임방의 경기 종류와 초대 경기 종류가 일치하지 않습니다."),
 	GAME_ROOM_ALREADY_JOINED("ROOM_004", HttpStatus.CONFLICT, "이미 게임방에 참가한 회원입니다."),
+	GAME_ROOM_PARTICIPANTS_INCOMPLETE("ROOM_005", HttpStatus.CONFLICT, "게임방 정원이 모두 채워져야 경기를 시작할 수 있습니다."),
+	GAME_ROOM_PARTICIPANTS_NOT_READY("ROOM_006", HttpStatus.CONFLICT, "모든 참가자가 준비를 완료해야 경기를 시작할 수 있습니다."),
 	UNAUTHORIZED("AUTH_001", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
 	FORBIDDEN("AUTH_002", HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
 	INTERNAL_SERVER_ERROR("COMMON_999", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");

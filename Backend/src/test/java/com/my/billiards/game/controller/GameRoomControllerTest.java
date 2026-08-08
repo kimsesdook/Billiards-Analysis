@@ -151,6 +151,84 @@ class GameRoomControllerTest {
             .andExpect(jsonPath("$.code").value("COMMON_001"));
     }
 
+    @Test
+    void participantReadiesAndHostStartsFullRoom() throws Exception {
+        String hostToken = signUpAndLogin("host@example.com", "Host");
+        String playerToken = signUpAndLogin("player@example.com", "Player");
+        Long playerId = memberId("player@example.com");
+        Long roomId = createRoom(hostToken, "Ready Match", "3-Cushion", "Individual", 2, 20);
+        joinRoomThroughInvitation(hostToken, playerToken, playerId, roomId, "3-Cushion");
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/ready", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(playerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "ready": true
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.participants[1].ready").value(true));
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/start", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(hostToken)))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.status").value("IN_PROGRESS"));
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/ready", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(playerToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "ready": false
+                    }
+                    """))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ROOM_001"));
+
+        assertThat(gameRoomRepository.findById(roomId).orElseThrow().getStatus())
+            .isEqualTo(GameRoomStatus.IN_PROGRESS);
+    }
+
+    @Test
+    void rejectsStartUntilRoomIsFull() throws Exception {
+        String hostToken = signUpAndLogin("host@example.com", "Host");
+        Long roomId = createRoom(hostToken, "Incomplete Match", "3-Cushion", "Individual", 2, 20);
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/start", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(hostToken)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ROOM_005"));
+    }
+
+    @Test
+    void rejectsStartWhileParticipantIsNotReady() throws Exception {
+        String hostToken = signUpAndLogin("host@example.com", "Host");
+        String playerToken = signUpAndLogin("player@example.com", "Player");
+        Long playerId = memberId("player@example.com");
+        Long roomId = createRoom(hostToken, "Waiting Match", "4-Ball", "Individual", 2, 25);
+        joinRoomThroughInvitation(hostToken, playerToken, playerId, roomId, "4-Ball");
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/start", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(hostToken)))
+            .andExpect(status().isConflict())
+            .andExpect(jsonPath("$.code").value("ROOM_006"));
+    }
+
+    @Test
+    void rejectsStartByParticipantWhoIsNotHost() throws Exception {
+        String hostToken = signUpAndLogin("host@example.com", "Host");
+        String playerToken = signUpAndLogin("player@example.com", "Player");
+        Long playerId = memberId("player@example.com");
+        Long roomId = createRoom(hostToken, "Host Only Match", "3-Cushion", "Individual", 2, 20);
+        joinRoomThroughInvitation(hostToken, playerToken, playerId, roomId, "3-Cushion");
+
+        mockMvc.perform(patch("/api/game-rooms/{roomId}/start", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(playerToken)))
+            .andExpect(status().isForbidden())
+            .andExpect(jsonPath("$.code").value("AUTH_002"));
+    }
+
     private Long createRoom(
         String token,
         String name,
@@ -191,6 +269,52 @@ class GameRoomControllerTest {
             """.formatted(name, gameType, gameMode, playerCapacity, hostTargetScore);
     }
 
+    private void joinRoomThroughInvitation(
+        String hostToken,
+        String playerToken,
+        Long playerId,
+        Long roomId,
+        String gameType
+    ) throws Exception {
+        String friendshipResponse = mockMvc.perform(post("/api/friends/requests")
+                .header(HttpHeaders.AUTHORIZATION, bearer(hostToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "targetMemberId": %d
+                    }
+                    """.formatted(playerId)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long friendshipId = extractLong(friendshipResponse, "requestId");
+
+        mockMvc.perform(patch("/api/friends/requests/{requestId}/accept", friendshipId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(playerToken)))
+            .andExpect(status().isOk());
+
+        String invitationResponse = mockMvc.perform(post("/api/game-invitations")
+                .header(HttpHeaders.AUTHORIZATION, bearer(hostToken))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "receiverMemberId": %d,
+                      "gameType": "%s",
+                      "gameRoomId": %d
+                    }
+                    """.formatted(playerId, gameType, roomId)))
+            .andExpect(status().isCreated())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+        Long invitationId = extractLong(invitationResponse, "invitationId");
+
+        mockMvc.perform(patch("/api/game-invitations/{invitationId}/accept", invitationId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(playerToken)))
+            .andExpect(status().isOk());
+    }
+
     private String signUpAndLogin(String email, String nickname) throws Exception {
         mockMvc.perform(post("/api/auth/signup")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -217,6 +341,10 @@ class GameRoomControllerTest {
             .getContentAsString();
 
         return extractString(response, "accessToken");
+    }
+
+    private Long memberId(String email) {
+        return memberRepository.findByEmail(email).orElseThrow().getId();
     }
 
     private String bearer(String token) {
