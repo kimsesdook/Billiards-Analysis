@@ -35,6 +35,36 @@ export type GameRoomCreatePayload = {
   hostTargetScore: number;
 };
 
+export type GameRoomLiveScore = {
+  memberId: number;
+  nickname: string;
+  targetScore: number;
+  currentScore: number;
+  cushionScore: number;
+  highRun: number;
+};
+
+export type GameRoomLiveState = {
+  roomId: number;
+  status: GameRoomStatus;
+  stateVersion: number;
+  currentInning: number;
+  activeMemberId: number;
+  scores: GameRoomLiveScore[];
+};
+
+export type GameRoomLiveStateUpdatePayload = {
+  stateVersion: number;
+  currentInning: number;
+  activeMemberId: number;
+  scores: Array<{
+    memberId: number;
+    currentScore: number;
+    cushionScore: number;
+    highRun: number;
+  }>;
+};
+
 export const createGameRoom = (payload: GameRoomCreatePayload) =>
   apiRequest<GameRoom>('/api/game-rooms', {
     method: 'POST',
@@ -62,3 +92,14 @@ export const startGameRoom = (roomId: number) =>
   apiRequest<GameRoom>(`/api/game-rooms/${roomId}/start`, {
     method: 'PATCH',
   });
+
+export const getGameRoomLiveState = (roomId: number) =>
+  apiRequest<GameRoomLiveState>(`/api/game-rooms/${roomId}/live-state`);
+
+export const updateGameRoomLiveState = (
+  roomId: number,
+  payload: GameRoomLiveStateUpdatePayload,
+) => apiRequest<GameRoomLiveState>(`/api/game-rooms/${roomId}/live-state`, {
+  method: 'PUT',
+  body: JSON.stringify(payload),
+});

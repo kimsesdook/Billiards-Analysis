@@ -52,15 +52,17 @@ describe('game room realtime API contract', () => {
       .toBe('wss://api.example.com/ws/game-rooms/7?token=token%20with%20spaces');
   });
 
-  it('forwards connected and matching room events while ignoring invalid frames', () => {
+  it('forwards matching room and live-state events while ignoring invalid frames', () => {
     const onConnected = vi.fn();
     const onGameRoomEvent = vi.fn();
+    const onLiveStateEvent = vi.fn();
 
     connectGameRoomSocket({
       accessToken: 'access-token',
       roomId: 7,
       onConnected,
       onGameRoomEvent,
+      onLiveStateEvent,
     });
     const socket = FakeWebSocket.instances[0];
 
@@ -81,6 +83,23 @@ describe('game room realtime API contract', () => {
     socket.emitMessage(JSON.stringify({
       success: true,
       data: {
+        eventType: 'LIVE_STATE_CHANGED',
+        roomId: 7,
+        gameRoom: null,
+        liveState: {
+          roomId: 7,
+          status: 'IN_PROGRESS',
+          stateVersion: 4,
+          currentInning: 3,
+          activeMemberId: 42,
+          scores: [],
+        },
+      },
+      message: null,
+    }));
+    socket.emitMessage(JSON.stringify({
+      success: true,
+      data: {
         eventType: 'GAME_STARTED',
         roomId: 8,
         gameRoom: { roomId: 8, status: 'IN_PROGRESS' },
@@ -94,6 +113,10 @@ describe('game room realtime API contract', () => {
     expect(onGameRoomEvent).toHaveBeenCalledWith(
       'READY_CHANGED',
       expect.objectContaining({ roomId: 7, status: 'WAITING' }),
+    );
+    expect(onLiveStateEvent).toHaveBeenCalledOnce();
+    expect(onLiveStateEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ roomId: 7, stateVersion: 4, activeMemberId: 42 }),
     );
   });
 });

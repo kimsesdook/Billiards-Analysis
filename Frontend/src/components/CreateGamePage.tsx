@@ -13,12 +13,16 @@ import {
   cancelGameRoom,
   createGameRoom,
   getGameRoom,
+  getGameRoomLiveState,
   startGameRoom,
+  updateGameRoomLiveState,
   updateGameRoomReady,
   type GameRoom,
+  type GameRoomLiveState,
+  type GameRoomLiveStateUpdatePayload,
 } from '../api/gameRooms';
 import { connectGameRoomSocket } from '../api/realtimeGameRooms';
-import { getApiErrorMessage } from '../api/client';
+import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -28,6 +32,7 @@ interface CreateGamePageProps {
 
 interface ActivePlayer {
   id: number;
+  memberId?: number;
   name: string;
   targetScore: number;
   currentScore: number;
@@ -58,6 +63,25 @@ type GameInvitationNavigationState = {
     gameRoomId: number | null;
   };
 };
+
+type GameRoomLiveStateDraft = Omit<GameRoomLiveStateUpdatePayload, 'stateVersion'>;
+
+const toLiveStateDraft = (liveState: GameRoomLiveState): GameRoomLiveStateDraft => ({
+  currentInning: liveState.currentInning,
+  activeMemberId: liveState.activeMemberId,
+  scores: liveState.scores.map((score) => ({
+    memberId: score.memberId,
+    currentScore: score.currentScore,
+    cushionScore: score.cushionScore,
+    highRun: score.highRun,
+  })),
+});
+
+const getLiveStateSignature = (draft: GameRoomLiveStateDraft) => JSON.stringify({
+  currentInning: draft.currentInning,
+  activeMemberId: draft.activeMemberId,
+  scores: [...draft.scores].sort((left, right) => left.memberId - right.memberId),
+});
 
 const CUE_BALL_COLORS = ['white', 'yellow', 'red', 'blue'];
 
@@ -149,6 +173,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [gameRoomAction, setGameRoomAction] = useState<'ready' | 'start' | null>(null);
   const [isGameRoomCreating, setIsGameRoomCreating] = useState(false);
   const [gameRoomError, setGameRoomError] = useState<string | null>(null);
+  const [isLiveStateReady, setIsLiveStateReady] = useState(false);
+  const [liveStateError, setLiveStateError] = useState<string | null>(null);
   const [lobbyCode, setLobbyCode] = useState<string>('');
   const [lobbyPlayers, setLobbyPlayers] = useState<any[]>([]);
   const [lobbyLogs, setLobbyLogs] = useState<any[]>([]);
@@ -232,6 +258,16 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   // --- Timers Refs ---
   const gameTimerRef = useRef<any>(null);
   const clockTimerRef = useRef<any>(null);
+  const liveStateRoomIdRef = useRef<number | null>(null);
+  const liveStateVersionRef = useRef<number | null>(null);
+  const lastSynchronizedLiveStateRef = useRef<string | null>(null);
+  const pendingLiveStateRef = useRef<GameRoomLiveStateDraft | null>(null);
+  const submittedLiveStateSignaturesRef = useRef<Set<string>>(new Set());
+  const liveStateSaveInFlightRef = useRef(false);
+  const applyLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
+  const acknowledgeLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
+  const isGameRoomHostRef = useRef(isGameRoomHost);
+  const isPlayingRef = useRef(isPlaying);
 
   const applyGameRoomToLobby = useCallback((gameRoom: GameRoom) => {
     const currentMemberId = getStoredAuthSession()?.member.id;
@@ -279,6 +315,195 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     });
     setIsGameRoomHost(gameRoom.hostMemberId === currentMemberId);
   }, []);
+
+  const acknowledgeLiveGameState = useCallback((liveState: GameRoomLiveState) => {
+    if (liveState.roomId !== liveStateRoomIdRef.current) {
+      return;
+    }
+    if (
+      liveStateVersionRef.current !== null
+      && liveState.stateVersion < liveStateVersionRef.current
+    ) {
+      return;
+    }
+
+    liveStateVersionRef.current = liveState.stateVersion;
+    lastSynchronizedLiveStateRef.current = getLiveStateSignature(toLiveStateDraft(liveState));
+    setIsLiveStateReady(true);
+  }, []);
+
+  const applyLiveGameState = useCallback((liveState: GameRoomLiveState) => {
+    if (liveState.roomId !== liveStateRoomIdRef.current) {
+      return;
+    }
+    if (
+      liveStateVersionRef.current !== null
+      && liveState.stateVersion < liveStateVersionRef.current
+    ) {
+      return;
+    }
+
+    acknowledgeLiveGameState(liveState);
+    pendingLiveStateRef.current = null;
+
+    const scoresByMemberId = new Map(
+      liveState.scores.map((score) => [score.memberId, score]),
+    );
+    const synchronizedPlayers = players.map((player) => {
+      const score = player.memberId ? scoresByMemberId.get(player.memberId) : undefined;
+      if (!score) {
+        return player;
+      }
+
+      const isCushionPhase = type === '4-Ball'
+        && lastThreeCushions > 0
+        && score.currentScore >= score.targetScore;
+      const isFinished = type === '4-Ball' && lastThreeCushions > 0
+        ? isCushionPhase && score.cushionScore >= lastThreeCushions
+        : score.currentScore >= score.targetScore;
+
+      return {
+        ...player,
+        targetScore: score.targetScore,
+        currentScore: score.currentScore,
+        cushionScore: score.cushionScore,
+        highRun: score.highRun,
+        isCushionPhase,
+        isFinished,
+      };
+    });
+    const synchronizedActiveIndex = synchronizedPlayers.findIndex(
+      (player) => player.memberId === liveState.activeMemberId,
+    );
+
+    setPlayers(synchronizedPlayers);
+    setCurrentInning(liveState.currentInning);
+    if (synchronizedActiveIndex >= 0) {
+      setActivePlayerIndex(synchronizedActiveIndex);
+    }
+    setCurrentTurnPoints(0);
+    setStateHistory([]);
+    setLiveStateError(null);
+  }, [acknowledgeLiveGameState, lastThreeCushions, players, type]);
+
+  applyLiveGameStateRef.current = applyLiveGameState;
+  acknowledgeLiveGameStateRef.current = acknowledgeLiveGameState;
+  isGameRoomHostRef.current = isGameRoomHost;
+  isPlayingRef.current = isPlaying;
+
+  useEffect(() => {
+    liveStateRoomIdRef.current = gameRoomId;
+    liveStateVersionRef.current = null;
+    lastSynchronizedLiveStateRef.current = null;
+    pendingLiveStateRef.current = null;
+    submittedLiveStateSignaturesRef.current.clear();
+    liveStateSaveInFlightRef.current = false;
+    setIsLiveStateReady(!gameRoomId);
+    setLiveStateError(null);
+  }, [gameRoomId]);
+
+  const processPendingLiveState = useCallback(async () => {
+    const roomId = gameRoomId;
+    if (!roomId || liveStateSaveInFlightRef.current) {
+      return;
+    }
+
+    liveStateSaveInFlightRef.current = true;
+    try {
+      while (pendingLiveStateRef.current && liveStateRoomIdRef.current === roomId) {
+        const pendingState = pendingLiveStateRef.current;
+        const stateVersion = liveStateVersionRef.current;
+        if (stateVersion === null) {
+          break;
+        }
+
+        pendingLiveStateRef.current = null;
+        const pendingStateSignature = getLiveStateSignature(pendingState);
+        if (submittedLiveStateSignaturesRef.current.size >= 20) {
+          submittedLiveStateSignaturesRef.current.clear();
+        }
+        submittedLiveStateSignaturesRef.current.add(pendingStateSignature);
+        try {
+          const updatedState = await updateGameRoomLiveState(roomId, {
+            ...pendingState,
+            stateVersion,
+          });
+          if (liveStateRoomIdRef.current !== roomId) {
+            return;
+          }
+
+          acknowledgeLiveGameState(updatedState);
+          window.setTimeout(() => {
+            submittedLiveStateSignaturesRef.current.delete(pendingStateSignature);
+          }, 5000);
+          setLiveStateError(null);
+        } catch (error) {
+          submittedLiveStateSignaturesRef.current.delete(pendingStateSignature);
+          if (error instanceof ApiClientError && error.code === 'ROOM_008') {
+            try {
+              const latestState = await getGameRoomLiveState(roomId);
+              applyLiveGameStateRef.current(latestState);
+              setLiveStateError('다른 화면의 변경이 먼저 저장되어 최신 점수판을 다시 불러왔습니다.');
+            } catch (refreshError) {
+              setLiveStateError(getApiErrorMessage(refreshError));
+            }
+          } else {
+            setLiveStateError(getApiErrorMessage(error));
+          }
+          break;
+        }
+      }
+    } finally {
+      liveStateSaveInFlightRef.current = false;
+    }
+  }, [acknowledgeLiveGameState, gameRoomId]);
+
+  useEffect(() => {
+    if (
+      !gameRoomId
+      || !isPlaying
+      || !isGameRoomHost
+      || !isLiveStateReady
+      || showOrderSelection
+      || players.length === 0
+    ) {
+      return;
+    }
+
+    const activeMemberId = players[activePlayerIndex]?.memberId;
+    const hasEveryMemberId = players.every((player) => player.memberId !== undefined);
+    if (!activeMemberId || !hasEveryMemberId) {
+      return;
+    }
+
+    const draft: GameRoomLiveStateDraft = {
+      currentInning,
+      activeMemberId,
+      scores: players.map((player) => ({
+        memberId: player.memberId as number,
+        currentScore: player.currentScore,
+        cushionScore: player.cushionScore || 0,
+        highRun: player.highRun,
+      })),
+    };
+
+    if (getLiveStateSignature(draft) === lastSynchronizedLiveStateRef.current) {
+      return;
+    }
+
+    pendingLiveStateRef.current = draft;
+    void processPendingLiveState();
+  }, [
+    activePlayerIndex,
+    currentInning,
+    gameRoomId,
+    isGameRoomHost,
+    isLiveStateReady,
+    isPlaying,
+    players,
+    processPendingLiveState,
+    showOrderSelection,
+  ]);
 
   // Check if there is an active game in local storage that can be resumed
   useEffect(() => {
@@ -377,7 +602,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   }, [applyGameRoomToLobby, location.pathname, location.state, navigate]);
 
   useEffect(() => {
-    if (!isLobby || !gameRoomId) {
+    if ((!isLobby && !isPlaying) || !gameRoomId) {
       return;
     }
 
@@ -409,12 +634,28 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       }
     };
 
+    const synchronizeLiveGameState = async () => {
+      try {
+        const liveState = await getGameRoomLiveState(gameRoomId);
+        if (!closedByClient) {
+          applyLiveGameStateRef.current(liveState);
+        }
+      } catch (error) {
+        if (!closedByClient) {
+          setLiveStateError(getApiErrorMessage(error));
+        }
+      }
+    };
+
     const connect = () => {
       socket = connectGameRoomSocket({
         accessToken,
         roomId: gameRoomId,
         onConnected: () => {
           void synchronizeGameRoom();
+          if (isPlayingRef.current) {
+            void synchronizeLiveGameState();
+          }
         },
         onGameRoomEvent: (eventType, gameRoom) => {
           if (closedByClient) {
@@ -428,12 +669,31 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
             setGameRoomError('방장이 게임방을 종료했습니다.');
           }
         },
+        onLiveStateEvent: (liveState) => {
+          if (closedByClient) {
+            return;
+          }
+
+          const liveStateSignature = getLiveStateSignature(toLiveStateDraft(liveState));
+          const isSubmittedByThisScreen = submittedLiveStateSignaturesRef.current.delete(
+            liveStateSignature,
+          );
+
+          if (isGameRoomHostRef.current && isSubmittedByThisScreen) {
+            acknowledgeLiveGameStateRef.current(liveState);
+          } else {
+            applyLiveGameStateRef.current(liveState);
+          }
+        },
         onClose: () => {
           if (closedByClient) {
             return;
           }
 
           void synchronizeGameRoom();
+          if (isPlayingRef.current) {
+            void synchronizeLiveGameState();
+          }
           reconnectTimer = window.setTimeout(connect, 3000);
         },
       });
@@ -448,10 +708,13 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       }
       socket?.close();
     };
-  }, [applyGameRoomToLobby, gameRoomId, isLobby]);
+  }, [applyGameRoomToLobby, gameRoomId, isLobby, isPlaying]);
 
   const handleConfirmResume = () => {
     if (!resumeData) return;
+    setGameRoomId(resumeData.gameRoomId ?? null);
+    setGameRoomStatus(resumeData.gameRoomStatus ?? null);
+    setIsGameRoomHost(Boolean(resumeData.isGameRoomHost));
     setType(resumeData.type);
     setMode(resumeData.mode);
     setPlayerCount(resumeData.playerCount as any);
@@ -489,13 +752,33 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         shotClockTime,
         notes,
         matchHistory,
-        stateHistory
+        stateHistory,
+        gameRoomId,
+        gameRoomStatus,
+        isGameRoomHost,
       };
       localStorage.setItem('billiards_active_room_state', JSON.stringify(stateToSave));
     } else if (!isPlaying) {
       localStorage.removeItem('billiards_active_room_state');
     }
-  }, [isPlaying, players, currentInning, activePlayerIndex, currentTurnPoints, gameTime, shotClockTime, matchHistory, stateHistory, type, mode, playerCount, notes]);
+  }, [
+    activePlayerIndex,
+    currentInning,
+    currentTurnPoints,
+    gameRoomId,
+    gameRoomStatus,
+    gameTime,
+    isGameRoomHost,
+    isPlaying,
+    matchHistory,
+    mode,
+    notes,
+    playerCount,
+    players,
+    shotClockTime,
+    stateHistory,
+    type,
+  ]);
 
   // Game Timer and Shot Clock effects
   useEffect(() => {
@@ -673,6 +956,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const isLobbyFull = lobbyPlayers.length === playerCount && lobbyPlayers.every((player) => player.isJoined);
   const areAllLobbyPlayersReady = isLobbyFull && lobbyPlayers.every((player) => player.isReady);
   const currentLobbyPlayer = lobbyPlayers.find((player) => player.isMe);
+  const canControlLiveScoreboard = !gameRoomId || (isGameRoomHost && isLiveStateReady);
 
   // Launch actual real-time game board transition
   const handleLaunchGameFromLobby = () => {
@@ -704,6 +988,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
       activePlayersList.push({
         id: lp.id,
+        memberId: lp.memberId,
         name: lp.name,
         targetScore: lp.targetScore,
         currentScore: 0,
@@ -731,7 +1016,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setIsLobby(false);
     setIsPlaying(true);
     setIsPaused(false);
-    setShowOrderSelection(true);
+    setShowOrderSelection(!gameRoomId || isGameRoomHost);
   };
 
   const handleToggleReady = async () => {
@@ -845,7 +1130,14 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Perform point alterations for the current turn
   const handleScoreChange = (amount: number) => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
     const targetPlayer = players[activePlayerIndex];
+    if (!targetPlayer) {
+      return;
+    }
     const isCushion = type === '4-Ball' && lastThreeCushions > 0 && targetPlayer.isCushionPhase;
 
     if (isCushion) {
@@ -856,6 +1148,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       if (amount < 0 && prevCushion <= 0) {
         return; // Prevent going below 0
       }
+    } else if (amount < 0 && currentTurnPoints <= 0) {
+      return;
     }
 
     cueClickSound();
@@ -880,9 +1174,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         updatedInningScores[currentInning - 1] = newInningScore;
         playerCopy.inningScores = updatedInningScores;
 
-        if (newInningScore > playerCopy.highRun) {
-          playerCopy.highRun = newInningScore;
-        }
+        playerCopy.highRun = Math.max(0, ...updatedInningScores);
 
         // Automatic drop out of cushion phase if regular score drops and cushionScore is negative (optional safety)
         if (newCushion < 0) {
@@ -914,9 +1206,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         updatedInningScores[currentInning - 1] = newTurnPoints;
         playerCopy.inningScores = updatedInningScores;
 
-        if (newTurnPoints > playerCopy.highRun) {
-          playerCopy.highRun = newTurnPoints;
-        }
+        playerCopy.highRun = Math.max(0, ...updatedInningScores);
 
         // AUTO-TRANSITION TO CUSHION PHASE WHEN TARGET REGULAR SCORE ACHIEVED
         if (type === '4-Ball' && lastThreeCushions > 0) {
@@ -941,6 +1231,10 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Set turn scores to 0 (direct pass / miss)
   const handleZeroInningScore = () => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
     pushStateToHistory();
     setCurrentTurnPoints(0);
     
@@ -959,6 +1253,10 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // End Inning turn and swap players
   const handleEndInning = (overridePlayers?: ActivePlayer[] | any) => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
     turnSwitchSound();
     
     const currentPlayersList = Array.isArray(overridePlayers) ? overridePlayers : players;
@@ -1039,7 +1337,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Undo system
   const handleUndoAction = () => {
-    if (stateHistory.length === 0) return;
+    if (!canControlLiveScoreboard || stateHistory.length === 0) return;
     
     cueClickSound();
     const lastState = stateHistory[stateHistory.length - 1];
@@ -1057,12 +1355,20 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Clock Timeout Fallback Switch
   const handleForceTurnSwitch = () => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
     // Current player scored what they have earned so far
     handleEndInning();
   };
 
   // Toggle cushion phase for a team in 4-Ball Team mode
   const handleTeamCushionTransition = (teamId: 'A' | 'B', forceState?: boolean) => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
     cueClickSound();
     
     // Save state history before editing so that users can Undo
@@ -1897,8 +2203,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
               <button
                 onClick={() => setIsPaused(!isPaused)}
+                disabled={!canControlLiveScoreboard}
                 className={cn(
-                  "px-4 py-2.5 text-xs font-bold border rounded-xl transition-colors",
+                  "px-4 py-2.5 text-xs font-bold border rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
                   isPaused 
                     ? "bg-amber-500 border-amber-400 text-zinc-950" 
                     : "bg-[#144b3c] border-[#227764] text-emerald-300 hover:text-white"
@@ -1913,13 +2220,39 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                   setWinnerName(highestScorePlayer ? highestScorePlayer.name : players[0]?.name || '');
                   setShowFinishedModal(true);
                 }}
-                className="px-4 py-2.5 text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer hover:scale-105 transition-all"
+                disabled={!canControlLiveScoreboard}
+                className="px-4 py-2.5 text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer hover:scale-105 transition-all"
               >
                 <Trophy size={14} />
                 <span>경기 종료</span>
               </button>
             </div>
           </div>
+
+          {gameRoomId && (
+            <div className={cn(
+              "flex items-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold",
+              liveStateError
+                ? "bg-red-500/10 border-red-500/25 text-red-300"
+                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
+            )}>
+              {liveStateError ? (
+                <AlertCircle size={15} className="shrink-0" />
+              ) : isLiveStateReady ? (
+                <CheckCircle2 size={15} className="shrink-0" />
+              ) : (
+                <Hourglass size={15} className="shrink-0 animate-pulse" />
+              )}
+              <span>
+                {liveStateError
+                  || (!isLiveStateReady
+                    ? '실시간 점수판을 동기화하고 있습니다.'
+                    : isGameRoomHost
+                      ? '실시간 점수판이 연결되었습니다.'
+                      : '방장의 점수판을 실시간으로 보고 있습니다.')}
+              </span>
+            </div>
+          )}
 
           {/* Active Shot-clock indicator bar */}
           {enableShotClock && (
@@ -1990,8 +2323,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     <button
                       type="button"
                       onClick={() => handleTeamCushionTransition('A')}
+                      disabled={!canControlLiveScoreboard}
                       className={cn(
-                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0",
+                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0 disabled:opacity-40 disabled:cursor-not-allowed",
                         (players.find(p => p.id === 1)?.isCushionPhase && players.find(p => p.id === 3)?.isCushionPhase)
                           ? "bg-amber-400 text-zinc-950 border-amber-300 font-black"
                           : "bg-orange-500/15 text-orange-400 hover:bg-orange-500/30 border-orange-500/20"
@@ -2046,8 +2380,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     <button
                       type="button"
                       onClick={() => handleTeamCushionTransition('B')}
+                      disabled={!canControlLiveScoreboard}
                       className={cn(
-                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0",
+                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0 disabled:opacity-40 disabled:cursor-not-allowed",
                         (players.find(p => p.id === 2)?.isCushionPhase && players.find(p => p.id === 4)?.isCushionPhase)
                           ? "bg-amber-400 text-zinc-950 border-amber-300 font-black"
                           : "bg-orange-500/15 text-orange-400 hover:bg-orange-500/30 border-orange-500/20"
@@ -2294,8 +2629,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     {/* 3-Cushion scoring point addition */}
                     <button
                       onClick={() => handleScoreChange(1)}
-                      disabled={isPaused}
-                      className="h-20 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-black rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transform hover:-translate-y-1 transition-all"
+                      disabled={isPaused || !canControlLiveScoreboard}
+                      className="h-20 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-black rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transform hover:-translate-y-1 transition-all"
                     >
                       <Plus size={24} />
                       <span className="text-sm font-black block">🏆 3쿠션 득점</span>
@@ -2304,8 +2639,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     {/* 3-Cushion point deduction */}
                     <button
                       onClick={() => handleScoreChange(-1)}
-                      disabled={isPaused}
-                      className="h-20 bg-[#2b1f13] hover:bg-orange-500/10 hover:text-orange-300 border border-orange-500/30 text-orange-400 font-bold rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer transform hover:-translate-y-1 transition-all"
+                      disabled={isPaused || !canControlLiveScoreboard}
+                      className="h-20 bg-[#2b1f13] hover:bg-orange-500/10 hover:text-orange-300 disabled:opacity-40 disabled:cursor-not-allowed border border-orange-500/30 text-orange-400 font-bold rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer transform hover:-translate-y-1 transition-all"
                     >
                       <Minus size={24} />
                       <span className="text-sm font-bold block">3쿠션 감점 (수정)</span>
@@ -2316,7 +2651,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     {/* General Point addition */}
                     <button
                       onClick={() => handleScoreChange(1)}
-                      disabled={isPaused}
+                      disabled={isPaused || !canControlLiveScoreboard}
                       className="h-20 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-[#092e23] font-black rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transform hover:-translate-y-1 transition-all"
                     >
                       <Plus size={24} />
@@ -2326,7 +2661,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                     {/* General Deduct point (safe correction) */}
                     <button
                       onClick={() => handleScoreChange(-1)}
-                      disabled={isPaused}
+                      disabled={isPaused || !canControlLiveScoreboard}
                       className="h-20 bg-[#1a3830] hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40 text-emerald-500 rounded-2xl flex flex-col items-center justify-center gap-1 border border-[#2d8a75]/30 cursor-pointer transform hover:-translate-y-1 transition-all"
                     >
                       <Minus size={24} />
@@ -2338,7 +2673,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 {/* Next Turn Trigger */}
                 <button
                   onClick={handleEndInning}
-                  disabled={isPaused}
+                  disabled={isPaused || !canControlLiveScoreboard}
                   className="h-20 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-2xl flex flex-col items-center justify-center gap-1 shadow-md cursor-pointer transform hover:-translate-y-1 transition-all"
                 >
                   <ChevronRight size={24} />
@@ -2676,10 +3011,15 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                       `🎲 타순 배치가 확정되어 본 경기가 활성화되었습니다: ${players.map((pl, i) => `[${i + 1}P] ${pl.name}`).join(' ➔ ')}`
                     ]);
                   }}
-                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-[#07241c] py-4 rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-95"
+                  disabled={Boolean(gameRoomId) && !isLiveStateReady}
+                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 disabled:opacity-50 disabled:cursor-wait text-[#07241c] py-4 rounded-2xl text-sm font-black transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-emerald-500/20 active:scale-95"
                 >
-                  <Play size={16} fill="currentColor" />
-                  <span>순서 결정 및 경기 시작하기</span>
+                  {gameRoomId && !isLiveStateReady ? (
+                    <Hourglass size={16} className="animate-pulse" />
+                  ) : (
+                    <Play size={16} fill="currentColor" />
+                  )}
+                  <span>{gameRoomId && !isLiveStateReady ? '점수판 동기화 중...' : '순서 결정 및 경기 시작하기'}</span>
                 </button>
               </div>
             </motion.div>
