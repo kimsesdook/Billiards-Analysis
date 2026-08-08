@@ -26,6 +26,15 @@ describe('game invitation API contract', () => {
     });
   });
 
+  it('links an invitation to a game room when a room ID is provided', () => {
+    createGameInvitation(42, '3-Cushion', 7);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/game-invitations', {
+      method: 'POST',
+      body: JSON.stringify({ receiverMemberId: 42, gameType: '3-Cushion', gameRoomId: 7 }),
+    });
+  });
+
   it('loads pending incoming and outgoing invitations', () => {
     getGameInvitations();
 
