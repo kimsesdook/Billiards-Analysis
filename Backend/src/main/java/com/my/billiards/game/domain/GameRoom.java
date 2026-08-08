@@ -54,6 +54,15 @@ public class GameRoom extends BaseTimeEntity {
     @Column(name = "room_status", nullable = false, length = 30)
     private GameRoomStatus status;
 
+    @Column(name = "current_inning", nullable = false)
+    private int currentInning;
+
+    @Column(name = "active_member_id")
+    private Long activeMemberId;
+
+    @Column(name = "state_version", nullable = false)
+    private long stateVersion;
+
     @OneToMany(mappedBy = "gameRoom", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("createdAt asc, id asc")
     private List<GameRoomParticipant> participants = new ArrayList<>();
@@ -77,6 +86,8 @@ public class GameRoom extends BaseTimeEntity {
         this.gameMode = gameMode;
         this.playerCapacity = playerCapacity;
         this.status = GameRoomStatus.WAITING;
+        this.currentInning = 1;
+        this.stateVersion = 0;
         this.participants.add(GameRoomParticipant.host(this, host, hostTargetScore));
     }
 
@@ -130,9 +141,25 @@ public class GameRoom extends BaseTimeEntity {
 
     public void start() {
         this.status = GameRoomStatus.IN_PROGRESS;
+        this.currentInning = 1;
+        this.activeMemberId = participants.get(0).getMember().getId();
     }
 
     public void cancel() {
         this.status = GameRoomStatus.CANCELED;
+    }
+
+    public void updateParticipantScore(Long memberId, int currentScore, int cushionScore, int highRun) {
+        participants.stream()
+            .filter(participant -> participant.getMember().getId().equals(memberId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Game room participant not found."))
+            .updateLiveScore(currentScore, cushionScore, highRun);
+    }
+
+    public void updateLiveState(int currentInning, Long activeMemberId) {
+        this.currentInning = currentInning;
+        this.activeMemberId = activeMemberId;
+        this.stateVersion += 1;
     }
 }

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -98,6 +99,7 @@ class GameRoomWebSocketIntegrationTest {
     void publishesJoinReadyAndStartEventsToRoomParticipants() throws Exception {
         String hostToken = signUpAndLogin("host@example.com", "Host");
         String playerToken = signUpAndLogin("player@example.com", "Player");
+        Long hostId = memberId("host@example.com");
         Long playerId = memberId("player@example.com");
         createAcceptedFriendship(hostToken, playerToken, playerId);
         Long roomId = createRoom(hostToken, "Realtime Match");
@@ -137,6 +139,17 @@ class GameRoomWebSocketIntegrationTest {
                 .path("gameRoom").path("status").asText()).isEqualTo("IN_PROGRESS");
             assertThat(playerStartedFuture.get(5, TimeUnit.SECONDS)
                 .path("gameRoom").path("status").asText()).isEqualTo("IN_PROGRESS");
+
+            CompletableFuture<JsonNode> hostLiveStateFuture = hostHandler.await("LIVE_STATE_CHANGED");
+            CompletableFuture<JsonNode> playerLiveStateFuture = playerHandler.await("LIVE_STATE_CHANGED");
+            updateLiveState(hostToken, roomId, hostId, playerId);
+
+            JsonNode hostLiveState = hostLiveStateFuture.get(5, TimeUnit.SECONDS);
+            JsonNode playerLiveState = playerLiveStateFuture.get(5, TimeUnit.SECONDS);
+            assertThat(hostLiveState.path("liveState").path("stateVersion").asLong()).isEqualTo(1);
+            assertThat(hostLiveState.path("liveState").path("currentInning").asInt()).isEqualTo(2);
+            assertThat(hostLiveState.path("liveState").path("activeMemberId").asLong()).isEqualTo(playerId);
+            assertThat(playerLiveState).isEqualTo(hostLiveState);
         } finally {
             if (playerSession != null) {
                 playerSession.close();
@@ -281,6 +294,34 @@ class GameRoomWebSocketIntegrationTest {
     private void startRoom(String token, Long roomId) throws Exception {
         mockMvc.perform(patch("/api/game-rooms/{roomId}/start", roomId)
                 .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+            .andExpect(status().isOk());
+    }
+
+    private void updateLiveState(String token, Long roomId, Long hostId, Long playerId) throws Exception {
+        mockMvc.perform(put("/api/game-rooms/{roomId}/live-state", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(token))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "stateVersion": 0,
+                      "currentInning": 2,
+                      "activeMemberId": %d,
+                      "scores": [
+                        {
+                          "memberId": %d,
+                          "currentScore": 3,
+                          "cushionScore": 1,
+                          "highRun": 2
+                        },
+                        {
+                          "memberId": %d,
+                          "currentScore": 5,
+                          "cushionScore": 0,
+                          "highRun": 4
+                        }
+                      ]
+                    }
+                    """.formatted(playerId, hostId, playerId)))
             .andExpect(status().isOk());
     }
 

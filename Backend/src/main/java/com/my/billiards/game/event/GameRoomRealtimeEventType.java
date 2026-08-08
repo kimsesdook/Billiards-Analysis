@@ -4,5 +4,6 @@ public enum GameRoomRealtimeEventType {
     PARTICIPANT_JOINED,
     READY_CHANGED,
     GAME_STARTED,
-    ROOM_CANCELED
+    ROOM_CANCELED,
+    LIVE_STATE_CHANGED
 }

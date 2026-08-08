@@ -6,6 +6,9 @@ import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.domain.GameRoom;
 import com.my.billiards.game.domain.GameRoomStatus;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
+import com.my.billiards.game.dto.GameRoomLiveScoreRequest;
+import com.my.billiards.game.dto.GameRoomLiveStateResponse;
+import com.my.billiards.game.dto.GameRoomLiveStateUpdateRequest;
 import com.my.billiards.game.dto.GameRoomReadyRequest;
 import com.my.billiards.game.dto.GameRoomResponse;
 import com.my.billiards.game.event.GameRoomRealtimeEvent;
@@ -16,7 +19,9 @@ import com.my.billiards.member.domain.MemberStatus;
 import com.my.billiards.member.repository.MemberRepository;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
@@ -115,8 +120,63 @@ public class GameRoomService {
         return response;
     }
 
+    @Transactional(readOnly = true)
+    public GameRoomLiveStateResponse findLiveState(Long memberId, Long roomId) {
+        return GameRoomLiveStateResponse.from(getAccessibleRoom(memberId, roomId));
+    }
+
+    @Transactional
+    public GameRoomLiveStateResponse updateLiveState(
+        Long memberId,
+        Long roomId,
+        GameRoomLiveStateUpdateRequest request
+    ) {
+        GameRoom gameRoom = getAccessibleRoomForUpdate(memberId, roomId);
+        if (!gameRoom.isHost(memberId)) {
+            throw new BilliardsException(ErrorCode.FORBIDDEN);
+        }
+        if (gameRoom.getStatus() != GameRoomStatus.IN_PROGRESS) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_IN_PROGRESS);
+        }
+        if (gameRoom.getStateVersion() != request.stateVersion()) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_STATE_VERSION_CONFLICT);
+        }
+
+        validateLiveState(gameRoom, request);
+        request.scores().forEach(score -> gameRoom.updateParticipantScore(
+            score.memberId(),
+            score.currentScore(),
+            score.cushionScore(),
+            score.highRun()
+        ));
+        gameRoom.updateLiveState(request.currentInning(), request.activeMemberId());
+
+        GameRoomLiveStateResponse response = GameRoomLiveStateResponse.from(gameRoom);
+        eventPublisher.publishEvent(GameRoomRealtimeEvent.liveStateChanged(response));
+        return response;
+    }
+
     private void publishRealtimeEvent(GameRoomRealtimeEventType eventType, GameRoomResponse response) {
         eventPublisher.publishEvent(new GameRoomRealtimeEvent(response.roomId(), eventType, response));
+    }
+
+    private void validateLiveState(GameRoom gameRoom, GameRoomLiveStateUpdateRequest request) {
+        Set<Long> participantIds = gameRoom.getParticipants().stream()
+            .map(participant -> participant.getMember().getId())
+            .collect(Collectors.toSet());
+        Set<Long> requestedMemberIds = request.scores().stream()
+            .map(GameRoomLiveScoreRequest::memberId)
+            .collect(Collectors.toSet());
+
+        boolean containsEveryParticipant = participantIds.equals(requestedMemberIds)
+            && requestedMemberIds.size() == request.scores().size();
+        boolean activeMemberParticipates = participantIds.contains(request.activeMemberId());
+        boolean validHighRuns = request.scores().stream()
+            .allMatch(score -> score.highRun() <= score.currentScore());
+
+        if (!containsEveryParticipant || !activeMemberParticipates || !validHighRuns) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_LIVE_STATE_INVALID);
+        }
     }
 
     private GameRoom getAccessibleRoom(Long memberId, Long roomId) {

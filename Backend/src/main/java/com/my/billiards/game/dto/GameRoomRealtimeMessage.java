@@ -5,18 +5,20 @@ import com.my.billiards.game.event.GameRoomRealtimeEventType;
 public record GameRoomRealtimeMessage(
     String eventType,
     Long roomId,
-    GameRoomResponse gameRoom
+    GameRoomResponse gameRoom,
+    GameRoomLiveStateResponse liveState
 ) {
 
     public static GameRoomRealtimeMessage connected(Long roomId) {
-        return new GameRoomRealtimeMessage("CONNECTED", roomId, null);
+        return new GameRoomRealtimeMessage("CONNECTED", roomId, null, null);
     }
 
     public static GameRoomRealtimeMessage event(
         GameRoomRealtimeEventType eventType,
         Long roomId,
-        GameRoomResponse gameRoom
+        GameRoomResponse gameRoom,
+        GameRoomLiveStateResponse liveState
     ) {
-        return new GameRoomRealtimeMessage(eventType.name(), roomId, gameRoom);
+        return new GameRoomRealtimeMessage(eventType.name(), roomId, gameRoom, liveState);
     }
 }

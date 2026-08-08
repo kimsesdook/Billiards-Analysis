@@ -42,6 +42,15 @@ public class GameRoomParticipant extends BaseTimeEntity {
     @Column(name = "is_ready", nullable = false)
     private boolean ready;
 
+    @Column(name = "current_score", nullable = false)
+    private int currentScore;
+
+    @Column(name = "cushion_score", nullable = false)
+    private int cushionScore;
+
+    @Column(name = "high_run", nullable = false)
+    private int highRun;
+
     protected GameRoomParticipant() {
     }
 
@@ -57,6 +66,9 @@ public class GameRoomParticipant extends BaseTimeEntity {
         this.role = role;
         this.targetScore = targetScore;
         this.ready = ready;
+        this.currentScore = 0;
+        this.cushionScore = 0;
+        this.highRun = 0;
     }
 
     static GameRoomParticipant host(GameRoom gameRoom, Member member, int targetScore) {
@@ -69,5 +81,11 @@ public class GameRoomParticipant extends BaseTimeEntity {
 
     void updateReady(boolean ready) {
         this.ready = ready;
+    }
+
+    void updateLiveScore(int currentScore, int cushionScore, int highRun) {
+        this.currentScore = currentScore;
+        this.cushionScore = cushionScore;
+        this.highRun = highRun;
     }
 }
