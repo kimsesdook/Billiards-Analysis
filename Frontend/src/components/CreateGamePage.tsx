@@ -17,6 +17,7 @@ import {
   updateGameRoomReady,
   type GameRoom,
 } from '../api/gameRooms';
+import { connectGameRoomSocket } from '../api/realtimeGameRooms';
 import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -380,30 +381,72 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       return;
     }
 
-    let cancelled = false;
+    const accessToken = getStoredAuthSession()?.accessToken;
+    if (!accessToken) {
+      return;
+    }
+
+    let socket: WebSocket | null = null;
+    let reconnectTimer: number | undefined;
+    let closedByClient = false;
+    let receivedEventVersion = 0;
+
     const synchronizeGameRoom = async () => {
+      const eventVersionAtRequest = receivedEventVersion;
+
       try {
         const gameRoom = await getGameRoom(gameRoomId);
-        if (!cancelled) {
+        if (!closedByClient && eventVersionAtRequest === receivedEventVersion) {
           applyGameRoomToLobby(gameRoom);
-          setGameRoomError(
-            gameRoom.status === 'CANCELED' ? '방장이 게임방을 종료했습니다.' : null
-          );
+          if (gameRoom.status === 'CANCELED') {
+            setGameRoomError('방장이 게임방을 종료했습니다.');
+          }
         }
       } catch (error) {
-        if (!cancelled) {
+        if (!closedByClient) {
           setGameRoomError(getApiErrorMessage(error));
         }
       }
     };
 
-    const intervalId = window.setInterval(() => {
-      void synchronizeGameRoom();
-    }, 3000);
+    const connect = () => {
+      socket = connectGameRoomSocket({
+        accessToken,
+        roomId: gameRoomId,
+        onConnected: () => {
+          void synchronizeGameRoom();
+        },
+        onGameRoomEvent: (eventType, gameRoom) => {
+          if (closedByClient) {
+            return;
+          }
+
+          receivedEventVersion += 1;
+          applyGameRoomToLobby(gameRoom);
+
+          if (eventType === 'ROOM_CANCELED') {
+            setGameRoomError('방장이 게임방을 종료했습니다.');
+          }
+        },
+        onClose: () => {
+          if (closedByClient) {
+            return;
+          }
+
+          void synchronizeGameRoom();
+          reconnectTimer = window.setTimeout(connect, 3000);
+        },
+      });
+    };
+
+    connect();
 
     return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
+      closedByClient = true;
+      if (reconnectTimer) {
+        window.clearTimeout(reconnectTimer);
+      }
+      socket?.close();
     };
   }, [applyGameRoomToLobby, gameRoomId, isLobby]);
 
