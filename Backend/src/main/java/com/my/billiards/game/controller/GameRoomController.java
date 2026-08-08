@@ -2,6 +2,8 @@ package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
+import com.my.billiards.game.dto.GameRoomFinishRequest;
+import com.my.billiards.game.dto.GameRoomFinishResponse;
 import com.my.billiards.game.dto.GameRoomLiveStateResponse;
 import com.my.billiards.game.dto.GameRoomLiveStateUpdateRequest;
 import com.my.billiards.game.dto.GameRoomReadyRequest;
@@ -79,6 +81,15 @@ public class GameRoomController {
         @PathVariable Long roomId
     ) {
         return ApiResponse.success(gameRoomService.start(member.id(), roomId));
+    }
+
+    @PatchMapping("/{roomId}/finish")
+    public ApiResponse<GameRoomFinishResponse> finish(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId,
+        @Valid @RequestBody GameRoomFinishRequest request
+    ) {
+        return ApiResponse.success(gameRoomService.finish(member.id(), roomId, request));
     }
 
     @GetMapping("/{roomId}/live-state")

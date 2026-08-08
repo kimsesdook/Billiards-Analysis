@@ -23,6 +23,7 @@ public enum ErrorCode {
 	GAME_ROOM_NOT_IN_PROGRESS("ROOM_007", HttpStatus.CONFLICT, "The game room is not in progress."),
 	GAME_ROOM_STATE_VERSION_CONFLICT("ROOM_008", HttpStatus.CONFLICT, "The live game state has already changed."),
 	GAME_ROOM_LIVE_STATE_INVALID("ROOM_009", HttpStatus.BAD_REQUEST, "The live game state is invalid."),
+	GAME_ROOM_COMPLETION_INVALID("ROOM_010", HttpStatus.BAD_REQUEST, "The game room completion data is invalid."),
 	UNAUTHORIZED("AUTH_001", HttpStatus.UNAUTHORIZED, "인증이 필요합니다."),
 	FORBIDDEN("AUTH_002", HttpStatus.FORBIDDEN, "접근 권한이 없습니다."),
 	INTERNAL_SERVER_ERROR("COMMON_999", HttpStatus.INTERNAL_SERVER_ERROR, "서버 내부 오류가 발생했습니다.");
