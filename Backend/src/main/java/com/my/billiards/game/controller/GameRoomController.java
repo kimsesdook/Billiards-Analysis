@@ -2,6 +2,7 @@ package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
+import com.my.billiards.game.dto.GameRoomReadyRequest;
 import com.my.billiards.game.dto.GameRoomResponse;
 import com.my.billiards.game.service.GameRoomService;
 import com.my.billiards.security.AuthenticatedMember;
@@ -58,5 +59,22 @@ public class GameRoomController {
         @PathVariable Long roomId
     ) {
         return ApiResponse.success(gameRoomService.cancel(member.id(), roomId));
+    }
+
+    @PatchMapping("/{roomId}/ready")
+    public ApiResponse<GameRoomResponse> updateReady(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId,
+        @Valid @RequestBody GameRoomReadyRequest request
+    ) {
+        return ApiResponse.success(gameRoomService.updateReady(member.id(), roomId, request));
+    }
+
+    @PatchMapping("/{roomId}/start")
+    public ApiResponse<GameRoomResponse> start(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId
+    ) {
+        return ApiResponse.success(gameRoomService.start(member.id(), roomId));
     }
 }

@@ -182,6 +182,8 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `GET /api/game-rooms` returns rooms the authenticated member participates in.
 - `GET /api/game-rooms/{roomId}` returns a room only to one of its participants.
 - `PATCH /api/game-rooms/{roomId}/cancel` lets only the host cancel a waiting room.
+- `PATCH /api/game-rooms/{roomId}/ready` lets a participant set their ready state while the room is waiting.
+- `PATCH /api/game-rooms/{roomId}/start` lets only the host start a full room after every participant is ready.
 
 ## Current Stage
 

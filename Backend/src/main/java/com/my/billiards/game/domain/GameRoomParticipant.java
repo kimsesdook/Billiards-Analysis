@@ -66,4 +66,8 @@ public class GameRoomParticipant extends BaseTimeEntity {
     static GameRoomParticipant player(GameRoom gameRoom, Member member, int targetScore) {
         return new GameRoomParticipant(gameRoom, member, GameRoomParticipantRole.PLAYER, targetScore, false);
     }
+
+    void updateReady(boolean ready) {
+        this.ready = ready;
+    }
 }

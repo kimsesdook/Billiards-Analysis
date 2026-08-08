@@ -6,6 +6,7 @@ import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.domain.GameRoom;
 import com.my.billiards.game.domain.GameRoomStatus;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
+import com.my.billiards.game.dto.GameRoomReadyRequest;
 import com.my.billiards.game.dto.GameRoomResponse;
 import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.member.domain.Member;
@@ -61,7 +62,7 @@ public class GameRoomService {
 
     @Transactional
     public GameRoomResponse cancel(Long memberId, Long roomId) {
-        GameRoom gameRoom = getAccessibleRoom(memberId, roomId);
+        GameRoom gameRoom = getAccessibleRoomForUpdate(memberId, roomId);
         if (!gameRoom.isHost(memberId)) {
             throw new BilliardsException(ErrorCode.FORBIDDEN);
         }
@@ -73,9 +74,52 @@ public class GameRoomService {
         return GameRoomResponse.from(gameRoom);
     }
 
+    @Transactional
+    public GameRoomResponse updateReady(Long memberId, Long roomId, GameRoomReadyRequest request) {
+        GameRoom gameRoom = getAccessibleRoomForUpdate(memberId, roomId);
+        if (!gameRoom.isWaiting()) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_WAITING);
+        }
+
+        gameRoom.updateParticipantReady(memberId, request.ready());
+        return GameRoomResponse.from(gameRoom);
+    }
+
+    @Transactional
+    public GameRoomResponse start(Long memberId, Long roomId) {
+        GameRoom gameRoom = getAccessibleRoomForUpdate(memberId, roomId);
+        if (!gameRoom.isHost(memberId)) {
+            throw new BilliardsException(ErrorCode.FORBIDDEN);
+        }
+        if (!gameRoom.isWaiting()) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_WAITING);
+        }
+        if (!gameRoom.hasAllParticipants()) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_PARTICIPANTS_INCOMPLETE);
+        }
+        if (!gameRoom.areAllParticipantsReady()) {
+            throw new BilliardsException(ErrorCode.GAME_ROOM_PARTICIPANTS_NOT_READY);
+        }
+
+        gameRoom.start();
+        return GameRoomResponse.from(gameRoom);
+    }
+
     private GameRoom getAccessibleRoom(Long memberId, Long roomId) {
         Member member = getActiveMember(memberId);
         GameRoom gameRoom = gameRoomRepository.findDetailById(roomId)
+            .orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND, "게임방을 찾을 수 없습니다."));
+
+        if (!gameRoom.hasParticipant(member.getId())) {
+            throw new BilliardsException(ErrorCode.FORBIDDEN);
+        }
+
+        return gameRoom;
+    }
+
+    private GameRoom getAccessibleRoomForUpdate(Long memberId, Long roomId) {
+        Member member = getActiveMember(memberId);
+        GameRoom gameRoom = gameRoomRepository.findByIdForUpdate(roomId)
             .orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND, "게임방을 찾을 수 없습니다."));
 
         if (!gameRoom.hasParticipant(member.getId())) {

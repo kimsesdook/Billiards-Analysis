@@ -112,6 +112,26 @@ public class GameRoom extends BaseTimeEntity {
         this.participants.add(GameRoomParticipant.player(this, member, targetScore));
     }
 
+    public void updateParticipantReady(Long memberId, boolean ready) {
+        participants.stream()
+            .filter(participant -> participant.getMember().getId().equals(memberId))
+            .findFirst()
+            .orElseThrow(() -> new IllegalArgumentException("Game room participant not found."))
+            .updateReady(ready);
+    }
+
+    public boolean hasAllParticipants() {
+        return participants.size() == playerCapacity;
+    }
+
+    public boolean areAllParticipantsReady() {
+        return participants.stream().allMatch(GameRoomParticipant::isReady);
+    }
+
+    public void start() {
+        this.status = GameRoomStatus.IN_PROGRESS;
+    }
+
     public void cancel() {
         this.status = GameRoomStatus.CANCELED;
     }

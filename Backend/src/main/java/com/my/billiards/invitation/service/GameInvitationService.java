@@ -170,7 +170,7 @@ public class GameInvitationService {
 			return;
 		}
 
-		GameRoom gameRoom = gameRoomRepository.findDetailById(invitation.getGameRoom().getId())
+		GameRoom gameRoom = gameRoomRepository.findByIdForUpdate(invitation.getGameRoom().getId())
 			.orElseThrow(() -> new BilliardsException(ErrorCode.RESOURCE_NOT_FOUND, "게임방을 찾을 수 없습니다."));
 		if (!gameRoom.isWaiting()) {
 			throw new BilliardsException(ErrorCode.GAME_ROOM_NOT_WAITING);
