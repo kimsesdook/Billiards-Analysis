@@ -1,5 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { cancelGameRoom, createGameRoom, getGameRoom, getMyGameRooms } from './gameRooms';
+import {
+  cancelGameRoom,
+  createGameRoom,
+  getGameRoom,
+  getMyGameRooms,
+  startGameRoom,
+  updateGameRoomReady,
+} from './gameRooms';
 
 const apiRequest = vi.hoisted(() => vi.fn());
 
@@ -45,6 +52,23 @@ describe('game room API contract', () => {
     cancelGameRoom(7);
 
     expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/cancel', {
+      method: 'PATCH',
+    });
+  });
+
+  it('updates a participants ready state', () => {
+    updateGameRoomReady(7, true);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/ready', {
+      method: 'PATCH',
+      body: JSON.stringify({ ready: true }),
+    });
+  });
+
+  it('starts a ready game room', () => {
+    startGameRoom(7);
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/start', {
       method: 'PATCH',
     });
   });

@@ -9,7 +9,14 @@ import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
 import { getFriends } from '../api/friends';
 import { createGameInvitation } from '../api/gameInvitations';
 import { getStoredAuthSession } from '../api/authStorage';
-import { cancelGameRoom, createGameRoom, getGameRoom, type GameRoom } from '../api/gameRooms';
+import {
+  cancelGameRoom,
+  createGameRoom,
+  getGameRoom,
+  startGameRoom,
+  updateGameRoomReady,
+  type GameRoom,
+} from '../api/gameRooms';
 import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -137,6 +144,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     `${localStorage.getItem('billiards_nickname') || '사용자'}의 게임방`
   );
   const [isGameRoomHost, setIsGameRoomHost] = useState(false);
+  const [gameRoomStatus, setGameRoomStatus] = useState<GameRoom['status'] | null>(null);
+  const [gameRoomAction, setGameRoomAction] = useState<'ready' | 'start' | null>(null);
   const [isGameRoomCreating, setIsGameRoomCreating] = useState(false);
   const [gameRoomError, setGameRoomError] = useState<string | null>(null);
   const [lobbyCode, setLobbyCode] = useState<string>('');
@@ -233,6 +242,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setType(gameRoom.gameType);
     setMode(gameRoom.gameMode);
     setPlayerCount(gameRoom.playerCapacity as 2 | 3 | 4);
+    setGameRoomStatus(gameRoom.status);
     setLobbyPlayers((currentPlayers) => {
       const currentParticipantIds = currentPlayers
         .filter((player) => player.isJoined)
@@ -241,9 +251,30 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         .filter((player) => player.isJoined)
         .map((player) => player.memberId);
       const participantListUnchanged = currentParticipantIds.length === synchronizedParticipantIds.length
-        && currentParticipantIds.every((memberId, index) => memberId === synchronizedParticipantIds[index]);
+        && currentParticipantIds.every((memberId) => synchronizedParticipantIds.includes(memberId));
 
-      return participantListUnchanged ? currentPlayers : synchronizedPlayers;
+      if (!participantListUnchanged) {
+        return synchronizedPlayers;
+      }
+
+      return currentPlayers.map((currentPlayer) => {
+        if (!currentPlayer.isJoined) {
+          return currentPlayer;
+        }
+
+        const synchronizedPlayer = synchronizedPlayers.find(
+          (player) => player.memberId === currentPlayer.memberId
+        );
+        return synchronizedPlayer
+          ? {
+              ...currentPlayer,
+              name: synchronizedPlayer.name,
+              role: synchronizedPlayer.role,
+              isReady: synchronizedPlayer.isReady,
+              isMe: synchronizedPlayer.isMe,
+            }
+          : currentPlayer;
+      });
     });
     setIsGameRoomHost(gameRoom.hostMemberId === currentMemberId);
   }, []);
@@ -355,7 +386,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         const gameRoom = await getGameRoom(gameRoomId);
         if (!cancelled) {
           applyGameRoomToLobby(gameRoom);
-          setGameRoomError(null);
+          setGameRoomError(
+            gameRoom.status === 'CANCELED' ? '방장이 게임방을 종료했습니다.' : null
+          );
         }
       } catch (error) {
         if (!cancelled) {
@@ -520,6 +553,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     }
 
     setGameRoomId(null);
+    setGameRoomStatus(null);
+    setGameRoomAction(null);
     setLobbyCode('');
     setLobbyPlayers([]);
     setLobbyLogs([]);
@@ -570,6 +605,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
         // Copy everything except ID from p2 to p1
         copy[p1Idx].name = copy[p2Idx].name;
+        copy[p1Idx].memberId = copy[p2Idx].memberId;
         copy[p1Idx].role = copy[p2Idx].role;
         copy[p1Idx].isJoined = copy[p2Idx].isJoined;
         copy[p1Idx].isReady = copy[p2Idx].isReady;
@@ -579,6 +615,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
         // Copy from temp (originally p1) to p2
         copy[p2Idx].name = temp.name;
+        copy[p2Idx].memberId = temp.memberId;
         copy[p2Idx].role = temp.role;
         copy[p2Idx].isJoined = temp.isJoined;
         copy[p2Idx].isReady = temp.isReady;
@@ -590,9 +627,13 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     });
   };
 
+  const isLobbyFull = lobbyPlayers.length === playerCount && lobbyPlayers.every((player) => player.isJoined);
+  const areAllLobbyPlayersReady = isLobbyFull && lobbyPlayers.every((player) => player.isReady);
+  const currentLobbyPlayer = lobbyPlayers.find((player) => player.isMe);
+
   // Launch actual real-time game board transition
   const handleLaunchGameFromLobby = () => {
-    if (!lobbyPlayers.every(p => p.isJoined)) {
+    if (!isLobbyFull || (gameRoomId && gameRoomStatus !== 'IN_PROGRESS')) {
       warningSound();
       return;
     }
@@ -649,6 +690,65 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setIsPaused(false);
     setShowOrderSelection(true);
   };
+
+  const handleToggleReady = async () => {
+    if (!gameRoomId || !currentLobbyPlayer || gameRoomAction || gameRoomStatus !== 'WAITING') {
+      return;
+    }
+
+    const nextReady = !currentLobbyPlayer.isReady;
+    setGameRoomAction('ready');
+    setGameRoomError(null);
+
+    try {
+      const gameRoom = await updateGameRoomReady(gameRoomId, nextReady);
+      applyGameRoomToLobby(gameRoom);
+      setLobbyLogs((current) => [
+        ...current,
+        {
+          id: `ready-${Date.now()}`,
+          text: `${currentLobbyPlayer.name}님이 ${nextReady ? '준비를 완료했습니다.' : '준비를 해제했습니다.'}`,
+          type: 'system',
+          time: '방금 전',
+        },
+      ]);
+    } catch (error) {
+      setGameRoomError(getApiErrorMessage(error));
+    } finally {
+      setGameRoomAction(null);
+    }
+  };
+
+  const handleStartGameRoom = async () => {
+    if (
+      !gameRoomId
+      || !isGameRoomHost
+      || !areAllLobbyPlayersReady
+      || gameRoomAction
+      || gameRoomStatus !== 'WAITING'
+    ) {
+      warningSound();
+      return;
+    }
+
+    setGameRoomAction('start');
+    setGameRoomError(null);
+
+    try {
+      const gameRoom = await startGameRoom(gameRoomId);
+      applyGameRoomToLobby(gameRoom);
+    } catch (error) {
+      setGameRoomError(getApiErrorMessage(error));
+    } finally {
+      setGameRoomAction(null);
+    }
+  };
+
+  useEffect(() => {
+    if (isLobby && gameRoomId && gameRoomStatus === 'IN_PROGRESS' && isLobbyFull) {
+      handleLaunchGameFromLobby();
+    }
+  }, [gameRoomId, gameRoomStatus, isLobby, isLobbyFull]);
 
   const handleInviteFriend = async (friend: BilliardFriend) => {
     if (!gameRoomId) {
@@ -1607,7 +1707,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
                 {/* Simulated lobby chat helper advice */}
                 <p className="text-[9px] text-[#ffd6aa]/45 border-t border-[#1a5d4e]/30 pt-2 text-center">
-                  💡 대기방의 모든 참가자가 입장하면 경기 시작 버튼에 빛이 들어옵니다.
+                  {gameRoomId
+                    ? '모든 참가자가 입장하고 준비를 완료하면 방장이 경기를 시작할 수 있습니다.'
+                    : '대기방의 모든 참가자가 입장하면 경기 시작 버튼에 빛이 들어옵니다.'}
                 </p>
               </div>
             </div>
@@ -1615,25 +1717,94 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
           </div>
 
           {/* Bottom actions Panel */}
-          <div className="flex justify-center pt-2">
-            <button
-              type="button"
-              onClick={handleLaunchGameFromLobby}
-              className={cn(
-                "w-full sm:w-auto font-black px-12 py-4 rounded-xl text-sm transition-all flex items-center justify-center gap-2 cursor-pointer",
-                lobbyPlayers.every(p => p.isJoined)
-                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-[#07241c] shadow-lg shadow-emerald-500/15 active:scale-95"
-                  : "bg-transparent border border-[#1d6352] text-emerald-300 hover:bg-[#144b3c]/30 hover:text-white active:scale-95"
-              )}
-            >
-              <Play size={16} fill="currentColor" />
-              <span>경기 시작하기</span>
-              {!lobbyPlayers.every(p => p.isJoined) && (
-                <span className="text-xs font-bold opacity-75 font-sans">
-                  ({lobbyPlayers.filter(p => p.isJoined).length}/{playerCount} 대기)
-                </span>
-              )}
-            </button>
+          <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
+            {gameRoomId ? (
+              <>
+                {!isGameRoomHost && currentLobbyPlayer && (
+                  <button
+                    type="button"
+                    onClick={() => void handleToggleReady()}
+                    disabled={Boolean(gameRoomAction) || gameRoomStatus !== 'WAITING'}
+                    className={cn(
+                      "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-8 py-4 text-sm font-black transition-all sm:w-auto",
+                      currentLobbyPlayer.isReady
+                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
+                        : "border-emerald-400 bg-emerald-500 text-[#07241c] hover:bg-emerald-400",
+                      "disabled:cursor-not-allowed disabled:opacity-60"
+                    )}
+                  >
+                    {gameRoomAction === 'ready' ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : currentLobbyPlayer.isReady ? (
+                      <RotateCcw size={16} />
+                    ) : (
+                      <Check size={16} />
+                    )}
+                    {gameRoomAction === 'ready'
+                      ? '준비 상태 변경 중...'
+                      : currentLobbyPlayer.isReady
+                        ? '준비 해제'
+                        : '준비 완료'}
+                  </button>
+                )}
+
+                {isGameRoomHost ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleStartGameRoom()}
+                    disabled={!areAllLobbyPlayersReady || Boolean(gameRoomAction) || gameRoomStatus !== 'WAITING'}
+                    className={cn(
+                      "inline-flex w-full items-center justify-center gap-2 rounded-xl px-12 py-4 text-sm font-black transition-all sm:w-auto",
+                      areAllLobbyPlayersReady && gameRoomStatus === 'WAITING'
+                        ? "bg-emerald-500 text-[#07241c] shadow-lg shadow-emerald-500/15 hover:bg-emerald-400 active:scale-95"
+                        : "cursor-not-allowed border border-[#1d6352] bg-transparent text-emerald-300/60"
+                    )}
+                  >
+                    {gameRoomAction === 'start' ? (
+                      <RefreshCw size={16} className="animate-spin" />
+                    ) : (
+                      <Play size={16} fill="currentColor" />
+                    )}
+                    <span>{gameRoomAction === 'start' ? '경기 시작 요청 중...' : '경기 시작하기'}</span>
+                    {!isLobbyFull && (
+                      <span className="text-xs opacity-75">
+                        ({lobbyPlayers.filter((player) => player.isJoined).length}/{playerCount} 입장)
+                      </span>
+                    )}
+                    {isLobbyFull && !areAllLobbyPlayersReady && (
+                      <span className="text-xs opacity-75">
+                        ({lobbyPlayers.filter((player) => player.isReady).length}/{playerCount} 준비)
+                      </span>
+                    )}
+                  </button>
+                ) : (
+                  <span className="text-xs font-bold text-emerald-200/65">
+                    {currentLobbyPlayer?.isReady
+                      ? '방장이 경기를 시작하기를 기다리고 있습니다.'
+                      : '준비를 완료하면 방장이 경기를 시작할 수 있습니다.'}
+                  </span>
+                )}
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={handleLaunchGameFromLobby}
+                className={cn(
+                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-12 py-4 text-sm font-black transition-all sm:w-auto",
+                  isLobbyFull
+                    ? "bg-emerald-500 text-[#07241c] shadow-lg shadow-emerald-500/15 hover:bg-emerald-400 active:scale-95"
+                    : "border border-[#1d6352] bg-transparent text-emerald-300/60"
+                )}
+              >
+                <Play size={16} fill="currentColor" />
+                <span>경기 시작하기</span>
+                {!isLobbyFull && (
+                  <span className="text-xs opacity-75">
+                    ({lobbyPlayers.filter((player) => player.isJoined).length}/{playerCount} 대기)
+                  </span>
+                )}
+              </button>
+            )}
           </div>
         </div>
       )}
