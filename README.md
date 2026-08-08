@@ -163,6 +163,7 @@ erDiagram
 - Room completion and all participant records are committed in one transaction, so partial record creation cannot remain in the database.
 - Each generated record is linked to its source room with a database uniqueness constraint, making finish retries idempotent.
 - The `GAME_FINISHED` WebSocket event is published only after the completion transaction commits.
+- The host UI flushes its final scoreboard update before requesting completion, while every participant leaves the live board after the committed event arrives.
 
 ### Contact Inquiry Privacy
 

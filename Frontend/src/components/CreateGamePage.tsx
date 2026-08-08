@@ -12,6 +12,7 @@ import { getStoredAuthSession } from '../api/authStorage';
 import {
   cancelGameRoom,
   createGameRoom,
+  finishGameRoom,
   getGameRoom,
   getGameRoomLiveState,
   startGameRoom,
@@ -24,6 +25,7 @@ import {
 import { connectGameRoomSocket } from '../api/realtimeGameRooms';
 import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
+import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
 import { motion, AnimatePresence } from 'motion/react';
 
 interface CreateGamePageProps {
@@ -252,6 +254,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Game completion review overlay state
   const [showFinishedModal, setShowFinishedModal] = useState<boolean>(false);
+  const [gameCompletionError, setGameCompletionError] = useState<string | null>(null);
   const [showOrderSelection, setShowOrderSelection] = useState<boolean>(false);
   const [winnerName, setWinnerName] = useState<string>('');
 
@@ -264,10 +267,27 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const pendingLiveStateRef = useRef<GameRoomLiveStateDraft | null>(null);
   const submittedLiveStateSignaturesRef = useRef<Set<string>>(new Set());
   const liveStateSaveInFlightRef = useRef(false);
+  const liveStateSavePromiseRef = useRef<Promise<void> | null>(null);
+  const completedGameRoomHandledRef = useRef(false);
   const applyLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
   const acknowledgeLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
   const isGameRoomHostRef = useRef(isGameRoomHost);
   const isPlayingRef = useRef(isPlaying);
+
+  const exitCompletedGameRoom = useCallback(() => {
+    if (completedGameRoomHandledRef.current) {
+      return;
+    }
+
+    completedGameRoomHandledRef.current = true;
+    localStorage.removeItem('billiards_active_room_state');
+    setGameRoomStatus('FINISHED');
+    setIsPlaying(false);
+    setIsLobby(false);
+    setShowFinishedModal(false);
+    setGameCompletionError(null);
+    navigate('/records');
+  }, [navigate]);
 
   const applyGameRoomToLobby = useCallback((gameRoom: GameRoom) => {
     const currentMemberId = getStoredAuthSession()?.member.id;
@@ -398,18 +418,24 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     pendingLiveStateRef.current = null;
     submittedLiveStateSignaturesRef.current.clear();
     liveStateSaveInFlightRef.current = false;
+    liveStateSavePromiseRef.current = null;
+    completedGameRoomHandledRef.current = false;
     setIsLiveStateReady(!gameRoomId);
     setLiveStateError(null);
+    setGameCompletionError(null);
   }, [gameRoomId]);
 
-  const processPendingLiveState = useCallback(async () => {
+  const processPendingLiveState = useCallback((): Promise<void> => {
     const roomId = gameRoomId;
-    if (!roomId || liveStateSaveInFlightRef.current) {
-      return;
+    if (!roomId) {
+      return Promise.resolve();
+    }
+    if (liveStateSavePromiseRef.current) {
+      return liveStateSavePromiseRef.current;
     }
 
     liveStateSaveInFlightRef.current = true;
-    try {
+    const savePromise = (async () => {
       while (pendingLiveStateRef.current && liveStateRoomIdRef.current === roomId) {
         const pendingState = pendingLiveStateRef.current;
         const stateVersion = liveStateVersionRef.current;
@@ -453,9 +479,14 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
           break;
         }
       }
-    } finally {
+    })().finally(() => {
       liveStateSaveInFlightRef.current = false;
-    }
+      if (liveStateSavePromiseRef.current === savePromise) {
+        liveStateSavePromiseRef.current = null;
+      }
+    });
+    liveStateSavePromiseRef.current = savePromise;
+    return savePromise;
   }, [acknowledgeLiveGameState, gameRoomId]);
 
   useEffect(() => {
@@ -623,7 +654,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         const gameRoom = await getGameRoom(gameRoomId);
         if (!closedByClient && eventVersionAtRequest === receivedEventVersion) {
           applyGameRoomToLobby(gameRoom);
-          if (gameRoom.status === 'CANCELED') {
+          if (gameRoom.status === 'FINISHED') {
+            exitCompletedGameRoom();
+          } else if (gameRoom.status === 'CANCELED') {
             setGameRoomError('방장이 게임방을 종료했습니다.');
           }
         }
@@ -668,6 +701,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
           if (eventType === 'ROOM_CANCELED') {
             setGameRoomError('방장이 게임방을 종료했습니다.');
           }
+          if (eventType === 'GAME_FINISHED') {
+            exitCompletedGameRoom();
+          }
         },
         onLiveStateEvent: (liveState) => {
           if (closedByClient) {
@@ -708,7 +744,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       }
       socket?.close();
     };
-  }, [applyGameRoomToLobby, gameRoomId, isLobby, isPlaying]);
+  }, [applyGameRoomToLobby, exitCompletedGameRoom, gameRoomId, isLobby, isPlaying]);
 
   const handleConfirmResume = () => {
     if (!resumeData) return;
@@ -1394,6 +1430,74 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   // Finish active game and convert parameters to system persistent record list
   const handleFinalizeAndSaveRecord = async () => {
     if (isSavingRecord) return;
+
+    setGameCompletionError(null);
+    if (gameRoomId) {
+      if (!isGameRoomHost) {
+        setGameCompletionError('방장만 온라인 경기를 종료할 수 있습니다.');
+        return;
+      }
+
+      try {
+        setIsSavingRecord(true);
+        setLiveStateError(null);
+
+        const activeMemberId = players[activePlayerIndex]?.memberId;
+        const hasEveryMemberId = players.every((player) => player.memberId !== undefined);
+        if (!activeMemberId || !hasEveryMemberId || liveStateVersionRef.current === null) {
+          throw new Error('참가자와 점수판 정보를 다시 불러온 후 종료해 주세요.');
+        }
+
+        const finalLiveState: GameRoomLiveStateDraft = {
+          currentInning,
+          activeMemberId,
+          scores: players.map((player) => ({
+            memberId: player.memberId as number,
+            currentScore: player.currentScore,
+            cushionScore: player.cushionScore || 0,
+            highRun: player.highRun,
+          })),
+        };
+        const finalStateSignature = getLiveStateSignature(finalLiveState);
+        pendingLiveStateRef.current = finalLiveState;
+        await processPendingLiveState();
+
+        if (lastSynchronizedLiveStateRef.current !== finalStateSignature) {
+          throw new Error('최신 점수를 서버에 저장하지 못했습니다. 점수판을 확인해 주세요.');
+        }
+
+        const stateVersion = liveStateVersionRef.current;
+        if (stateVersion === null) {
+          throw new Error('최신 점수판 버전을 확인할 수 없습니다.');
+        }
+
+        const completion = await finishGameRoom(gameRoomId, buildGameRoomFinishPayload({
+          stateVersion,
+          currentInning,
+          gameType: type,
+          gameMode: mode,
+          lastThreeCushions,
+          players,
+        }));
+        liveStateVersionRef.current = completion.stateVersion;
+        exitCompletedGameRoom();
+      } catch (error) {
+        if (error instanceof ApiClientError && error.code === 'ROOM_008') {
+          try {
+            const latestState = await getGameRoomLiveState(gameRoomId);
+            applyLiveGameStateRef.current(latestState);
+            setGameCompletionError('다른 화면에서 점수가 변경되었습니다. 최신 점수를 확인한 후 다시 종료해 주세요.');
+          } catch (refreshError) {
+            setGameCompletionError(getApiErrorMessage(refreshError));
+          }
+        } else {
+          setGameCompletionError(getApiErrorMessage(error));
+        }
+      } finally {
+        setIsSavingRecord(false);
+      }
+      return;
+    }
 
     // Player 1 (user) statistics computed
     const p1 = players[0];
@@ -2739,16 +2843,27 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 </div>
               </div>
 
+              {gameCompletionError && (
+                <div className="mb-4 flex items-start gap-2 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-left text-xs font-bold text-red-200">
+                  <AlertCircle size={15} className="mt-0.5 shrink-0" />
+                  <span>{gameCompletionError}</span>
+                </div>
+              )}
+
               <div className="flex flex-col sm:flex-row gap-3">
                 <button
-                  onClick={() => setShowFinishedModal(false)}
-                  className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
+                  onClick={() => {
+                    setGameCompletionError(null);
+                    setShowFinishedModal(false);
+                  }}
+                  disabled={isSavingRecord}
+                  className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-60 disabled:cursor-not-allowed text-zinc-300 font-bold rounded-xl text-xs transition-all cursor-pointer"
                 >
                   취소 후 이어서 기록하기
                 </button>
                 <button
                   onClick={handleFinalizeAndSaveRecord}
-                  disabled={isSavingRecord}
+                  disabled={isSavingRecord || Boolean(gameRoomId && !isGameRoomHost)}
                   className="flex-1 py-3 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-60 disabled:cursor-not-allowed text-[#07241c] font-black rounded-xl text-xs transition-all shadow-lg shadow-emerald-500/20 cursor-pointer flex items-center justify-center gap-1.5"
                 >
                   {isSavingRecord ? <RefreshCw size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}

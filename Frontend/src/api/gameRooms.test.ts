@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   cancelGameRoom,
   createGameRoom,
+  finishGameRoom,
   getGameRoom,
   getGameRoomLiveState,
   getMyGameRooms,
@@ -72,6 +73,29 @@ describe('game room API contract', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/start', {
       method: 'PATCH',
+    });
+  });
+
+  it('finishes a room with the latest state and participant innings', () => {
+    finishGameRoom(7, {
+      stateVersion: 4,
+      lastThreeCushions: 0,
+      participants: [
+        { memberId: 41, inningScores: [1, 2] },
+        { memberId: 42, inningScores: [0, 5] },
+      ],
+    });
+
+    expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/finish', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        stateVersion: 4,
+        lastThreeCushions: 0,
+        participants: [
+          { memberId: 41, inningScores: [1, 2] },
+          { memberId: 42, inningScores: [0, 5] },
+        ],
+      }),
     });
   });
 

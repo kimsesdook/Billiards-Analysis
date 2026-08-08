@@ -100,6 +100,15 @@ describe('game room realtime API contract', () => {
     socket.emitMessage(JSON.stringify({
       success: true,
       data: {
+        eventType: 'GAME_FINISHED',
+        roomId: 7,
+        gameRoom: { roomId: 7, status: 'FINISHED' },
+      },
+      message: null,
+    }));
+    socket.emitMessage(JSON.stringify({
+      success: true,
+      data: {
         eventType: 'GAME_STARTED',
         roomId: 8,
         gameRoom: { roomId: 8, status: 'IN_PROGRESS' },
@@ -109,10 +118,16 @@ describe('game room realtime API contract', () => {
     socket.emitMessage('not-json');
 
     expect(onConnected).toHaveBeenCalledOnce();
-    expect(onGameRoomEvent).toHaveBeenCalledOnce();
-    expect(onGameRoomEvent).toHaveBeenCalledWith(
+    expect(onGameRoomEvent).toHaveBeenCalledTimes(2);
+    expect(onGameRoomEvent).toHaveBeenNthCalledWith(
+      1,
       'READY_CHANGED',
       expect.objectContaining({ roomId: 7, status: 'WAITING' }),
+    );
+    expect(onGameRoomEvent).toHaveBeenNthCalledWith(
+      2,
+      'GAME_FINISHED',
+      expect.objectContaining({ roomId: 7, status: 'FINISHED' }),
     );
     expect(onLiveStateEvent).toHaveBeenCalledOnce();
     expect(onLiveStateEvent).toHaveBeenCalledWith(

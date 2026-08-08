@@ -11,6 +11,7 @@ export type GameRoomChangeEventType =
   | 'PARTICIPANT_JOINED'
   | 'READY_CHANGED'
   | 'GAME_STARTED'
+  | 'GAME_FINISHED'
   | 'ROOM_CANCELED';
 
 export type GameRoomRealtimeEventType = GameRoomChangeEventType | 'LIVE_STATE_CHANGED';
