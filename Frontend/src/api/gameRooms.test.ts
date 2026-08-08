@@ -3,8 +3,10 @@ import {
   cancelGameRoom,
   createGameRoom,
   getGameRoom,
+  getGameRoomLiveState,
   getMyGameRooms,
   startGameRoom,
+  updateGameRoomLiveState,
   updateGameRoomReady,
 } from './gameRooms';
 
@@ -70,6 +72,53 @@ describe('game room API contract', () => {
 
     expect(apiRequest).toHaveBeenCalledWith('/api/game-rooms/7/start', {
       method: 'PATCH',
+    });
+  });
+
+  it('loads and updates the versioned live game state', () => {
+    getGameRoomLiveState(7);
+    updateGameRoomLiveState(7, {
+      stateVersion: 3,
+      currentInning: 5,
+      activeMemberId: 42,
+      scores: [
+        {
+          memberId: 41,
+          currentScore: 8,
+          cushionScore: 1,
+          highRun: 4,
+        },
+        {
+          memberId: 42,
+          currentScore: 6,
+          cushionScore: 0,
+          highRun: 3,
+        },
+      ],
+    });
+
+    expect(apiRequest).toHaveBeenNthCalledWith(1, '/api/game-rooms/7/live-state');
+    expect(apiRequest).toHaveBeenNthCalledWith(2, '/api/game-rooms/7/live-state', {
+      method: 'PUT',
+      body: JSON.stringify({
+        stateVersion: 3,
+        currentInning: 5,
+        activeMemberId: 42,
+        scores: [
+          {
+            memberId: 41,
+            currentScore: 8,
+            cushionScore: 1,
+            highRun: 4,
+          },
+          {
+            memberId: 42,
+            currentScore: 6,
+            cushionScore: 0,
+            highRun: 3,
+          },
+        ],
+      }),
     });
   });
 });

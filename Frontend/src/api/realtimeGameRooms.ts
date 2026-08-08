@@ -1,5 +1,5 @@
 import { getApiBaseUrl } from './client';
-import type { GameRoom } from './gameRooms';
+import type { GameRoom, GameRoomLiveState } from './gameRooms';
 
 type ApiRealtimeResponse<T> = {
   success: boolean;
@@ -13,10 +13,13 @@ export type GameRoomChangeEventType =
   | 'GAME_STARTED'
   | 'ROOM_CANCELED';
 
+export type GameRoomRealtimeEventType = GameRoomChangeEventType | 'LIVE_STATE_CHANGED';
+
 export type GameRoomRealtimeMessage = {
-  eventType: 'CONNECTED' | GameRoomChangeEventType;
+  eventType: 'CONNECTED' | GameRoomRealtimeEventType;
   roomId: number;
   gameRoom: GameRoom | null;
+  liveState: GameRoomLiveState | null;
 };
 
 type GameRoomSocketOptions = {
@@ -24,6 +27,7 @@ type GameRoomSocketOptions = {
   roomId: number;
   onConnected?: () => void;
   onGameRoomEvent: (eventType: GameRoomChangeEventType, gameRoom: GameRoom) => void;
+  onLiveStateEvent?: (liveState: GameRoomLiveState) => void;
   onClose?: (event: CloseEvent) => void;
   onError?: (event: Event) => void;
 };
@@ -38,6 +42,7 @@ export const connectGameRoomSocket = ({
   roomId,
   onConnected,
   onGameRoomEvent,
+  onLiveStateEvent,
   onClose,
   onError,
 }: GameRoomSocketOptions) => {
@@ -55,8 +60,12 @@ export const connectGameRoomSocket = ({
         onConnected?.();
         return;
       }
+      if (message.eventType === 'LIVE_STATE_CHANGED' && message.liveState) {
+        onLiveStateEvent?.(message.liveState);
+        return;
+      }
       if (message.gameRoom) {
-        onGameRoomEvent(message.eventType, message.gameRoom);
+        onGameRoomEvent(message.eventType as GameRoomChangeEventType, message.gameRoom);
       }
     } catch {
       // Ignore malformed frames and keep the current realtime connection alive.
