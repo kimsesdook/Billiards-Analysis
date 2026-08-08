@@ -13,6 +13,8 @@ public interface GameRoomRepository extends JpaRepository<GameRoom, Long> {
 
     boolean existsByJoinCode(String joinCode);
 
+    boolean existsByIdAndParticipants_Member_Id(Long roomId, Long memberId);
+
     @Query("""
         select distinct gameRoom
         from GameRoom gameRoom

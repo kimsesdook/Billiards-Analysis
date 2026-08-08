@@ -8,6 +8,8 @@ import com.my.billiards.game.domain.GameRoomStatus;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
 import com.my.billiards.game.dto.GameRoomReadyRequest;
 import com.my.billiards.game.dto.GameRoomResponse;
+import com.my.billiards.game.event.GameRoomRealtimeEvent;
+import com.my.billiards.game.event.GameRoomRealtimeEventType;
 import com.my.billiards.game.repository.GameRoomRepository;
 import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.domain.MemberStatus;
@@ -16,6 +18,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,6 +31,7 @@ public class GameRoomService {
 
     private final GameRoomRepository gameRoomRepository;
     private final MemberRepository memberRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public GameRoomResponse create(Long memberId, GameRoomCreateRequest request) {
@@ -71,7 +75,9 @@ public class GameRoomService {
         }
 
         gameRoom.cancel();
-        return GameRoomResponse.from(gameRoom);
+        GameRoomResponse response = GameRoomResponse.from(gameRoom);
+        publishRealtimeEvent(GameRoomRealtimeEventType.ROOM_CANCELED, response);
+        return response;
     }
 
     @Transactional
@@ -82,7 +88,9 @@ public class GameRoomService {
         }
 
         gameRoom.updateParticipantReady(memberId, request.ready());
-        return GameRoomResponse.from(gameRoom);
+        GameRoomResponse response = GameRoomResponse.from(gameRoom);
+        publishRealtimeEvent(GameRoomRealtimeEventType.READY_CHANGED, response);
+        return response;
     }
 
     @Transactional
@@ -102,7 +110,13 @@ public class GameRoomService {
         }
 
         gameRoom.start();
-        return GameRoomResponse.from(gameRoom);
+        GameRoomResponse response = GameRoomResponse.from(gameRoom);
+        publishRealtimeEvent(GameRoomRealtimeEventType.GAME_STARTED, response);
+        return response;
+    }
+
+    private void publishRealtimeEvent(GameRoomRealtimeEventType eventType, GameRoomResponse response) {
+        eventPublisher.publishEvent(new GameRoomRealtimeEvent(response.roomId(), eventType, response));
     }
 
     private GameRoom getAccessibleRoom(Long memberId, Long roomId) {

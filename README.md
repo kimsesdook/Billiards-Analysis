@@ -18,6 +18,7 @@
 - 친구 요청과 친구 관리
 - 친구 기반 경기 초대와 수락·거절 상태 관리
 - 알림 REST API와 WebSocket 기반 실시간 알림
+- 게임방 참가자 전용 WebSocket 기반 참가, 준비, 시작, 취소 이벤트
 - 명시적 요청 기반 Gemini 주간 AI 코칭 리포트
 - JWT로 보호된 읽기 전용 MCP 경기 분석 도구
 
@@ -28,7 +29,7 @@ flowchart LR
     Browser["React 19 SPA\nTypeScript + Vite"]
     API["Spring Boot API\nModular Monolith"]
     DB[("MySQL 8.4\nFlyway")]
-    Socket["WebSocket\nRealtime Notifications"]
+    Socket["WebSocket\nRealtime Events"]
     MCP["Streamable HTTP MCP\nRead-only tools"]
     Gemini["Google Gemini\nOptional"]
     CI["GitHub Actions\nCI"]
