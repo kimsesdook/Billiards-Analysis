@@ -51,3 +51,14 @@ export const cancelGameRoom = (roomId: number) =>
   apiRequest<GameRoom>(`/api/game-rooms/${roomId}/cancel`, {
     method: 'PATCH',
   });
+
+export const updateGameRoomReady = (roomId: number, ready: boolean) =>
+  apiRequest<GameRoom>(`/api/game-rooms/${roomId}/ready`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ready }),
+  });
+
+export const startGameRoom = (roomId: number) =>
+  apiRequest<GameRoom>(`/api/game-rooms/${roomId}/start`, {
+    method: 'PATCH',
+  });
