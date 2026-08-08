@@ -30,7 +30,8 @@ public class GameRoomRealtimeSender {
         String payload = serialize(GameRoomRealtimeMessage.event(
             event.eventType(),
             event.roomId(),
-            event.gameRoom()
+            event.gameRoom(),
+            event.liveState()
         ));
 
         for (WebSocketSession session : sessionRegistry.findOpenSessions(event.roomId())) {

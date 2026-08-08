@@ -2,6 +2,8 @@ package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
+import com.my.billiards.game.dto.GameRoomLiveStateResponse;
+import com.my.billiards.game.dto.GameRoomLiveStateUpdateRequest;
 import com.my.billiards.game.dto.GameRoomReadyRequest;
 import com.my.billiards.game.dto.GameRoomResponse;
 import com.my.billiards.game.service.GameRoomService;
@@ -17,6 +19,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -76,5 +79,22 @@ public class GameRoomController {
         @PathVariable Long roomId
     ) {
         return ApiResponse.success(gameRoomService.start(member.id(), roomId));
+    }
+
+    @GetMapping("/{roomId}/live-state")
+    public ApiResponse<GameRoomLiveStateResponse> findLiveState(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId
+    ) {
+        return ApiResponse.success(gameRoomService.findLiveState(member.id(), roomId));
+    }
+
+    @PutMapping("/{roomId}/live-state")
+    public ApiResponse<GameRoomLiveStateResponse> updateLiveState(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId,
+        @Valid @RequestBody GameRoomLiveStateUpdateRequest request
+    ) {
+        return ApiResponse.success(gameRoomService.updateLiveState(member.id(), roomId, request));
     }
 }

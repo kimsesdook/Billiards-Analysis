@@ -19,6 +19,7 @@
 - 친구 기반 경기 초대와 수락·거절 상태 관리
 - 알림 REST API와 WebSocket 기반 실시간 알림
 - 게임방 참가자 전용 WebSocket 기반 참가, 준비, 시작, 취소 이벤트
+- 버전 충돌 검사가 적용된 실시간 점수, 이닝, 현재 차례 상태 관리
 - 명시적 요청 기반 Gemini 주간 AI 코칭 리포트
 - JWT로 보호된 읽기 전용 MCP 경기 분석 도구
 
@@ -103,14 +104,21 @@ erDiagram
     GAME_ROOMS {
         bigint id PK
         bigint host_member_id FK
+        bigint active_member_id FK
         string join_code UK
         string room_status
+        int current_inning
+        bigint state_version
     }
     GAME_ROOM_PARTICIPANTS {
         bigint id PK
         bigint game_room_id FK
         bigint member_id FK
         string participant_role
+        int target_score
+        int current_score
+        int cushion_score
+        int high_run
     }
     NOTIFICATIONS {
         bigint id PK
