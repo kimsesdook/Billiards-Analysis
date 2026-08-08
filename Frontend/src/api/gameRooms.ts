@@ -65,6 +65,34 @@ export type GameRoomLiveStateUpdatePayload = {
   }>;
 };
 
+export type GameRoomFinishPayload = {
+  stateVersion: number;
+  lastThreeCushions: number;
+  participants: Array<{
+    memberId: number;
+    inningScores: number[];
+    teamNumber?: 1 | 2;
+  }>;
+};
+
+export type GameRoomFinishedRecord = {
+  memberId: number;
+  nickname: string;
+  gameRecordId: number;
+  score: number;
+  opponentScore: number;
+  rank: number | null;
+  win: boolean;
+};
+
+export type GameRoomFinishResponse = {
+  roomId: number;
+  status: 'FINISHED';
+  stateVersion: number;
+  playedAt: string;
+  records: GameRoomFinishedRecord[];
+};
+
 export const createGameRoom = (payload: GameRoomCreatePayload) =>
   apiRequest<GameRoom>('/api/game-rooms', {
     method: 'POST',
@@ -91,6 +119,12 @@ export const updateGameRoomReady = (roomId: number, ready: boolean) =>
 export const startGameRoom = (roomId: number) =>
   apiRequest<GameRoom>(`/api/game-rooms/${roomId}/start`, {
     method: 'PATCH',
+  });
+
+export const finishGameRoom = (roomId: number, payload: GameRoomFinishPayload) =>
+  apiRequest<GameRoomFinishResponse>(`/api/game-rooms/${roomId}/finish`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
   });
 
 export const getGameRoomLiveState = (roomId: number) =>

@@ -8,6 +8,7 @@ React 기반 당구 경기 기록과 분석 화면입니다. Spring Boot API와 
 - Tailwind CSS 4, React Router, Recharts
 - JWT-authenticated WebSocket clients for notifications and game room events
 - Host-authoritative live scoreboard sync with version-conflict recovery
+- Transactional room completion with final-score flushing and `GAME_FINISHED` participant navigation
 - Vitest API contract tests
 
 ## Environment
