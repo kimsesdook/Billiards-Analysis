@@ -15,6 +15,7 @@ export type GameInvitationMember = {
 
 export type GameInvitation = {
   invitationId: number;
+  gameRoomId: number | null;
   member: GameInvitationMember;
   gameType: GameType;
   status: GameInvitationStatus;
@@ -29,10 +30,18 @@ export type GameInvitations = {
   outgoing: GameInvitation[];
 };
 
-export const createGameInvitation = (receiverMemberId: number, gameType: GameType) =>
+export const createGameInvitation = (
+  receiverMemberId: number,
+  gameType: GameType,
+  gameRoomId?: number,
+) =>
   apiRequest<GameInvitation>('/api/game-invitations', {
     method: 'POST',
-    body: JSON.stringify({ receiverMemberId, gameType }),
+    body: JSON.stringify({
+      receiverMemberId,
+      gameType,
+      ...(gameRoomId !== undefined ? { gameRoomId } : {}),
+    }),
   });
 
 export const getGameInvitations = () =>

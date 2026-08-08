@@ -799,6 +799,7 @@ function AppContent() {
             opponentName: acceptedInvitation.member.nickname,
             opponentTargetScore: Math.max(5, Math.floor(opponentHandicap / 10)),
             gameType: acceptedInvitation.gameType,
+            gameRoomId: acceptedInvitation.gameRoomId,
           },
         },
       });

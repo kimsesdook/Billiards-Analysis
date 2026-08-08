@@ -8,6 +8,8 @@ import {
 import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
 import { getFriends } from '../api/friends';
 import { createGameInvitation } from '../api/gameInvitations';
+import { getStoredAuthSession } from '../api/authStorage';
+import { cancelGameRoom, createGameRoom, getGameRoom, type GameRoom } from '../api/gameRooms';
 import { getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -45,8 +47,41 @@ type GameInvitationNavigationState = {
     opponentName: string;
     opponentTargetScore: number;
     gameType: GameType;
+    gameRoomId: number | null;
   };
 };
+
+const CUE_BALL_COLORS = ['white', 'yellow', 'red', 'blue'];
+
+const createLobbyPlayers = (gameRoom: GameRoom, currentMemberId?: number) =>
+  Array.from({ length: gameRoom.playerCapacity }, (_, index) => {
+    const participant = gameRoom.participants[index];
+
+    if (!participant) {
+      return {
+        id: index + 1,
+        name: `대기 선수 ${index + 1}`,
+        role: '참가자',
+        isJoined: false,
+        isReady: false,
+        cueBallColor: CUE_BALL_COLORS[index],
+        targetScore: gameRoom.gameType === '3-Cushion' ? 15 : 20,
+        isMe: false,
+      };
+    }
+
+    return {
+      id: index + 1,
+      memberId: participant.memberId,
+      name: participant.nickname,
+      role: participant.role === 'HOST' ? '방장' : '참가자',
+      isJoined: true,
+      isReady: participant.ready,
+      cueBallColor: CUE_BALL_COLORS[index],
+      targetScore: participant.targetScore,
+      isMe: participant.memberId === currentMemberId,
+    };
+  });
 
 export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const navigate = useNavigate();
@@ -97,6 +132,13 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     };
   }, [isPlaying]);
   const [isLobby, setIsLobby] = useState<boolean>(false);
+  const [gameRoomId, setGameRoomId] = useState<number | null>(null);
+  const [roomName, setRoomName] = useState(() =>
+    `${localStorage.getItem('billiards_nickname') || '사용자'}의 게임방`
+  );
+  const [isGameRoomHost, setIsGameRoomHost] = useState(false);
+  const [isGameRoomCreating, setIsGameRoomCreating] = useState(false);
+  const [gameRoomError, setGameRoomError] = useState<string | null>(null);
   const [lobbyCode, setLobbyCode] = useState<string>('');
   const [lobbyPlayers, setLobbyPlayers] = useState<any[]>([]);
   const [lobbyLogs, setLobbyLogs] = useState<any[]>([]);
@@ -181,6 +223,31 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const gameTimerRef = useRef<any>(null);
   const clockTimerRef = useRef<any>(null);
 
+  const applyGameRoomToLobby = useCallback((gameRoom: GameRoom) => {
+    const currentMemberId = getStoredAuthSession()?.member.id;
+    const synchronizedPlayers = createLobbyPlayers(gameRoom, currentMemberId);
+
+    setGameRoomId(gameRoom.roomId);
+    setRoomName(gameRoom.name);
+    setLobbyCode(gameRoom.joinCode);
+    setType(gameRoom.gameType);
+    setMode(gameRoom.gameMode);
+    setPlayerCount(gameRoom.playerCapacity as 2 | 3 | 4);
+    setLobbyPlayers((currentPlayers) => {
+      const currentParticipantIds = currentPlayers
+        .filter((player) => player.isJoined)
+        .map((player) => player.memberId);
+      const synchronizedParticipantIds = synchronizedPlayers
+        .filter((player) => player.isJoined)
+        .map((player) => player.memberId);
+      const participantListUnchanged = currentParticipantIds.length === synchronizedParticipantIds.length
+        && currentParticipantIds.every((memberId, index) => memberId === synchronizedParticipantIds[index]);
+
+      return participantListUnchanged ? currentPlayers : synchronizedPlayers;
+    });
+    setIsGameRoomHost(gameRoom.hostMemberId === currentMemberId);
+  }, []);
+
   // Check if there is an active game in local storage that can be resumed
   useEffect(() => {
     const savedActiveGame = localStorage.getItem('billiards_active_room_state');
@@ -201,6 +268,35 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     const acceptedInvitation = (location.state as GameInvitationNavigationState | null)?.acceptedInvitation;
     if (!acceptedInvitation) {
       return;
+    }
+
+    if (acceptedInvitation.gameRoomId) {
+      let cancelled = false;
+
+      const loadAcceptedGameRoom = async () => {
+        try {
+          const gameRoom = await getGameRoom(acceptedInvitation.gameRoomId as number);
+          if (cancelled) return;
+
+          applyGameRoomToLobby(gameRoom);
+          setLobbyLogs([
+            { id: 1, text: `${gameRoom.hostNickname}님의 게임방에 참가했습니다.`, time: '방금 전' },
+            { id: 2, text: `${acceptedInvitation.opponentName}님의 경기 초대를 수락했습니다.`, time: '방금 전' },
+          ]);
+          setGameRoomError(null);
+          setIsLobby(true);
+          navigate(location.pathname, { replace: true, state: null });
+        } catch (error) {
+          if (!cancelled) {
+            setGameRoomError(getApiErrorMessage(error));
+          }
+        }
+      };
+
+      void loadAcceptedGameRoom();
+      return () => {
+        cancelled = true;
+      };
     }
 
     const userNickname = localStorage.getItem('billiards_nickname') || '사용자';
@@ -246,7 +342,37 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     ]);
     setIsLobby(true);
     navigate(location.pathname, { replace: true, state: null });
-  }, [location.pathname, location.state, navigate]);
+  }, [applyGameRoomToLobby, location.pathname, location.state, navigate]);
+
+  useEffect(() => {
+    if (!isLobby || !gameRoomId) {
+      return;
+    }
+
+    let cancelled = false;
+    const synchronizeGameRoom = async () => {
+      try {
+        const gameRoom = await getGameRoom(gameRoomId);
+        if (!cancelled) {
+          applyGameRoomToLobby(gameRoom);
+          setGameRoomError(null);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setGameRoomError(getApiErrorMessage(error));
+        }
+      }
+    };
+
+    const intervalId = window.setInterval(() => {
+      void synchronizeGameRoom();
+    }, 3000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [applyGameRoomToLobby, gameRoomId, isLobby]);
 
   const handleConfirmResume = () => {
     if (!resumeData) return;
@@ -337,76 +463,70 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     };
   }, [isPlaying, isPaused, showFinishedModal, showOrderSelection, activePlayerIndex, enableShotClock, shotClockLimit]);
 
-  // Create virtual game lobby with invitations
-  const handleStartRealtimeGame = (e: React.FormEvent) => {
+  // Create a persisted game room before opening the lobby.
+  const handleStartRealtimeGame = async (e: React.FormEvent) => {
     e.preventDefault();
     cueClickSound();
+    setIsGameRoomCreating(true);
+    setGameRoomError(null);
 
-    // Create unique random room ID prefix
-    const randomCode = 'B-' + Math.floor(100 + Math.random() * 900) + '-' + Math.floor(1000 + Math.random() * 9000);
-    setLobbyCode(randomCode);
+    const handicap = type === '3-Cushion'
+      ? parseInt(localStorage.getItem('billiards_dama3') || '200', 10)
+      : parseInt(localStorage.getItem('billiards_dama4') || '250', 10);
+    const hostTargetScore = Math.max(5, Math.floor(handicap / 10));
 
-    const isTeamMode = playerCount === 4 && mode === 'Team';
-    const defaultTarget = type === '3-Cushion' ? 15 : 20;
-
-    const initialLobby: any[] = [];
-    
-    // Player 1 (나) is the Host, joined and ready by default
-    initialLobby.push({
-      id: 1,
-      name: isTeamMode ? p1Name || '플레이어 1' : p1Name || '플레이어 1',
-      role: '방장',
-      isJoined: true,
-      isReady: true,
-      cueBallColor: 'white',
-      targetScore: defaultTarget,
-      isMe: true
-    });
-
-    // Player 2 (상대)
-    initialLobby.push({
-      id: 2,
-      name: isTeamMode ? '상대' : '상대 (플레이어 2)',
-      role: '참가자',
-      isJoined: false,
-      isReady: false,
-      cueBallColor: 'yellow',
-      targetScore: defaultTarget,
-      isMe: false
-    });
-
-    if (playerCount >= 3) {
-      initialLobby.push({
-        id: 3,
-        name: isTeamMode ? '동료' : '플레이어 3',
-        role: '참가자',
-        isJoined: false,
-        isReady: false,
-        cueBallColor: 'red',
-        targetScore: defaultTarget,
-        isMe: false
+    try {
+      const gameRoom = await createGameRoom({
+        name: roomName.trim(),
+        gameType: type,
+        gameMode: mode,
+        playerCapacity: playerCount,
+        hostTargetScore,
       });
+
+      applyGameRoomToLobby(gameRoom);
+      setP1Target(hostTargetScore);
+      setLobbyLogs([
+        { id: `room-${gameRoom.roomId}`, text: `${gameRoom.name} 게임방이 생성되었습니다.`, time: '방금 전' },
+      ]);
+      setInvitedFriendIds([]);
+      setIsLobby(true);
+    } catch (error) {
+      setGameRoomError(getApiErrorMessage(error));
+    } finally {
+      setIsGameRoomCreating(false);
+    }
+  };
+
+  const handleCopyLobbyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(lobbyCode);
+      setCopySuccess(true);
+      window.setTimeout(() => setCopySuccess(false), 1500);
+    } catch {
+      setGameRoomError('입장 코드를 복사하지 못했습니다.');
+    }
+  };
+
+  const handleExitLobby = async () => {
+    if (gameRoomId && isGameRoomHost) {
+      try {
+        await cancelGameRoom(gameRoomId);
+      } catch (error) {
+        setGameRoomError(getApiErrorMessage(error));
+        setShowExitLobbyConfirm(false);
+        return;
+      }
     }
 
-    if (playerCount === 4) {
-      initialLobby.push({
-        id: 4,
-        name: isTeamMode ? '상대 2' : '플레이어 4',
-        role: '참가자',
-        isJoined: false,
-        isReady: false,
-        cueBallColor: 'blue',
-        targetScore: defaultTarget,
-        isMe: false
-      });
-    }
-
-    setLobbyPlayers(initialLobby);
-    
+    setGameRoomId(null);
+    setLobbyCode('');
+    setLobbyPlayers([]);
     setLobbyLogs([]);
     setInvitedFriendIds([]);
-
-    setIsLobby(true);
+    setIsGameRoomHost(false);
+    setIsLobby(false);
+    setShowExitLobbyConfirm(false);
   };
 
   // Modify individual handicaps/targets right in the lobby
@@ -531,6 +651,11 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   };
 
   const handleInviteFriend = async (friend: BilliardFriend) => {
+    if (!gameRoomId) {
+      setBilliardFriendsError('게임방 정보를 찾을 수 없습니다. 게임방을 다시 생성해 주세요.');
+      return;
+    }
+
     const openSlotCount = lobbyPlayers.filter((player) => !player.isJoined).length;
     if (invitedFriendIds.length >= openSlotCount) {
       alert('초대를 보낸 친구의 응답을 기다리고 있습니다.');
@@ -542,7 +667,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setBilliardFriendsError(null);
 
     try {
-      await createGameInvitation(friend.id, type);
+      await createGameInvitation(friend.id, type, gameRoomId);
       setInvitedFriendIds((current) => [...current, friend.id]);
       setLobbyLogs((current) => [
         ...current,
@@ -909,6 +1034,23 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
             <form onSubmit={handleStartRealtimeGame} className="space-y-6 text-left relative z-10 text-emerald-50">
 
+              <div>
+                <label htmlFor="game-room-name" className="block text-xs font-bold text-emerald-400/85 uppercase tracking-widest mb-2">
+                  게임방 이름
+                </label>
+                <input
+                  id="game-room-name"
+                  type="text"
+                  required
+                  maxLength={50}
+                  value={roomName}
+                  onChange={(event) => setRoomName(event.target.value)}
+                  disabled={isGameRoomCreating}
+                  className="w-full bg-[#144b3c] border border-[#1d6352] rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:border-emerald-400 disabled:opacity-60"
+                  placeholder="게임방 이름을 입력하세요"
+                />
+              </div>
+
               {/* 경기 방식 설정 (개인전 vs 팀전) */}
               <div>
                 <label className="block text-xs font-bold text-[#e9a65a] uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
@@ -1035,13 +1177,24 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 </div>
               )}
 
+              {gameRoomError && (
+                <p className="text-xs font-semibold text-rose-200" role="alert">
+                  {gameRoomError}
+                </p>
+              )}
+
               {/* Start Match button */}
               <button
                 type="submit"
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-[#0a3d2e] font-black py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-base mt-2 cursor-pointer"
+                disabled={isGameRoomCreating}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 text-[#0a3d2e] font-black py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-base mt-2 cursor-pointer"
               >
-                <Play size={18} fill="currentColor" />
-                실시간 경기 예약 및 게임방 입장
+                {isGameRoomCreating ? (
+                  <RefreshCw size={18} className="animate-spin" />
+                ) : (
+                  <Play size={18} fill="currentColor" />
+                )}
+                {isGameRoomCreating ? '게임방 생성 중...' : '실시간 경기 예약 및 게임방 입장'}
               </button>
             </form>
           </div>
@@ -1074,6 +1227,25 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
             <p className="text-emerald-100/60 mt-1 font-medium text-xs">
               대기방에 동료 및 상대 선수가 하나둘 접속하고 있습니다. 모든 선수가 접속 완료하면 경기를 시작할 수 있습니다.
             </p>
+            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+              <span className="border border-emerald-400/20 bg-[#0b3c2e] px-3 py-2 font-bold text-emerald-100">
+                {roomName}
+              </span>
+              <button
+                type="button"
+                onClick={() => void handleCopyLobbyCode()}
+                className="inline-flex items-center gap-1.5 border border-amber-400/25 bg-amber-400/10 px-3 py-2 font-mono font-black text-amber-200 transition-colors hover:bg-amber-400/15"
+                title="입장 코드 복사"
+              >
+                {copySuccess ? <Check size={13} /> : <Copy size={13} />}
+                {copySuccess ? '복사됨' : lobbyCode}
+              </button>
+            </div>
+            {gameRoomError && (
+              <p className="mt-3 text-xs font-semibold text-rose-200" role="alert">
+                {gameRoomError}
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -2048,10 +2220,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         confirmText="완전히 나가기"
         cancelText="계속 대기하기"
         isDanger={true}
-        onConfirm={() => {
-          setIsLobby(false);
-          setShowExitLobbyConfirm(false);
-        }}
+        onConfirm={() => void handleExitLobby()}
         onCancel={() => setShowExitLobbyConfirm(false)}
       />
 
