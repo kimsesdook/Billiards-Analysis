@@ -22,7 +22,7 @@ public class RedisWebSocketTicketStore implements WebSocketTicketStore {
 	private static final String KEY_PREFIX = "billiards:websocket-ticket:";
 
 	private final StringRedisTemplate redisTemplate;
-	private final ObjectMapper objectMapper;
+	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Override
 	public void save(String ticketHash, WebSocketTicketPayload payload, Duration timeToLive) {
