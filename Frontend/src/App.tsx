@@ -89,6 +89,7 @@ import {
   type NotificationItem,
 } from './api/notifications';
 import { connectNotificationSocket } from './api/realtimeNotifications';
+import { issueNotificationWebSocketTicket } from './api/websocketTickets';
 import {
   AuthSession,
   AuthSessionPayload,
@@ -1076,7 +1077,7 @@ function AppContent() {
   }, [loadNotifications]);
 
   useEffect(() => {
-    if (!isLoggedIn || !authSession?.accessToken) {
+    if (!isLoggedIn) {
       return undefined;
     }
 
@@ -1084,40 +1085,56 @@ function AppContent() {
     let reconnectTimer: number | undefined;
     let closedByClient = false;
 
-    const connect = () => {
-      socket = connectNotificationSocket({
-        accessToken: authSession.accessToken,
-        onNotification: (notification) => {
-          const nextNotification = toAppNotification(notification);
-          setNotifications((prev) => [
-            nextNotification,
-            ...prev.filter((item) => item.id !== nextNotification.id),
-          ]);
+    const connect = async () => {
+      try {
+        const { ticket } = await issueNotificationWebSocketTicket();
+        if (closedByClient) {
+          return;
+        }
 
-          if (notification.type === 'FRIEND') {
-            void loadHeaderFriendState();
-          }
+        socket = connectNotificationSocket({
+          ticket,
+          onNotification: (notification) => {
+            const nextNotification = toAppNotification(notification);
+            setNotifications((prev) => [
+              nextNotification,
+              ...prev.filter((item) => item.id !== nextNotification.id),
+            ]);
 
-          if (notification.type === 'MATCH') {
-            void loadIncomingGameInvitations();
-          }
-        },
-        onClose: (event) => {
-          if (closedByClient) {
-            return;
-          }
+            if (notification.type === 'FRIEND') {
+              void loadHeaderFriendState();
+            }
 
-          if (event.code === 1008) {
-            handleAuthExpired();
-            return;
-          }
+            if (notification.type === 'MATCH') {
+              void loadIncomingGameInvitations();
+            }
+          },
+          onClose: (event) => {
+            if (closedByClient) {
+              return;
+            }
 
-          reconnectTimer = window.setTimeout(connect, 3000);
-        },
-      });
+            if (event.code === 1008) {
+              handleAuthExpired();
+              return;
+            }
+
+            reconnectTimer = window.setTimeout(() => void connect(), 3000);
+          },
+        });
+      } catch (error) {
+        if (closedByClient) {
+          return;
+        }
+        if (error instanceof ApiClientError && error.status === 401) {
+          handleAuthExpired();
+          return;
+        }
+        reconnectTimer = window.setTimeout(() => void connect(), 3000);
+      }
     };
 
-    connect();
+    void connect();
 
     return () => {
       closedByClient = true;
@@ -1127,7 +1144,6 @@ function AppContent() {
       socket?.close();
     };
   }, [
-    authSession?.accessToken,
     handleAuthExpired,
     isLoggedIn,
     loadHeaderFriendState,

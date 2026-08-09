@@ -13,6 +13,7 @@ import com.my.billiards.notification.repository.NotificationRepository;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,6 +31,7 @@ import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -92,7 +94,8 @@ class NotificationWebSocketIntegrationTest {
 		CompletableFuture<Void> connectedFuture = new CompletableFuture<>();
 		CompletableFuture<JsonNode> notificationFuture = new CompletableFuture<>();
 
-		WebSocketSession session = connectNotificationSocket(receiverToken, connectedFuture, notificationFuture);
+		String ticket = issueNotificationTicket(receiverToken);
+		WebSocketSession session = connectNotificationSocket(ticket, connectedFuture, notificationFuture);
 		try {
 			connectedFuture.get(3, TimeUnit.SECONDS);
 			sendFriendRequest(senderToken, receiverId);
@@ -107,14 +110,34 @@ class NotificationWebSocketIntegrationTest {
 		}
 	}
 
+	@Test
+	void rejectsReusedNotificationTicket() throws Exception {
+		String token = signUpAndLogin("receiver@example.com", "Receiver");
+		String ticket = issueNotificationTicket(token);
+		CompletableFuture<Void> connectedFuture = new CompletableFuture<>();
+		WebSocketSession session = connectNotificationSocket(
+			ticket,
+			connectedFuture,
+			new CompletableFuture<>()
+		);
+		connectedFuture.get(3, TimeUnit.SECONDS);
+		session.close();
+
+		assertThatThrownBy(() -> connectNotificationSocket(
+			ticket,
+			new CompletableFuture<>(),
+			new CompletableFuture<>()
+		)).isInstanceOf(ExecutionException.class);
+	}
+
 	private WebSocketSession connectNotificationSocket(
-		String token,
+		String ticket,
 		CompletableFuture<Void> connectedFuture,
 		CompletableFuture<JsonNode> notificationFuture
 	) throws Exception {
-		String url = "ws://localhost:%d/ws/notifications?token=%s".formatted(
+		String url = "ws://localhost:%d/ws/notifications?ticket=%s".formatted(
 			port,
-			URLEncoder.encode(token, StandardCharsets.UTF_8)
+			URLEncoder.encode(ticket, StandardCharsets.UTF_8)
 		);
 
 		return new StandardWebSocketClient()
@@ -132,6 +155,17 @@ class NotificationWebSocketIntegrationTest {
 				}
 			}, url)
 			.get(3, TimeUnit.SECONDS);
+	}
+
+	private String issueNotificationTicket(String token) throws Exception {
+		String response = mockMvc.perform(post("/api/notifications/websocket-ticket")
+				.header(HttpHeaders.AUTHORIZATION, bearer(token)))
+			.andExpect(status().isOk())
+			.andReturn()
+			.getResponse()
+			.getContentAsString();
+
+		return extractString(response, "ticket");
 	}
 
 	private void sendFriendRequest(String token, Long targetMemberId) throws Exception {

@@ -2,6 +2,9 @@ package com.my.billiards.game.service;
 
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.websocket.WebSocketTicketPurpose;
+import com.my.billiards.common.websocket.WebSocketTicketResponse;
+import com.my.billiards.common.websocket.WebSocketTicketService;
 import com.my.billiards.game.domain.GameMode;
 import com.my.billiards.game.domain.GameRecord;
 import com.my.billiards.game.domain.GameRoom;
@@ -50,6 +53,7 @@ public class GameRoomService {
     private final GameRecordRepository gameRecordRepository;
     private final MemberRepository memberRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final WebSocketTicketService webSocketTicketService;
 
     @Transactional
     public GameRoomResponse create(Long memberId, GameRoomCreateRequest request) {
@@ -80,6 +84,12 @@ public class GameRoomService {
     @Transactional(readOnly = true)
     public GameRoomResponse findById(Long memberId, Long roomId) {
         return GameRoomResponse.from(getAccessibleRoom(memberId, roomId));
+    }
+
+    @Transactional(readOnly = true)
+    public WebSocketTicketResponse issueWebSocketTicket(Long memberId, Long roomId) {
+        getAccessibleRoom(memberId, roomId);
+        return webSocketTicketService.issue(memberId, WebSocketTicketPurpose.GAME_ROOM, roomId);
     }
 
     @Transactional

@@ -1,6 +1,7 @@
 package com.my.billiards.game.websocket;
 
-import com.my.billiards.common.websocket.WebSocketTokenAuthenticator;
+import com.my.billiards.common.websocket.WebSocketTicketAuthenticator;
+import com.my.billiards.common.websocket.WebSocketTicketPurpose;
 import com.my.billiards.game.repository.GameRoomRepository;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
@@ -15,7 +16,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 @RequiredArgsConstructor
 public class GameRoomWebSocketHandshakeInterceptor implements HandshakeInterceptor {
 
-    private final WebSocketTokenAuthenticator tokenAuthenticator;
+    private final WebSocketTicketAuthenticator ticketAuthenticator;
     private final GameRoomRepository gameRoomRepository;
 
     @Override
@@ -25,13 +26,17 @@ public class GameRoomWebSocketHandshakeInterceptor implements HandshakeIntercept
         WebSocketHandler wsHandler,
         Map<String, Object> attributes
     ) {
-        Long memberId = tokenAuthenticator.authenticate(request, response);
-        if (memberId == null) {
-            return false;
-        }
-
         Long roomId = resolveRoomId(request, response);
         if (roomId == null) {
+            return false;
+        }
+        Long memberId = ticketAuthenticator.authenticate(
+            request,
+            response,
+            WebSocketTicketPurpose.GAME_ROOM,
+            roomId
+        );
+        if (memberId == null) {
             return false;
         }
         if (!gameRoomRepository.existsByIdAndParticipants_Member_Id(roomId, memberId)) {
