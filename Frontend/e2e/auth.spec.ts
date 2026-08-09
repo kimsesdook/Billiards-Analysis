@@ -31,6 +31,11 @@ test('a new member can sign up, log out, and log in again', async ({ page }, tes
   await expect(page).toHaveURL(/\/dashboard$/);
   await expect(page.getByRole('heading', { name: '나의 대시보드' })).toBeVisible();
 
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('billiards_auth_session'))).toBeNull();
+  await page.reload();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page.getByRole('heading', { name: '나의 대시보드' })).toBeVisible();
+
   await page.getByRole('button', { name: new RegExp(nickname) }).click();
   await page.getByRole('button', { name: '로그아웃', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);

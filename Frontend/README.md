@@ -21,6 +21,15 @@ VITE_API_BASE_URL="http://localhost:8080"
 
 Only the API base URL belongs in frontend environment files. Gemini API keys are never used or exposed by the frontend.
 
+## Authentication Session
+
+- Access tokens are kept in memory and are never written to `localStorage`.
+- The backend refresh cookie is `HttpOnly`; browser requests include it with `credentials: include`, but frontend JavaScript cannot read it.
+- A non-secret `billiards_has_refresh_session` hint decides whether startup session restoration is needed.
+- A protected API `401` triggers one shared refresh request, then retries the original request once with the new access token.
+- Concurrent `401` responses share the same refresh promise to avoid refresh-token reuse detection.
+- Logout revokes the backend session before clearing frontend authentication state.
+
 ## Commands
 
 ```powershell
@@ -44,6 +53,6 @@ cd Frontend
 npm run test:e2e
 ```
 
-Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, and retains failure traces and screenshots for seven days.
+Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, verifies cookie-based session restoration after a page reload, and retains failure traces and screenshots for seven days.
 
 The full project setup, architecture, Docker commands, and backend configuration are documented in the [root README](../README.md).
