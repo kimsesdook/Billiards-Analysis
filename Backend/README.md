@@ -99,13 +99,25 @@ $env:DB_PASSWORD="your_password"
 $env:JWT_SECRET="change-this-to-a-long-random-secret-value"
 ```
 
-WebSocket ticket issuance also requires Redis. Start only the ephemeral Redis service from the project root before running the backend locally:
+Rate limiting and WebSocket ticket issuance require Redis. Start only the ephemeral Redis service from the project root before running the backend locally:
 
 ```powershell
 docker compose up -d redis
 ```
 
-The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses an in-memory ticket store and does not require Redis.
+The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses in-memory ticket and rate-limit stores and does not require Redis.
+
+## Distributed Rate Limits
+
+Redis executes each increment and expiration assignment in one Lua script, so multiple backend instances share the same counters without lost updates. Account emails and client addresses are SHA-256 hashed before becoming Redis keys.
+
+- Login: 5 attempts per normalized account and 30 attempts per client address in 5 minutes
+- WebSocket tickets: 30 tickets per authenticated member per minute
+- AI generation: 3 actual model-call attempts per authenticated member per day; cached reports do not consume the limit
+- Rejected requests return `429 RATE_LIMIT_001` and a `Retry-After` response header
+- Redis failures return `503 RATE_LIMIT_002` instead of silently bypassing protection
+
+All limits and windows can be overridden with the `RATE_LIMIT_*` environment variables defined in `application.yaml`.
 
 Run the backend locally:
 
@@ -237,6 +249,7 @@ The backend currently includes:
 - JWT-protected game invitation APIs with friend-only authorization and expiration handling
 - Notification REST APIs and single-use-ticket WebSocket delivery
 - Redis-backed game room WebSocket tickets scoped to each room's participants
+- Redis-backed distributed limits for login, WebSocket ticket, and AI generation abuse prevention
 - Versioned live game state with host-only updates and stale-write conflict detection
 - Transactional game-room completion with participant record generation and idempotent retries
 - Docker Compose development environment

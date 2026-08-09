@@ -9,6 +9,7 @@ import com.my.billiards.ai.dto.AiWeeklyReportResponse;
 import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.ratelimit.RateLimitService;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.WeeklyGameReportResponse;
@@ -33,6 +34,7 @@ public class AiWeeklyReportService {
 	private final GameRecordService gameRecordService;
 	private final ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
 	private final AiReportProperties aiReportProperties;
+	private final RateLimitService rateLimitService;
 	private final ConcurrentMap<String, Object> generationLocks = new ConcurrentHashMap<>();
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -82,7 +84,9 @@ public class AiWeeklyReportService {
 		}
 
 		GameStatisticsResponse statistics = gameRecordService.getStatistics(memberId, type, RECENT_GAME_COUNT);
-		AiWeeklyAnalysis analysis = getAnalysisGenerator().generate(weeklyReport, statistics);
+		WeeklyAiAnalysisGenerator analysisGenerator = getAnalysisGenerator();
+		rateLimitService.checkAiGeneration(memberId);
+		AiWeeklyAnalysis analysis = analysisGenerator.generate(weeklyReport, statistics);
 		validateAnalysis(analysis);
 
 		WeeklyAiReport savedReport = weeklyAiReportRepository.save(WeeklyAiReport.create(

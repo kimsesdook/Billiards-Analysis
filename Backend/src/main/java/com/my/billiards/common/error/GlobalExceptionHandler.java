@@ -1,8 +1,10 @@
 package com.my.billiards.common.error;
 
+import com.my.billiards.common.ratelimit.RateLimitExceededException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -12,6 +14,16 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice
 @Slf4j
 public class GlobalExceptionHandler {
+
+	@ExceptionHandler(RateLimitExceededException.class)
+	public ResponseEntity<ErrorResponse> handleRateLimitExceeded(RateLimitExceededException exception) {
+		ErrorCode errorCode = exception.getErrorCode();
+		log.warn("Handled rate limit exception: retryAfterSeconds={}", exception.getRetryAfterSeconds());
+		return ResponseEntity
+			.status(errorCode.getStatus())
+			.header(HttpHeaders.RETRY_AFTER, Long.toString(exception.getRetryAfterSeconds()))
+			.body(ErrorResponse.of(errorCode));
+	}
 
 	@ExceptionHandler(BilliardsException.class)
 	public ResponseEntity<ErrorResponse> handleBilliardsException(BilliardsException exception) {

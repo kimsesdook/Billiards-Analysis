@@ -62,5 +62,13 @@ app:
     refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
   websocket-ticket:
     expiration-seconds: ${WEBSOCKET_TICKET_EXPIRATION_SECONDS:30}
+  rate-limit:
+    login-account-max-requests: ${RATE_LIMIT_LOGIN_ACCOUNT_MAX_REQUESTS:5}
+    login-address-max-requests: ${RATE_LIMIT_LOGIN_ADDRESS_MAX_REQUESTS:30}
+    login-window-seconds: ${RATE_LIMIT_LOGIN_WINDOW_SECONDS:300}
+    websocket-ticket-max-requests: ${RATE_LIMIT_WEBSOCKET_TICKET_MAX_REQUESTS:30}
+    websocket-ticket-window-seconds: ${RATE_LIMIT_WEBSOCKET_TICKET_WINDOW_SECONDS:60}
+    ai-generation-max-requests: ${RATE_LIMIT_AI_GENERATION_MAX_REQUESTS:3}
+    ai-generation-window-seconds: ${RATE_LIMIT_AI_GENERATION_WINDOW_SECONDS:86400}
   ai-report:
     model-name: ${GEMINI_MODEL:gemini-2.5-flash}

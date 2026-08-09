@@ -1,5 +1,6 @@
 package com.my.billiards.common.websocket;
 
+import com.my.billiards.common.ratelimit.RateLimitService;
 import com.my.billiards.config.BilliardsProperties;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -20,6 +21,7 @@ public class WebSocketTicketService {
 
 	private final WebSocketTicketStore ticketStore;
 	private final BilliardsProperties properties;
+	private final RateLimitService rateLimitService;
 	private final SecureRandom secureRandom = new SecureRandom();
 
 	public WebSocketTicketResponse issue(
@@ -28,6 +30,7 @@ public class WebSocketTicketService {
 		Long roomId
 	) {
 		validateScope(purpose, roomId);
+		rateLimitService.checkWebSocketTicket(memberId);
 		long expirationSeconds = properties.getWebSocketTicket().getExpirationSeconds();
 		if (expirationSeconds <= 0) {
 			throw new IllegalStateException("WebSocket ticket expiration must be positive.");

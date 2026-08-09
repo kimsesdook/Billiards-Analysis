@@ -15,6 +15,7 @@ import com.my.billiards.ai.dto.AiWeeklyReportResponse;
 import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.ratelimit.RateLimitService;
 import com.my.billiards.game.domain.GameTrend;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
@@ -51,6 +52,9 @@ class AiWeeklyReportServiceTest {
 	@Mock
 	private ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
 
+	@Mock
+	private RateLimitService rateLimitService;
+
 	private AiWeeklyReportService aiWeeklyReportService;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final AiWeeklyAnalysis analysis = new AiWeeklyAnalysis(
@@ -69,7 +73,8 @@ class AiWeeklyReportServiceTest {
 			weeklyAiReportRepository,
 			gameRecordService,
 			weeklyAiAnalysisGeneratorProvider,
-			properties
+			properties,
+			rateLimitService
 		);
 	}
 
@@ -93,6 +98,7 @@ class AiWeeklyReportServiceTest {
 		assertThat(result.modelName()).isEqualTo("gemini-2.5-flash");
 		assertThat(result.analysis()).isEqualTo(analysis);
 		verify(weeklyAiAnalysisGenerator).generate(any(), any());
+		verify(rateLimitService).checkAiGeneration(MEMBER_ID);
 		verify(weeklyAiReportRepository).save(any(WeeklyAiReport.class));
 	}
 
@@ -118,6 +124,7 @@ class AiWeeklyReportServiceTest {
 		assertThat(result.analysis()).isEqualTo(analysis);
 		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
 		verify(weeklyAiReportRepository, never()).save(any());
+		verify(rateLimitService, never()).checkAiGeneration(any());
 	}
 
 	@Test

@@ -8,7 +8,9 @@ import com.my.billiards.auth.service.AuthSessionResult;
 import com.my.billiards.auth.service.AuthService;
 import com.my.billiards.auth.token.RefreshTokenCookieFactory;
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.ratelimit.RateLimitService;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -29,6 +31,7 @@ public class AuthController {
 
 	private final AuthService authService;
 	private final RefreshTokenCookieFactory refreshTokenCookieFactory;
+	private final RateLimitService rateLimitService;
 
 	@PostMapping("/signup")
 	@ResponseStatus(HttpStatus.CREATED)
@@ -37,7 +40,11 @@ public class AuthController {
 	}
 
 	@PostMapping("/login")
-	public ResponseEntity<ApiResponse<LoginResponse>> login(@Valid @RequestBody LoginRequest request) {
+	public ResponseEntity<ApiResponse<LoginResponse>> login(
+		@Valid @RequestBody LoginRequest request,
+		HttpServletRequest httpRequest
+	) {
+		rateLimitService.checkLogin(request.email(), httpRequest.getRemoteAddr());
 		return authenticationResponse(authService.login(request));
 	}
 

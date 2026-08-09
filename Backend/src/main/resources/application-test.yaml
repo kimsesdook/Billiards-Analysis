@@ -25,3 +25,10 @@ management:
   health:
     redis:
       enabled: false
+
+app:
+  rate-limit:
+    login-account-max-requests: 10000
+    login-address-max-requests: 10000
+    websocket-ticket-max-requests: 10000
+    ai-generation-max-requests: 10000
