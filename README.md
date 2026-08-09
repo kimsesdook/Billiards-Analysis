@@ -12,6 +12,8 @@
 
 ## Key Features
 
+- Server-managed refresh sessions with hashed token storage, rotation, reuse detection, and HttpOnly cookies
+
 - 회원가입, 로그인, JWT 기반 인증과 프로필 관리
 - 3쿠션과 4구 경기 기록 생성, 조회, 수정, 삭제, 검색, 페이지네이션
 - 종목별 통계, 평균 추세, 상대 전적, 주간 경기 리포트
@@ -146,6 +148,10 @@ erDiagram
 ## Technical Decisions
 
 ### Authentication And Data Isolation
+
+- Access tokens are short-lived API credentials, while refresh tokens are opaque random values stored only in an `HttpOnly`, `SameSite=Strict` cookie.
+- The database stores only SHA-256 refresh-token hashes. Every refresh rotates the token, and reuse of an older token revokes its complete login-session family.
+- Logout revokes the server-side session before expiring the browser cookie.
 
 - Spring Security와 JWT로 보호 API를 구성했습니다.
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.

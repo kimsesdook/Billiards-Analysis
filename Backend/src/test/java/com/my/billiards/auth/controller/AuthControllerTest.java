@@ -1,5 +1,9 @@
 package com.my.billiards.auth.controller;
 
+import com.my.billiards.auth.domain.RefreshToken;
+import com.my.billiards.auth.repository.RefreshTokenRepository;
+import com.my.billiards.auth.token.RefreshTokenCodec;
+import com.my.billiards.auth.token.RefreshTokenCookieFactory;
 import com.my.billiards.friend.repository.FriendshipRepository;
 import com.my.billiards.game.repository.GameRecordRepository;
 import com.my.billiards.game.repository.GameRoomParticipantRepository;
@@ -9,15 +13,19 @@ import com.my.billiards.member.domain.Member;
 import com.my.billiards.member.repository.MemberRepository;
 import com.my.billiards.notice.repository.NoticeRepository;
 import com.my.billiards.notification.repository.NotificationRepository;
+import jakarta.servlet.http.Cookie;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -59,8 +67,15 @@ class AuthControllerTest {
 	@Autowired
 	private PasswordEncoder passwordEncoder;
 
+	@Autowired
+	private RefreshTokenRepository refreshTokenRepository;
+
+	@Autowired
+	private RefreshTokenCodec refreshTokenCodec;
+
 	@BeforeEach
 	void setUp() {
+		refreshTokenRepository.deleteAll();
 		noticeRepository.deleteAll();
 		gameRecordRepository.deleteAll();
 		notificationRepository.deleteAll();
@@ -133,7 +148,7 @@ class AuthControllerTest {
 	void loginIssuesJwtAccessToken() throws Exception {
 		signUp("player@example.com");
 
-		mockMvc.perform(post("/api/auth/login")
+		MvcResult result = mockMvc.perform(post("/api/auth/login")
 				.contentType(MediaType.APPLICATION_JSON)
 				.content("""
 					{
@@ -147,7 +162,109 @@ class AuthControllerTest {
 			.andExpect(jsonPath("$.data.tokenType").value("Bearer"))
 			.andExpect(jsonPath("$.data.expiresInSeconds").value(3600))
 			.andExpect(jsonPath("$.data.member.email").value("player@example.com"))
-			.andExpect(jsonPath("$.data.member.role").value("USER"));
+			.andExpect(jsonPath("$.data.member.role").value("USER"))
+			.andReturn();
+
+		String setCookie = result.getResponse().getHeader(HttpHeaders.SET_COOKIE);
+		String rawRefreshToken = extractRefreshToken(setCookie);
+
+		assertThat(result.getResponse().getHeader(HttpHeaders.CACHE_CONTROL)).isEqualTo("no-store");
+		assertThat(setCookie)
+			.contains("HttpOnly")
+			.contains("SameSite=Strict")
+			.contains("Path=/api/auth");
+		assertThat(rawRefreshToken).isNotBlank();
+		assertThat(refreshTokenRepository.findAll())
+			.singleElement()
+			.satisfies(token -> {
+				assertThat(token.getTokenHash()).isEqualTo(refreshTokenCodec.hash(rawRefreshToken));
+				assertThat(token.getTokenHash()).doesNotContain(rawRefreshToken);
+				assertThat(token.getRevokedAt()).isNull();
+			});
+	}
+
+	@Test
+	void refreshRotatesTokenAndIssuesNewAccessToken() throws Exception {
+		signUp("player@example.com");
+		String firstRefreshToken = extractRefreshToken(login("player@example.com"));
+
+		MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh")
+				.cookie(refreshCookie(firstRefreshToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.data.accessToken").isString())
+			.andExpect(jsonPath("$.data.member.email").value("player@example.com"))
+			.andReturn();
+
+		String secondRefreshToken = extractRefreshToken(refreshResult);
+		assertThat(secondRefreshToken).isNotEqualTo(firstRefreshToken);
+
+		List<RefreshToken> tokens = refreshTokenRepository.findAll();
+		assertThat(tokens).hasSize(2);
+		assertThat(tokens)
+			.filteredOn(token -> token.getTokenHash().equals(refreshTokenCodec.hash(firstRefreshToken)))
+			.singleElement()
+			.satisfies(token -> {
+				assertThat(token.getRevokedAt()).isNotNull();
+				assertThat(token.getReplacedByTokenHash())
+					.isEqualTo(refreshTokenCodec.hash(secondRefreshToken));
+			});
+		assertThat(tokens)
+			.filteredOn(token -> token.getTokenHash().equals(refreshTokenCodec.hash(secondRefreshToken)))
+			.singleElement()
+			.satisfies(token -> assertThat(token.getRevokedAt()).isNull());
+	}
+
+	@Test
+	void reuseOfRotatedTokenRevokesTheWholeSession() throws Exception {
+		signUp("player@example.com");
+		String firstRefreshToken = extractRefreshToken(login("player@example.com"));
+		MvcResult refreshResult = mockMvc.perform(post("/api/auth/refresh")
+				.cookie(refreshCookie(firstRefreshToken)))
+			.andExpect(status().isOk())
+			.andReturn();
+		String secondRefreshToken = extractRefreshToken(refreshResult);
+
+		mockMvc.perform(post("/api/auth/refresh")
+				.cookie(refreshCookie(firstRefreshToken)))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+
+		mockMvc.perform(post("/api/auth/refresh")
+				.cookie(refreshCookie(secondRefreshToken)))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+
+		assertThat(refreshTokenRepository.findAll())
+			.allSatisfy(token -> assertThat(token.getRevokedAt()).isNotNull());
+	}
+
+	@Test
+	void logoutRevokesSessionAndClearsCookie() throws Exception {
+		signUp("player@example.com");
+		String refreshToken = extractRefreshToken(login("player@example.com"));
+
+		MvcResult logoutResult = mockMvc.perform(post("/api/auth/logout")
+				.cookie(refreshCookie(refreshToken)))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.success").value(true))
+			.andReturn();
+
+		assertThat(logoutResult.getResponse().getHeader(HttpHeaders.SET_COOKIE))
+			.contains(RefreshTokenCookieFactory.COOKIE_NAME + "=")
+			.contains("Max-Age=0")
+			.contains("HttpOnly");
+
+		mockMvc.perform(post("/api/auth/refresh")
+				.cookie(refreshCookie(refreshToken)))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
+	}
+
+	@Test
+	void rejectRefreshWithoutCookie() throws Exception {
+		mockMvc.perform(post("/api/auth/refresh"))
+			.andExpect(status().isUnauthorized())
+			.andExpect(jsonPath("$.code").value("AUTH_001"));
 	}
 
 	@Test
@@ -208,5 +325,34 @@ class AuthControllerTest {
 					}
 					""".formatted(email)))
 			.andExpect(status().isCreated());
+	}
+
+	private MvcResult login(String email) throws Exception {
+		return mockMvc.perform(post("/api/auth/login")
+				.contentType(MediaType.APPLICATION_JSON)
+				.content("""
+					{
+					  "email": "%s",
+					  "password": "password123"
+					}
+					""".formatted(email)))
+			.andExpect(status().isOk())
+			.andReturn();
+	}
+
+	private Cookie refreshCookie(String value) {
+		return new Cookie(RefreshTokenCookieFactory.COOKIE_NAME, value);
+	}
+
+	private String extractRefreshToken(MvcResult result) {
+		return extractRefreshToken(result.getResponse().getHeader(HttpHeaders.SET_COOKIE));
+	}
+
+	private String extractRefreshToken(String setCookie) {
+		assertThat(setCookie).isNotNull();
+		String prefix = RefreshTokenCookieFactory.COOKIE_NAME + "=";
+		int valueStart = setCookie.indexOf(prefix) + prefix.length();
+		int valueEnd = setCookie.indexOf(';', valueStart);
+		return setCookie.substring(valueStart, valueEnd);
 	}
 }
