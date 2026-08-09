@@ -78,7 +78,8 @@ import {
   type GameInvitation,
 } from './api/gameInvitations';
 import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
-import { ApiClientError, addUnauthorizedListener, getApiErrorMessage } from './api/client';
+import { logout, restoreSession } from './api/auth';
+import { ApiClientError, addUnauthorizedListener, getApiErrorMessage, refreshAuthSession } from './api/client';
 import {
   deleteAllNotifications,
   deleteNotification,
@@ -94,7 +95,9 @@ import {
   clearAuthSession,
   getAuthSessionRemainingMs,
   getStoredAuthSession,
+  hasRefreshSessionHint,
   saveAuthSession,
+  subscribeAuthSession,
   updateStoredAuthMember,
 } from './api/authStorage';
 
@@ -243,6 +246,7 @@ function AppContent() {
   const [statisticsError, setStatisticsError] = useState<string | null>(null);
   const [authSession, setAuthSession] = useState<AuthSession | null>(() => getStoredAuthSession());
   const [isLoggedIn, setIsLoggedIn] = useState(() => Boolean(authSession));
+  const [isAuthRestoring, setIsAuthRestoring] = useState(() => hasRefreshSessionHint());
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isFriendsOpen, setIsFriendsOpen] = useState(false);
@@ -624,10 +628,17 @@ function AppContent() {
     }
   };
 
-  const handleWithdraw = (e: React.FormEvent) => {
+  const handleWithdraw = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!withdrawConfirmed) {
       alert('동의 항목에 체크해야 진행할 수 있습니다.');
+      return;
+    }
+
+    try {
+      await logout();
+    } catch (error) {
+      alert(getApiErrorMessage(error));
       return;
     }
     
@@ -704,7 +715,49 @@ function AppContent() {
     setStatisticsError(null);
   }, []);
 
-  const handleLogout = useCallback(() => {
+  useEffect(() => subscribeAuthSession((session) => {
+    setAuthSession(session);
+    setIsLoggedIn(Boolean(session));
+    if (session) {
+      setUserName(session.member.nickname);
+      setUserNickname(session.member.nickname);
+    }
+  }), []);
+
+  useEffect(() => {
+    if (!hasRefreshSessionHint()) {
+      setIsAuthRestoring(false);
+      return undefined;
+    }
+
+    let active = true;
+
+    const restore = async () => {
+      try {
+        await restoreSession();
+      } catch {
+        // A temporary backend failure should not erase the HttpOnly refresh cookie.
+      } finally {
+        if (active) {
+          setIsAuthRestoring(false);
+        }
+      }
+    };
+
+    void restore();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleLogout = useCallback(async () => {
+    try {
+      await logout();
+    } catch (error) {
+      alert(getApiErrorMessage(error));
+      return;
+    }
+
     clearAuthSession();
     setAuthSession(null);
     setIsLoggedIn(false);
@@ -1262,11 +1315,17 @@ function AppContent() {
   useEffect(() => addUnauthorizedListener(handleAuthExpired), [handleAuthExpired]);
 
   useEffect(() => {
-    if (!authSession) return undefined;
+    if (!authSession || isAuthRestoring) return undefined;
 
-    const timeoutId = window.setTimeout(handleAuthExpired, getAuthSessionRemainingMs(authSession));
+    const timeoutId = window.setTimeout(() => {
+      void refreshAuthSession().catch((error) => {
+        if (error instanceof ApiClientError && error.status === 401) {
+          handleAuthExpired();
+        }
+      });
+    }, getAuthSessionRemainingMs(authSession));
     return () => window.clearTimeout(timeoutId);
-  }, [authSession, handleAuthExpired]);
+  }, [authSession, handleAuthExpired, isAuthRestoring]);
 
   const addRecord = async (newRecord: GameRecordDraft) => {
     const payload = fillMissingInningScores(newRecord);
@@ -1408,6 +1467,14 @@ function AppContent() {
       changeRate: Number(changeRate.toFixed(1)),
     };
   }, [filteredRecords, filter]);
+
+  if (isAuthRestoring) {
+    return (
+      <div className="min-h-screen bg-white flex items-center justify-center" role="status" aria-label="Restoring session">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-zinc-200 border-t-emerald-600" />
+      </div>
+    );
+  }
 
   const requireAuth = (element: React.ReactElement) => (
     isLoggedIn ? element : <Navigate to="/login" replace />

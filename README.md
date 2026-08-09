@@ -152,6 +152,8 @@ erDiagram
 - Access tokens are short-lived API credentials, while refresh tokens are opaque random values stored only in an `HttpOnly`, `SameSite=Strict` cookie.
 - The database stores only SHA-256 refresh-token hashes. Every refresh rotates the token, and reuse of an older token revokes its complete login-session family.
 - Logout revokes the server-side session before expiring the browser cookie.
+- The browser keeps access tokens in memory, restores sessions through the HttpOnly cookie after reload, and never persists access tokens in `localStorage`.
+- Concurrent API `401` responses share one refresh request before retrying each original request once.
 
 - Spring Security와 JWT로 보호 API를 구성했습니다.
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
@@ -229,7 +231,7 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Backend: Java 17, Gradle, Spring Boot tests
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
-- Full stack: Playwright signup, logout, and login E2E against Dockerized MySQL, backend, and frontend
+- Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, backend, and frontend
 
 The E2E job runs only after the backend, frontend, and Compose checks pass. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.
 

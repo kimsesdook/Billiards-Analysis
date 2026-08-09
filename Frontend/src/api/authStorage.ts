@@ -17,55 +17,25 @@ export type AuthSession = {
 export type AuthSessionPayload = Omit<AuthSession, 'savedAt' | 'expiresAt'>;
 
 const AUTH_STORAGE_KEY = 'billiards_auth_session';
+const AUTH_SESSION_HINT_KEY = 'billiards_has_refresh_session';
 const EXPIRY_SAFETY_MARGIN_MS = 5000;
-
-const isValidMember = (member: unknown): member is AuthMember => {
-  if (!member || typeof member !== 'object') return false;
-  const candidate = member as Partial<AuthMember>;
-
-  return (
-    typeof candidate.id === 'number'
-    && typeof candidate.email === 'string'
-    && typeof candidate.nickname === 'string'
-    && (candidate.role === 'USER' || candidate.role === 'ADMIN')
-  );
-};
+let currentAuthSession: AuthSession | null = null;
+const authSessionListeners = new Set<(session: AuthSession | null) => void>();
 
 export const isAuthSessionExpired = (session: AuthSession, now = Date.now()) =>
   now + EXPIRY_SAFETY_MARGIN_MS >= session.expiresAt;
 
 export const getAuthSessionRemainingMs = (session: AuthSession, now = Date.now()) =>
-  Math.max(0, session.expiresAt - now);
+  Math.max(0, session.expiresAt - now - EXPIRY_SAFETY_MARGIN_MS);
 
 export const getStoredAuthSession = (): AuthSession | null => {
-  const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-  if (!stored) return null;
-
-  try {
-    const parsed = JSON.parse(stored) as Partial<AuthSession>;
-    if (
-      !parsed.accessToken
-      || parsed.tokenType !== 'Bearer'
-      || typeof parsed.expiresInSeconds !== 'number'
-      || typeof parsed.savedAt !== 'number'
-      || typeof parsed.expiresAt !== 'number'
-      || !isValidMember(parsed.member)
-    ) {
-      clearAuthSession();
-      return null;
-    }
-
-    const session = parsed as AuthSession;
-    if (isAuthSessionExpired(session)) {
-      clearAuthSession();
-      return null;
-    }
-
-    return session;
-  } catch {
+  removeLegacyPersistedSession();
+  if (currentAuthSession && isAuthSessionExpired(currentAuthSession)) {
     clearAuthSession();
     return null;
   }
+
+  return currentAuthSession;
 };
 
 export const getStoredAccessToken = () => getStoredAuthSession()?.accessToken ?? null;
@@ -78,9 +48,12 @@ export const saveAuthSession = (session: AuthSessionPayload): AuthSession => {
     expiresAt: savedAt + session.expiresInSeconds * 1000,
   };
 
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(authSession));
-  localStorage.setItem('billiards_name', authSession.member.nickname);
-  localStorage.setItem('billiards_nickname', authSession.member.nickname);
+  removeLegacyPersistedSession();
+  currentAuthSession = authSession;
+  getBrowserStorage()?.setItem(AUTH_SESSION_HINT_KEY, 'true');
+  getBrowserStorage()?.setItem('billiards_name', authSession.member.nickname);
+  getBrowserStorage()?.setItem('billiards_nickname', authSession.member.nickname);
+  notifyAuthSessionListeners();
 
   return authSession;
 };
@@ -97,14 +70,46 @@ export const updateStoredAuthMember = (member: Partial<AuthMember>): AuthSession
     },
   };
 
-  localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextSession));
-  localStorage.setItem('billiards_nickname', nextSession.member.nickname);
+  currentAuthSession = nextSession;
+  getBrowserStorage()?.setItem('billiards_nickname', nextSession.member.nickname);
+  notifyAuthSessionListeners();
 
   return nextSession;
 };
 
 export const clearAuthSession = () => {
-  localStorage.removeItem(AUTH_STORAGE_KEY);
-  localStorage.removeItem('billiards_name');
-  localStorage.removeItem('billiards_nickname');
+  currentAuthSession = null;
+  const storage = getBrowserStorage();
+  storage?.removeItem(AUTH_STORAGE_KEY);
+  storage?.removeItem(AUTH_SESSION_HINT_KEY);
+  storage?.removeItem('billiards_name');
+  storage?.removeItem('billiards_nickname');
+  notifyAuthSessionListeners();
+};
+
+export const subscribeAuthSession = (listener: (session: AuthSession | null) => void) => {
+  authSessionListeners.add(listener);
+  return () => {
+    authSessionListeners.delete(listener);
+  };
+};
+
+export const hasRefreshSessionHint = () => (
+  getBrowserStorage()?.getItem(AUTH_SESSION_HINT_KEY) === 'true'
+);
+
+const getBrowserStorage = () => (
+  typeof localStorage === 'undefined' ? null : localStorage
+);
+
+const removeLegacyPersistedSession = () => {
+  const storage = getBrowserStorage();
+  if (storage?.getItem(AUTH_STORAGE_KEY)) {
+    storage.setItem(AUTH_SESSION_HINT_KEY, 'true');
+  }
+  storage?.removeItem(AUTH_STORAGE_KEY);
+};
+
+const notifyAuthSessionListeners = () => {
+  authSessionListeners.forEach((listener) => listener(currentAuthSession));
 };
