@@ -4,6 +4,8 @@ import com.my.billiards.auth.dto.LoginRequest;
 import com.my.billiards.auth.dto.LoginResponse;
 import com.my.billiards.auth.dto.SignUpRequest;
 import com.my.billiards.auth.dto.SignUpResponse;
+import com.my.billiards.auth.service.RefreshTokenService.IssuedRefreshToken;
+import com.my.billiards.auth.service.RefreshTokenService.RotationResult;
 import com.my.billiards.auth.token.JwtTokenProvider;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
@@ -23,6 +25,7 @@ public class AuthService {
 	private final MemberRepository memberRepository;
 	private final PasswordEncoder passwordEncoder;
 	private final JwtTokenProvider jwtTokenProvider;
+	private final RefreshTokenService refreshTokenService;
 
 	@Transactional
 	public SignUpResponse signUp(SignUpRequest request) {
@@ -40,8 +43,8 @@ public class AuthService {
 		return SignUpResponse.from(memberRepository.save(member));
 	}
 
-	@Transactional(readOnly = true)
-	public LoginResponse login(LoginRequest request) {
+	@Transactional
+	public AuthSessionResult login(LoginRequest request) {
 		Member member = memberRepository.findByEmail(normalizeEmail(request.email()))
 			.orElseThrow(this::invalidLogin);
 
@@ -53,7 +56,32 @@ public class AuthService {
 			throw new BilliardsException(ErrorCode.FORBIDDEN);
 		}
 
-		return LoginResponse.of(jwtTokenProvider.issue(member), member);
+		return createSession(member, refreshTokenService.issue(member));
+	}
+
+	public AuthSessionResult refresh(String rawRefreshToken) {
+		RotationResult rotation = refreshTokenService.rotate(rawRefreshToken);
+		if (!rotation.rotated()) {
+			throw new BilliardsException(ErrorCode.UNAUTHORIZED);
+		}
+
+		return new AuthSessionResult(
+			LoginResponse.of(jwtTokenProvider.issue(rotation.member()), rotation.member()),
+			rotation.rawToken(),
+			rotation.expiresInSeconds()
+		);
+	}
+
+	public void logout(String rawRefreshToken) {
+		refreshTokenService.revokeFamily(rawRefreshToken);
+	}
+
+	private AuthSessionResult createSession(Member member, IssuedRefreshToken refreshToken) {
+		return new AuthSessionResult(
+			LoginResponse.of(jwtTokenProvider.issue(member), member),
+			refreshToken.rawToken(),
+			refreshToken.expiresInSeconds()
+		);
 	}
 
 	private String normalizeEmail(String email) {

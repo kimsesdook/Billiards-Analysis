@@ -40,6 +40,8 @@ public class BilliardsProperties {
 
 		private String secret = "local-development-jwt-secret-change-me-please-32bytes";
 		private long accessTokenExpirationMinutes = 60;
+		private long refreshTokenExpirationDays = 30;
+		private boolean refreshCookieSecure;
 
 		public String getSecret() {
 			return secret;
@@ -56,6 +58,23 @@ public class BilliardsProperties {
 		public void setAccessTokenExpirationMinutes(long accessTokenExpirationMinutes) {
 			this.accessTokenExpirationMinutes = accessTokenExpirationMinutes;
 		}
+
+		public long getRefreshTokenExpirationDays() {
+			return refreshTokenExpirationDays;
+		}
+
+		public void setRefreshTokenExpirationDays(long refreshTokenExpirationDays) {
+			this.refreshTokenExpirationDays = refreshTokenExpirationDays;
+		}
+
+		public boolean isRefreshCookieSecure() {
+			return refreshCookieSecure;
+		}
+
+		public void setRefreshCookieSecure(boolean refreshCookieSecure) {
+			this.refreshCookieSecure = refreshCookieSecure;
+		}
+
 	}
 
 	public static class AdminBootstrap {

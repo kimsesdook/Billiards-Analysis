@@ -39,7 +39,13 @@ public class SecurityConfig {
 			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 			.exceptionHandling(exception -> exception.authenticationEntryPoint(jsonAuthenticationEntryPoint))
 			.authorizeHttpRequests(auth -> auth
-				.requestMatchers(HttpMethod.POST, "/api/auth/signup", "/api/auth/login").permitAll()
+				.requestMatchers(
+					HttpMethod.POST,
+					"/api/auth/signup",
+					"/api/auth/login",
+					"/api/auth/refresh",
+					"/api/auth/logout"
+				).permitAll()
 				.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
 				.requestMatchers("/actuator/**").hasRole("ADMIN")
 				.requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()

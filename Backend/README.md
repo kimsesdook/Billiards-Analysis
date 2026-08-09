@@ -27,7 +27,17 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
 - OpenAPI JSON: `http://localhost:8080/v3/api-docs`
-- Signup and login are public. Other REST API groups are marked with the `bearerAuth` JWT scheme in Swagger UI.
+- Signup, login, refresh, and logout are public authentication endpoints. Other REST API groups are marked with the `bearerAuth` JWT scheme in Swagger UI.
+
+## Refresh Token Sessions
+
+- `POST /api/auth/login` returns an access token and sets `billiards_refresh_token` as an `HttpOnly`, `SameSite=Strict` cookie.
+- `POST /api/auth/refresh` rotates the cookie token and returns a new access token.
+- `POST /api/auth/logout` revokes the complete login-session family and expires the cookie.
+- Refresh token values are never returned in JSON and only SHA-256 hashes are stored in the database.
+- Reuse of an already rotated token revokes every active token in the same session family.
+- The cookie is limited to `/api/auth`. Set `JWT_REFRESH_COOKIE_SECURE=true` when the API is served over HTTPS.
+- `JWT_REFRESH_TOKEN_EXPIRATION_DAYS` controls session lifetime and defaults to 30 days.
 
 ## Actuator Access
 
@@ -63,6 +73,7 @@ The backend uses Flyway to manage database schema changes.
 - `V14__link_game_invitations_to_game_rooms.sql` links accepted invitations to persisted game rooms
 - `V15__add_game_room_live_state.sql` adds versioned live scores, inning, and active-player state
 - `V16__link_game_records_to_game_rooms.sql` links automatically generated records to their source room and prevents duplicate records per member
+- `V17__create_refresh_tokens_table.sql` stores hashed, rotatable refresh sessions with member and family indexes
 - JPA uses `ddl-auto=validate`, so Hibernate validates the schema instead of creating tables
 - Flyway records applied migrations in the `flyway_schema_history` table
 
@@ -210,6 +221,7 @@ The backend currently includes:
 - Flyway-managed game record schema
 - Member signup foundation with BCrypt password hashing
 - Login API with JWT access token issuance
+- Server-managed refresh token rotation, reuse detection, and logout revocation
 - JWT-protected game record APIs scoped to the authenticated member
 - JWT-protected member profile/password APIs
 - JWT-protected friend list, friend request, and member search APIs

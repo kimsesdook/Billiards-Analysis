@@ -52,5 +52,7 @@ app:
   jwt:
     secret: ${JWT_SECRET:local-development-jwt-secret-change-me-please-32bytes}
     access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:60}
+    refresh-token-expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:30}
+    refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
   ai-report:
     model-name: ${GEMINI_MODEL:gemini-2.5-flash}
