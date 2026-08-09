@@ -60,10 +60,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
 
         <form className="space-y-6" onSubmit={handleSubmit}>
           <div className="space-y-2">
-            <label className="text-sm font-bold text-zinc-700 ml-1">이메일</label>
+            <label htmlFor="login-email" className="text-sm font-bold text-zinc-700 ml-1">이메일</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
               <input
+                id="login-email"
                 required
                 type="email"
                 value={email}
@@ -76,10 +77,11 @@ export function LoginPage({ onLogin }: LoginPageProps) {
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-bold text-zinc-700 ml-1">비밀번호</label>
+            <label htmlFor="login-password" className="text-sm font-bold text-zinc-700 ml-1">비밀번호</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={18} />
               <input
+                id="login-password"
                 required
                 type="password"
                 value={password}

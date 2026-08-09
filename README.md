@@ -223,6 +223,9 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Backend: Java 17, Gradle, Spring Boot tests
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
+- Full stack: Playwright signup, logout, and login E2E against Dockerized MySQL, backend, and frontend
+
+The E2E job runs only after the backend, frontend, and Compose checks pass. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.
 
 The frontend AI report tests verify the selected game type, explicit `POST` generation request, and error propagation without calling Gemini, a database, or an external API.
 

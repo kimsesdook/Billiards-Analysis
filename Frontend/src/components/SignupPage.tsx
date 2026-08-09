@@ -98,10 +98,11 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <label className="text-sm font-bold text-zinc-700 ml-1">이메일</label>
+              <label htmlFor="signup-email" className="text-sm font-bold text-zinc-700 ml-1">이메일</label>
               <div className="relative">
                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
                 <input
+                  id="signup-email"
                   required
                   type="email"
                   value={formData.email}
@@ -114,10 +115,11 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-zinc-700 ml-1">닉네임</label>
+              <label htmlFor="signup-nickname" className="text-sm font-bold text-zinc-700 ml-1">닉네임</label>
               <div className="relative">
                 <User className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
                 <input
+                  id="signup-nickname"
                   required
                   type="text"
                   maxLength={30}
@@ -131,10 +133,11 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-zinc-700 ml-1">비밀번호</label>
+              <label htmlFor="signup-password" className="text-sm font-bold text-zinc-700 ml-1">비밀번호</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
                 <input
+                  id="signup-password"
                   required
                   type={showPassword ? 'text' : 'password'}
                   value={formData.password}
@@ -165,10 +168,11 @@ export function SignupPage({ onAuthenticated }: SignupPageProps) {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-bold text-zinc-700 ml-1">비밀번호 확인</label>
+              <label htmlFor="signup-confirm-password" className="text-sm font-bold text-zinc-700 ml-1">비밀번호 확인</label>
               <div className="relative">
                 <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" size={20} />
                 <input
+                  id="signup-confirm-password"
                   required
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={formData.confirmPassword}
