@@ -6,6 +6,8 @@ public enum ErrorCode {
 	AI_SERVICE_UNAVAILABLE("AI_001", HttpStatus.SERVICE_UNAVAILABLE, "AI analysis is not configured or temporarily unavailable."),
 	AI_ANALYSIS_FAILED("AI_002", HttpStatus.BAD_GATEWAY, "AI analysis could not be generated."),
 	REALTIME_SERVICE_UNAVAILABLE("REALTIME_001", HttpStatus.SERVICE_UNAVAILABLE, "Realtime authentication is temporarily unavailable."),
+	RATE_LIMIT_EXCEEDED("RATE_LIMIT_001", HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
+	RATE_LIMIT_SERVICE_UNAVAILABLE("RATE_LIMIT_002", HttpStatus.SERVICE_UNAVAILABLE, "Request protection is temporarily unavailable."),
 	INVALID_INPUT_VALUE("COMMON_001", HttpStatus.BAD_REQUEST, "입력값이 올바르지 않습니다."),
 	RESOURCE_NOT_FOUND("COMMON_002", HttpStatus.NOT_FOUND, "요청한 리소스를 찾을 수 없습니다."),
 	DUPLICATE_EMAIL("MEMBER_001", HttpStatus.CONFLICT, "이미 가입된 이메일입니다."),

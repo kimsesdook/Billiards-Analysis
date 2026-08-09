@@ -33,7 +33,7 @@ flowchart LR
     Browser["React 19 SPA\nTypeScript + Vite"]
     API["Spring Boot API\nModular Monolith"]
     DB[("MySQL 8.4\nFlyway")]
-    Redis[("Redis 7.4\nOne-time WS Tickets")]
+    Redis[("Redis 7.4\nTickets + Rate Limits")]
     Socket["WebSocket\nRealtime Events"]
     MCP["Streamable HTTP MCP\nRead-only tools"]
     Gemini["Google Gemini\nOptional"]
@@ -43,7 +43,7 @@ flowchart LR
     Browser <-->|"WebSocket + short-lived ticket"| Socket
     Socket --> API
     API -->|"JPA"| DB
-    API -->|"atomic ticket consume"| Redis
+    API -->|"atomic tickets and counters"| Redis
     MCP -->|"JWT"| API
     API -. "manual AI request only" .-> Gemini
     CI -->|"test, lint, build"| API
@@ -158,6 +158,8 @@ erDiagram
 - Concurrent API `401` responses share one refresh request before retrying each original request once.
 - WebSocket URLs never contain access tokens. The browser requests a 30-second, single-use ticket before each notification or game-room connection.
 - Redis stores only SHA-256 ticket hashes and consumes them atomically, preventing replay and binding game-room tickets to one room.
+- Redis Lua scripts enforce shared limits across backend instances: 5 login attempts per account and 30 per address in 5 minutes, 30 WebSocket tickets per minute, and 3 actual AI generations per day.
+- Rate-limit identities are SHA-256 hashed, and rejected requests return `429 Too Many Requests` with a browser-readable `Retry-After` header.
 
 - Spring Security와 JWT로 보호 API를 구성했습니다.
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
