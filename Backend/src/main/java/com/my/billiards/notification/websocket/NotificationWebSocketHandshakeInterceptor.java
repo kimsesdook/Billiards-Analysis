@@ -1,6 +1,7 @@
 package com.my.billiards.notification.websocket;
 
-import com.my.billiards.common.websocket.WebSocketTokenAuthenticator;
+import com.my.billiards.common.websocket.WebSocketTicketAuthenticator;
+import com.my.billiards.common.websocket.WebSocketTicketPurpose;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.server.ServerHttpRequest;
@@ -13,7 +14,7 @@ import org.springframework.web.socket.server.HandshakeInterceptor;
 @RequiredArgsConstructor
 public class NotificationWebSocketHandshakeInterceptor implements HandshakeInterceptor {
 
-	private final WebSocketTokenAuthenticator tokenAuthenticator;
+	private final WebSocketTicketAuthenticator ticketAuthenticator;
 
 	@Override
 	public boolean beforeHandshake(
@@ -22,7 +23,12 @@ public class NotificationWebSocketHandshakeInterceptor implements HandshakeInter
 		WebSocketHandler wsHandler,
 		Map<String, Object> attributes
 	) {
-		Long memberId = tokenAuthenticator.authenticate(request, response);
+		Long memberId = ticketAuthenticator.authenticate(
+			request,
+			response,
+			WebSocketTicketPurpose.NOTIFICATIONS,
+			null
+		);
 		if (memberId == null) {
 			return false;
 		}

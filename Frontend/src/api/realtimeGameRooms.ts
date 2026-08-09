@@ -24,7 +24,7 @@ export type GameRoomRealtimeMessage = {
 };
 
 type GameRoomSocketOptions = {
-  accessToken: string;
+  ticket: string;
   roomId: number;
   onConnected?: () => void;
   onGameRoomEvent: (eventType: GameRoomChangeEventType, gameRoom: GameRoom) => void;
@@ -33,13 +33,13 @@ type GameRoomSocketOptions = {
   onError?: (event: Event) => void;
 };
 
-const getGameRoomSocketUrl = (accessToken: string, roomId: number) => {
+const getGameRoomSocketUrl = (ticket: string, roomId: number) => {
   const wsBaseUrl = getApiBaseUrl().replace(/^http/, 'ws');
-  return `${wsBaseUrl}/ws/game-rooms/${roomId}?token=${encodeURIComponent(accessToken)}`;
+  return `${wsBaseUrl}/ws/game-rooms/${roomId}?ticket=${encodeURIComponent(ticket)}`;
 };
 
 export const connectGameRoomSocket = ({
-  accessToken,
+  ticket,
   roomId,
   onConnected,
   onGameRoomEvent,
@@ -47,7 +47,7 @@ export const connectGameRoomSocket = ({
   onClose,
   onError,
 }: GameRoomSocketOptions) => {
-  const socket = new WebSocket(getGameRoomSocketUrl(accessToken, roomId));
+  const socket = new WebSocket(getGameRoomSocketUrl(ticket, roomId));
 
   socket.onmessage = (event) => {
     try {

@@ -6,7 +6,7 @@ React 기반 당구 경기 기록과 분석 화면입니다. Spring Boot API와 
 
 - React 19, TypeScript, Vite 6
 - Tailwind CSS 4, React Router, Recharts
-- JWT-authenticated WebSocket clients for notifications and game room events
+- Redis-backed, single-use WebSocket ticket clients for notifications and game room events
 - Host-authoritative live scoreboard sync with version-conflict recovery
 - Transactional room completion with final-score flushing and `GAME_FINISHED` participant navigation
 - Vitest API contract tests
@@ -29,6 +29,7 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - A protected API `401` triggers one shared refresh request, then retries the original request once with the new access token.
 - Concurrent `401` responses share the same refresh promise to avoid refresh-token reuse detection.
 - Logout revokes the backend session before clearing frontend authentication state.
+- WebSocket clients request a 30-second ticket through the authenticated REST API before every connection and reconnection, so access tokens never appear in WebSocket URLs.
 
 ## Commands
 

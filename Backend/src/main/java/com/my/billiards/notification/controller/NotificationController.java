@@ -1,6 +1,9 @@
 package com.my.billiards.notification.controller;
 
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.websocket.WebSocketTicketPurpose;
+import com.my.billiards.common.websocket.WebSocketTicketResponse;
+import com.my.billiards.common.websocket.WebSocketTicketService;
 import com.my.billiards.notification.dto.NotificationResponse;
 import com.my.billiards.notification.service.NotificationService;
 import com.my.billiards.security.AuthenticatedMember;
@@ -13,6 +16,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -24,6 +28,18 @@ import org.springframework.web.bind.annotation.RestController;
 public class NotificationController {
 
 	private final NotificationService notificationService;
+	private final WebSocketTicketService webSocketTicketService;
+
+	@PostMapping("/websocket-ticket")
+	public ApiResponse<WebSocketTicketResponse> issueWebSocketTicket(
+		@AuthenticationPrincipal AuthenticatedMember member
+	) {
+		return ApiResponse.success(webSocketTicketService.issue(
+			member.id(),
+			WebSocketTicketPurpose.NOTIFICATIONS,
+			null
+		));
+	}
 
 	@GetMapping
 	public ApiResponse<List<NotificationResponse>> findAll(@AuthenticationPrincipal AuthenticatedMember member) {

@@ -13,24 +13,24 @@ export type NotificationRealtimeMessage = {
 };
 
 type NotificationSocketOptions = {
-  accessToken: string;
+  ticket: string;
   onNotification: (notification: NotificationItem) => void;
   onClose?: (event: CloseEvent) => void;
   onError?: (event: Event) => void;
 };
 
-const getNotificationSocketUrl = (accessToken: string) => {
+const getNotificationSocketUrl = (ticket: string) => {
   const wsBaseUrl = getApiBaseUrl().replace(/^http/, 'ws');
-  return `${wsBaseUrl}/ws/notifications?token=${encodeURIComponent(accessToken)}`;
+  return `${wsBaseUrl}/ws/notifications?ticket=${encodeURIComponent(ticket)}`;
 };
 
 export const connectNotificationSocket = ({
-  accessToken,
+  ticket,
   onNotification,
   onClose,
   onError,
 }: NotificationSocketOptions) => {
-  const socket = new WebSocket(getNotificationSocketUrl(accessToken));
+  const socket = new WebSocket(getNotificationSocketUrl(ticket));
 
   socket.onmessage = (event) => {
     try {

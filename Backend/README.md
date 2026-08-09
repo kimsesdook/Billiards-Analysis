@@ -18,7 +18,7 @@ This backend is designed as a modular monolith first. The package boundaries are
 ## Profiles
 
 - `local`: MySQL-based local development profile
-- `docker`: MySQL-based Docker Compose profile
+- `docker`: MySQL and Redis-based Docker Compose profile
 - `test`: H2-based test profile for fast context and repository tests
 
 ## API Documentation
@@ -99,6 +99,14 @@ $env:DB_PASSWORD="your_password"
 $env:JWT_SECRET="change-this-to-a-long-random-secret-value"
 ```
 
+WebSocket ticket issuance also requires Redis. Start only the ephemeral Redis service from the project root before running the backend locally:
+
+```powershell
+docker compose up -d redis
+```
+
+The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses an in-memory ticket store and does not require Redis.
+
 Run the backend locally:
 
 ```powershell
@@ -141,7 +149,7 @@ From the project root, run the full stack:
 docker compose up --build
 ```
 
-The backend runs with `SPRING_PROFILES_ACTIVE=docker`, connects to the Docker MySQL service, applies Flyway migrations, and serves the API on http://localhost:8080.
+The backend runs with `SPRING_PROFILES_ACTIVE=docker`, connects to Docker MySQL and ephemeral Redis services, applies Flyway migrations, and serves the API on http://localhost:8080.
 
 ## MCP Analysis Tools
 
@@ -203,7 +211,8 @@ The configured output cap is 350 tokens and no scheduled job invokes the model. 
 - `PATCH /api/game-rooms/{roomId}/finish` lets only the host atomically finish the current state version and create one game record per participant.
 - A repeated finish request returns the existing completion result without creating duplicate records. Invalid participant or inning data rolls back the entire transaction.
 - A stale `stateVersion` returns `409 ROOM_008` instead of overwriting a newer score update.
-- `GET /ws/game-rooms/{roomId}?token=...` opens a WebSocket for authenticated room participants and broadcasts join, ready, start, finish, cancel, and live-state events after database commit.
+- `POST /api/game-rooms/{roomId}/websocket-ticket` issues a 30-second, single-use Redis ticket only to a room participant.
+- `GET /ws/game-rooms/{roomId}?ticket=...` consumes the room-bound ticket and broadcasts join, ready, start, finish, cancel, and live-state events after database commit.
 
 ## Current Stage
 
@@ -226,8 +235,8 @@ The backend currently includes:
 - JWT-protected member profile/password APIs
 - JWT-protected friend list, friend request, and member search APIs
 - JWT-protected game invitation APIs with friend-only authorization and expiration handling
-- Notification REST APIs and realtime WebSocket delivery
-- Authenticated game room WebSocket events scoped to each room's participants
+- Notification REST APIs and single-use-ticket WebSocket delivery
+- Redis-backed game room WebSocket tickets scoped to each room's participants
 - Versioned live game state with host-only updates and stale-write conflict detection
 - Transactional game-room completion with participant record generation and idempotent retries
 - Docker Compose development environment

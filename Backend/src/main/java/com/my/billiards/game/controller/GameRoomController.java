@@ -1,6 +1,7 @@
 package com.my.billiards.game.controller;
 
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.websocket.WebSocketTicketResponse;
 import com.my.billiards.game.dto.GameRoomCreateRequest;
 import com.my.billiards.game.dto.GameRoomFinishRequest;
 import com.my.billiards.game.dto.GameRoomFinishResponse;
@@ -56,6 +57,14 @@ public class GameRoomController {
         @PathVariable Long roomId
     ) {
         return ApiResponse.success(gameRoomService.findById(member.id(), roomId));
+    }
+
+    @PostMapping("/{roomId}/websocket-ticket")
+    public ApiResponse<WebSocketTicketResponse> issueWebSocketTicket(
+        @AuthenticationPrincipal AuthenticatedMember member,
+        @PathVariable Long roomId
+    ) {
+        return ApiResponse.success(gameRoomService.issueWebSocketTicket(member.id(), roomId));
     }
 
     @PatchMapping("/{roomId}/cancel")

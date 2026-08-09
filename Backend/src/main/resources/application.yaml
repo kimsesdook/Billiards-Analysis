@@ -3,6 +3,12 @@ spring:
     name: billiards
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:local}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: 2s
+      timeout: 2s
   ai:
     model:
       chat: ${AI_CHAT_MODEL:none}
@@ -54,5 +60,7 @@ app:
     access-token-expiration-minutes: ${JWT_ACCESS_TOKEN_EXPIRATION_MINUTES:60}
     refresh-token-expiration-days: ${JWT_REFRESH_TOKEN_EXPIRATION_DAYS:30}
     refresh-cookie-secure: ${JWT_REFRESH_COOKIE_SECURE:false}
+  websocket-ticket:
+    expiration-seconds: ${WEBSOCKET_TICKET_EXPIRATION_SECONDS:30}
   ai-report:
     model-name: ${GEMINI_MODEL:gemini-2.5-flash}

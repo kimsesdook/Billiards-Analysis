@@ -9,6 +9,7 @@ public class BilliardsProperties {
 
 	private final Cors cors = new Cors();
 	private final Jwt jwt = new Jwt();
+	private final WebSocketTicket websocketTicket = new WebSocketTicket();
 	private final AdminBootstrap adminBootstrap = new AdminBootstrap();
 
 	public Cors getCors() {
@@ -17,6 +18,10 @@ public class BilliardsProperties {
 
 	public Jwt getJwt() {
 		return jwt;
+	}
+
+	public WebSocketTicket getWebSocketTicket() {
+		return websocketTicket;
 	}
 
 	public AdminBootstrap getAdminBootstrap() {
@@ -96,6 +101,19 @@ public class BilliardsProperties {
 
 		public void setEmail(String email) {
 			this.email = email;
+		}
+	}
+
+	public static class WebSocketTicket {
+
+		private long expirationSeconds = 30;
+
+		public long getExpirationSeconds() {
+			return expirationSeconds;
+		}
+
+		public void setExpirationSeconds(long expirationSeconds) {
+			this.expirationSeconds = expirationSeconds;
 		}
 	}
 }

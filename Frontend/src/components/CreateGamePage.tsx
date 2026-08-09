@@ -23,6 +23,7 @@ import {
   type GameRoomLiveStateUpdatePayload,
 } from '../api/gameRooms';
 import { connectGameRoomSocket } from '../api/realtimeGameRooms';
+import { issueGameRoomWebSocketTicket } from '../api/websocketTickets';
 import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
@@ -637,11 +638,6 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       return;
     }
 
-    const accessToken = getStoredAuthSession()?.accessToken;
-    if (!accessToken) {
-      return;
-    }
-
     let socket: WebSocket | null = null;
     let reconnectTimer: number | undefined;
     let closedByClient = false;
@@ -680,62 +676,75 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       }
     };
 
-    const connect = () => {
-      socket = connectGameRoomSocket({
-        accessToken,
-        roomId: gameRoomId,
-        onConnected: () => {
-          void synchronizeGameRoom();
-          if (isPlayingRef.current) {
-            void synchronizeLiveGameState();
-          }
-        },
-        onGameRoomEvent: (eventType, gameRoom) => {
-          if (closedByClient) {
-            return;
-          }
+    const connect = async () => {
+      try {
+        const { ticket } = await issueGameRoomWebSocketTicket(gameRoomId);
+        if (closedByClient) {
+          return;
+        }
 
-          receivedEventVersion += 1;
-          applyGameRoomToLobby(gameRoom);
+        socket = connectGameRoomSocket({
+          ticket,
+          roomId: gameRoomId,
+          onConnected: () => {
+            void synchronizeGameRoom();
+            if (isPlayingRef.current) {
+              void synchronizeLiveGameState();
+            }
+          },
+          onGameRoomEvent: (eventType, gameRoom) => {
+            if (closedByClient) {
+              return;
+            }
 
-          if (eventType === 'ROOM_CANCELED') {
-            setGameRoomError('방장이 게임방을 종료했습니다.');
-          }
-          if (eventType === 'GAME_FINISHED') {
-            exitCompletedGameRoom();
-          }
-        },
-        onLiveStateEvent: (liveState) => {
-          if (closedByClient) {
-            return;
-          }
+            receivedEventVersion += 1;
+            applyGameRoomToLobby(gameRoom);
 
-          const liveStateSignature = getLiveStateSignature(toLiveStateDraft(liveState));
-          const isSubmittedByThisScreen = submittedLiveStateSignaturesRef.current.delete(
-            liveStateSignature,
-          );
+            if (eventType === 'ROOM_CANCELED') {
+              setGameRoomError('방장이 게임방을 종료했습니다.');
+            }
+            if (eventType === 'GAME_FINISHED') {
+              exitCompletedGameRoom();
+            }
+          },
+          onLiveStateEvent: (liveState) => {
+            if (closedByClient) {
+              return;
+            }
 
-          if (isGameRoomHostRef.current && isSubmittedByThisScreen) {
-            acknowledgeLiveGameStateRef.current(liveState);
-          } else {
-            applyLiveGameStateRef.current(liveState);
-          }
-        },
-        onClose: () => {
-          if (closedByClient) {
-            return;
-          }
+            const liveStateSignature = getLiveStateSignature(toLiveStateDraft(liveState));
+            const isSubmittedByThisScreen = submittedLiveStateSignaturesRef.current.delete(
+              liveStateSignature,
+            );
 
-          void synchronizeGameRoom();
-          if (isPlayingRef.current) {
-            void synchronizeLiveGameState();
-          }
-          reconnectTimer = window.setTimeout(connect, 3000);
-        },
-      });
+            if (isGameRoomHostRef.current && isSubmittedByThisScreen) {
+              acknowledgeLiveGameStateRef.current(liveState);
+            } else {
+              applyLiveGameStateRef.current(liveState);
+            }
+          },
+          onClose: () => {
+            if (closedByClient) {
+              return;
+            }
+
+            void synchronizeGameRoom();
+            if (isPlayingRef.current) {
+              void synchronizeLiveGameState();
+            }
+            reconnectTimer = window.setTimeout(() => void connect(), 3000);
+          },
+        });
+      } catch (error) {
+        if (closedByClient) {
+          return;
+        }
+        setGameRoomError(getApiErrorMessage(error));
+        reconnectTimer = window.setTimeout(() => void connect(), 3000);
+      }
     };
 
-    connect();
+    void connect();
 
     return () => {
       closedByClient = true;

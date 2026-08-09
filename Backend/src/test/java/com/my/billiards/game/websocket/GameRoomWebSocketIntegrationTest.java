@@ -194,12 +194,13 @@ class GameRoomWebSocketIntegrationTest {
         String outsiderToken = signUpAndLogin("outsider@example.com", "Outsider");
         Long roomId = createRoom(hostToken, "Private Match");
 
-        assertThatThrownBy(() -> connect(outsiderToken, roomId, new GameRoomMessageHandler()))
-            .isInstanceOf(ExecutionException.class);
+        mockMvc.perform(post("/api/game-rooms/{roomId}/websocket-ticket", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(outsiderToken)))
+            .andExpect(status().isForbidden());
     }
 
     @Test
-    void rejectsConnectionWithoutToken() throws Exception {
+    void rejectsConnectionWithoutTicket() throws Exception {
         String hostToken = signUpAndLogin("host@example.com", "Host");
         Long roomId = createRoom(hostToken, "Authenticated Match");
         String url = "ws://localhost:%d/ws/game-rooms/%d".formatted(port, roomId);
@@ -210,16 +211,49 @@ class GameRoomWebSocketIntegrationTest {
             .isInstanceOf(ExecutionException.class);
     }
 
+    @Test
+    void rejectsTicketBoundToAnotherGameRoom() throws Exception {
+        String hostToken = signUpAndLogin("host@example.com", "Host");
+        Long firstRoomId = createRoom(hostToken, "First Match");
+        Long secondRoomId = createRoom(hostToken, "Second Match");
+        String firstRoomTicket = issueGameRoomTicket(hostToken, firstRoomId);
+
+        assertThatThrownBy(() -> connectWithTicket(
+            firstRoomTicket,
+            secondRoomId,
+            new GameRoomMessageHandler()
+        )).isInstanceOf(ExecutionException.class);
+    }
+
     private WebSocketSession connect(String token, Long roomId, GameRoomMessageHandler handler) throws Exception {
-        String url = "ws://localhost:%d/ws/game-rooms/%d?token=%s".formatted(
+        return connectWithTicket(issueGameRoomTicket(token, roomId), roomId, handler);
+    }
+
+    private WebSocketSession connectWithTicket(
+        String ticket,
+        Long roomId,
+        GameRoomMessageHandler handler
+    ) throws Exception {
+        String url = "ws://localhost:%d/ws/game-rooms/%d?ticket=%s".formatted(
             port,
             roomId,
-            URLEncoder.encode(token, StandardCharsets.UTF_8)
+            URLEncoder.encode(ticket, StandardCharsets.UTF_8)
         );
 
         return new StandardWebSocketClient()
             .execute(handler, url)
             .get(3, TimeUnit.SECONDS);
+    }
+
+    private String issueGameRoomTicket(String token, Long roomId) throws Exception {
+        String response = mockMvc.perform(post("/api/game-rooms/{roomId}/websocket-ticket", roomId)
+                .header(HttpHeaders.AUTHORIZATION, bearer(token)))
+            .andExpect(status().isOk())
+            .andReturn()
+            .getResponse()
+            .getContentAsString();
+
+        return extractString(response, "ticket");
     }
 
     private Long createRoom(String token, String name) throws Exception {

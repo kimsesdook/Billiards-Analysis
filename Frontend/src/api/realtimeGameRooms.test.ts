@@ -43,13 +43,13 @@ describe('game room realtime API contract', () => {
 
   it('connects to the authenticated room WebSocket endpoint', () => {
     connectGameRoomSocket({
-      accessToken: 'token with spaces',
+      ticket: 'ticket with spaces',
       roomId: 7,
       onGameRoomEvent: vi.fn(),
     });
 
     expect(FakeWebSocket.instances[0].url)
-      .toBe('wss://api.example.com/ws/game-rooms/7?token=token%20with%20spaces');
+      .toBe('wss://api.example.com/ws/game-rooms/7?ticket=ticket%20with%20spaces');
   });
 
   it('forwards matching room and live-state events while ignoring invalid frames', () => {
@@ -58,7 +58,7 @@ describe('game room realtime API contract', () => {
     const onLiveStateEvent = vi.fn();
 
     connectGameRoomSocket({
-      accessToken: 'access-token',
+      ticket: 'single-use-ticket',
       roomId: 7,
       onConnected,
       onGameRoomEvent,
