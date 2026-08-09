@@ -34,4 +34,16 @@ npm run lint
 npm run build
 ```
 
+## End-to-End Tests
+
+Start the full stack from the repository root, then run Playwright from `Frontend`.
+
+```powershell
+docker compose up -d --build
+cd Frontend
+npm run test:e2e
+```
+
+Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, and retains failure traces and screenshots for seven days.
+
 The full project setup, architecture, Docker commands, and backend configuration are documented in the [root README](../README.md).
