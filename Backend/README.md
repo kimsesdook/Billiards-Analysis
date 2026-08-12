@@ -41,8 +41,8 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 
 ## Actuator Access
 
-- `GET /actuator/health` and `GET /actuator/info` are public for health checks.
-- Other Actuator endpoints, including `/actuator/metrics`, require an `ADMIN` JWT role.
+- `GET /actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness`, and `/actuator/info` are public for health checks.
+- Other Actuator endpoints, including `/actuator/metrics` and `/actuator/prometheus`, require an `ADMIN` JWT role.
 
 ## Request Tracing
 
@@ -118,6 +118,17 @@ Redis executes each increment and expiration assignment in one Lua script, so mu
 - Redis failures return `503 RATE_LIMIT_002` instead of silently bypassing protection
 
 All limits and windows can be overridden with the `RATE_LIMIT_*` environment variables defined in `application.yaml`.
+
+## Operational Metrics
+
+Micrometer publishes JVM, HTTP, connection-pool, Redis, and business metrics through the administrator-only Actuator endpoints. The Prometheus endpoint is `/actuator/prometheus`.
+
+- `billiards.authentication.login.attempts`: login `success` and `failure` counters
+- `billiards.rate.limit.rejections`: rejected requests grouped by bounded policy `scope`
+- `billiards.ai.report.requests`: AI report `generated`, `cache_hit`, and `failed` counters grouped by game type
+- `billiards.websocket.connections.active`: current notification and game-room WebSocket connection gauges
+
+The tags intentionally exclude member IDs, emails, room IDs, client addresses, and request IDs to prevent sensitive data exposure and unbounded metric cardinality. Readiness includes the application state, MySQL, and Redis; the test profile excludes Redis because it uses in-memory stores.
 
 Run the backend locally:
 
@@ -250,6 +261,7 @@ The backend currently includes:
 - Notification REST APIs and single-use-ticket WebSocket delivery
 - Redis-backed game room WebSocket tickets scoped to each room's participants
 - Redis-backed distributed limits for login, WebSocket ticket, and AI generation abuse prevention
+- Prometheus-compatible operational and business metrics with liveness/readiness probes
 - Versioned live game state with host-only updates and stale-write conflict detection
 - Transactional game-room completion with participant record generation and idempotent retries
 - Docker Compose development environment

@@ -39,4 +39,12 @@ public class GameRoomWebSocketSessionRegistry {
             .filter(WebSocketSession::isOpen)
             .toList();
     }
+
+    public int activeSessionCount() {
+        return sessionsByRoomId.values()
+            .stream()
+            .flatMap(Set::stream)
+            .mapToInt(session -> session.isOpen() ? 1 : 0)
+            .sum();
+    }
 }

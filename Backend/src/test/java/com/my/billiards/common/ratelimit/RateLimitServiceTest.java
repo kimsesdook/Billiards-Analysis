@@ -2,7 +2,10 @@ package com.my.billiards.common.ratelimit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+import com.my.billiards.common.observability.BusinessMetrics;
 import java.time.Duration;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -15,6 +18,7 @@ class RateLimitServiceTest {
 	private RateLimitProperties properties;
 	private InMemoryRateLimitStore store;
 	private RateLimitService service;
+	private BusinessMetrics businessMetrics;
 
 	@BeforeEach
 	void setUp() {
@@ -27,7 +31,8 @@ class RateLimitServiceTest {
 		properties.setAiGenerationMaxRequests(1);
 		properties.setAiGenerationWindowSeconds(3600);
 		store = new InMemoryRateLimitStore();
-		service = new RateLimitService(store, properties);
+		businessMetrics = mock(BusinessMetrics.class);
+		service = new RateLimitService(store, properties, businessMetrics);
 	}
 
 	@Test
@@ -59,8 +64,10 @@ class RateLimitServiceTest {
 
 		assertThatThrownBy(() -> service.checkWebSocketTicket(10L))
 			.isInstanceOf(RateLimitExceededException.class);
+		verify(businessMetrics).recordRateLimitRejection("websocket-ticket");
 		assertThatThrownBy(() -> service.checkAiGeneration(10L))
 			.isInstanceOf(RateLimitExceededException.class);
+		verify(businessMetrics).recordRateLimitRejection("ai-generation");
 	}
 
 	@Test
@@ -70,7 +77,7 @@ class RateLimitServiceTest {
 			keys.add(key);
 			return new RateLimitResult(1, window.toSeconds());
 		};
-		RateLimitService recordingService = new RateLimitService(recordingStore, properties);
+		RateLimitService recordingService = new RateLimitService(recordingStore, properties, businessMetrics);
 
 		recordingService.checkLogin("member@example.com", "203.0.113.10");
 

@@ -8,6 +8,8 @@ import com.my.billiards.auth.service.AuthSessionResult;
 import com.my.billiards.auth.service.AuthService;
 import com.my.billiards.auth.token.RefreshTokenCookieFactory;
 import com.my.billiards.common.api.ApiResponse;
+import com.my.billiards.common.error.BilliardsException;
+import com.my.billiards.common.observability.BusinessMetrics;
 import com.my.billiards.common.ratelimit.RateLimitService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
@@ -32,6 +34,7 @@ public class AuthController {
 	private final AuthService authService;
 	private final RefreshTokenCookieFactory refreshTokenCookieFactory;
 	private final RateLimitService rateLimitService;
+	private final BusinessMetrics businessMetrics;
 
 	@PostMapping("/signup")
 	@ResponseStatus(HttpStatus.CREATED)
@@ -45,7 +48,14 @@ public class AuthController {
 		HttpServletRequest httpRequest
 	) {
 		rateLimitService.checkLogin(request.email(), httpRequest.getRemoteAddr());
-		return authenticationResponse(authService.login(request));
+		try {
+			ResponseEntity<ApiResponse<LoginResponse>> response = authenticationResponse(authService.login(request));
+			businessMetrics.recordLoginSuccess();
+			return response;
+		} catch (BilliardsException exception) {
+			businessMetrics.recordLoginFailure();
+			throw exception;
+		}
 	}
 
 	@PostMapping("/refresh")

@@ -16,6 +16,7 @@ import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.common.ratelimit.RateLimitService;
+import com.my.billiards.common.observability.BusinessMetrics;
 import com.my.billiards.game.domain.GameTrend;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
@@ -55,6 +56,9 @@ class AiWeeklyReportServiceTest {
 	@Mock
 	private RateLimitService rateLimitService;
 
+	@Mock
+	private BusinessMetrics businessMetrics;
+
 	private AiWeeklyReportService aiWeeklyReportService;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 	private final AiWeeklyAnalysis analysis = new AiWeeklyAnalysis(
@@ -74,7 +78,8 @@ class AiWeeklyReportServiceTest {
 			gameRecordService,
 			weeklyAiAnalysisGeneratorProvider,
 			properties,
-			rateLimitService
+			rateLimitService,
+			businessMetrics
 		);
 	}
 
@@ -99,6 +104,7 @@ class AiWeeklyReportServiceTest {
 		assertThat(result.analysis()).isEqualTo(analysis);
 		verify(weeklyAiAnalysisGenerator).generate(any(), any());
 		verify(rateLimitService).checkAiGeneration(MEMBER_ID);
+		verify(businessMetrics).recordAiReport("generated", GameType.THREE_CUSHION);
 		verify(weeklyAiReportRepository).save(any(WeeklyAiReport.class));
 	}
 
@@ -125,6 +131,7 @@ class AiWeeklyReportServiceTest {
 		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
 		verify(weeklyAiReportRepository, never()).save(any());
 		verify(rateLimitService, never()).checkAiGeneration(any());
+		verify(businessMetrics).recordAiReport("cache_hit", GameType.THREE_CUSHION);
 	}
 
 	@Test
@@ -163,6 +170,26 @@ class AiWeeklyReportServiceTest {
 			.isEqualTo(ErrorCode.AI_SERVICE_UNAVAILABLE);
 
 		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
+	}
+
+	@Test
+	void generateTodayReportRecordsModelFailures() {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		when(weeklyAiReportRepository.findByMemberIdAndGameTypeAndReportEndDate(
+			MEMBER_ID,
+			GameType.THREE_CUSHION,
+			today
+		)).thenReturn(Optional.empty());
+		when(gameRecordService.getWeeklyReport(MEMBER_ID, GameType.THREE_CUSHION, today)).thenReturn(weeklyReport(2));
+		when(gameRecordService.getStatistics(MEMBER_ID, GameType.THREE_CUSHION, 10)).thenReturn(statistics());
+		when(weeklyAiAnalysisGeneratorProvider.getIfAvailable()).thenReturn(weeklyAiAnalysisGenerator);
+		when(weeklyAiAnalysisGenerator.generate(any(), any()))
+			.thenThrow(new BilliardsException(ErrorCode.AI_ANALYSIS_FAILED));
+
+		assertThatThrownBy(() -> aiWeeklyReportService.generateTodayReport(MEMBER_ID, GameType.THREE_CUSHION))
+			.isInstanceOf(BilliardsException.class);
+
+		verify(businessMetrics).recordAiReport("failed", GameType.THREE_CUSHION);
 	}
 
 	private WeeklyGameReportResponse weeklyReport(int currentWeekGameCount) {

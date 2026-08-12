@@ -39,4 +39,12 @@ public class NotificationWebSocketSessionRegistry {
 			.filter(WebSocketSession::isOpen)
 			.toList();
 	}
+
+	public int activeSessionCount() {
+		return sessionsByMemberId.values()
+			.stream()
+			.flatMap(Set::stream)
+			.mapToInt(session -> session.isOpen() ? 1 : 0)
+			.sum();
+	}
 }

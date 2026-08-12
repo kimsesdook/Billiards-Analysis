@@ -1,5 +1,6 @@
 package com.my.billiards.common.ratelimit;
 
+import com.my.billiards.common.observability.BusinessMetrics;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -17,6 +18,7 @@ public class RateLimitService {
 
 	private final RateLimitStore rateLimitStore;
 	private final RateLimitProperties properties;
+	private final BusinessMetrics businessMetrics;
 
 	public void checkLogin(String email, String clientAddress) {
 		check(
@@ -61,6 +63,7 @@ public class RateLimitService {
 			Duration.ofSeconds(windowSeconds)
 		);
 		if (result.requestCount() > maxRequests) {
+			businessMetrics.recordRateLimitRejection(scope);
 			throw new RateLimitExceededException(result.retryAfterSeconds());
 		}
 	}
