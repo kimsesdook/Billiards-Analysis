@@ -9,6 +9,7 @@ import com.my.billiards.ai.dto.AiWeeklyReportResponse;
 import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
+import com.my.billiards.common.observability.BusinessMetrics;
 import com.my.billiards.common.ratelimit.RateLimitService;
 import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
@@ -35,6 +36,7 @@ public class AiWeeklyReportService {
 	private final ObjectProvider<WeeklyAiAnalysisGenerator> weeklyAiAnalysisGeneratorProvider;
 	private final AiReportProperties aiReportProperties;
 	private final RateLimitService rateLimitService;
+	private final BusinessMetrics businessMetrics;
 	private final ConcurrentMap<String, Object> generationLocks = new ConcurrentHashMap<>();
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -72,7 +74,9 @@ public class AiWeeklyReportService {
 			.orElse(null);
 
 		if (existingReport != null) {
-			return toResponse(existingReport);
+			AiWeeklyReportResponse response = toResponse(existingReport);
+			businessMetrics.recordAiReport("cache_hit", type);
+			return response;
 		}
 
 		WeeklyGameReportResponse weeklyReport = gameRecordService.getWeeklyReport(memberId, type, reportEndDate);
@@ -86,8 +90,14 @@ public class AiWeeklyReportService {
 		GameStatisticsResponse statistics = gameRecordService.getStatistics(memberId, type, RECENT_GAME_COUNT);
 		WeeklyAiAnalysisGenerator analysisGenerator = getAnalysisGenerator();
 		rateLimitService.checkAiGeneration(memberId);
-		AiWeeklyAnalysis analysis = analysisGenerator.generate(weeklyReport, statistics);
-		validateAnalysis(analysis);
+		AiWeeklyAnalysis analysis;
+		try {
+			analysis = analysisGenerator.generate(weeklyReport, statistics);
+			validateAnalysis(analysis);
+		} catch (RuntimeException exception) {
+			businessMetrics.recordAiReport("failed", type);
+			throw exception;
+		}
 
 		WeeklyAiReport savedReport = weeklyAiReportRepository.save(WeeklyAiReport.create(
 			memberId,
@@ -97,6 +107,7 @@ public class AiWeeklyReportService {
 			writeAnalysis(analysis),
 			aiReportProperties.getModelName()
 		));
+		businessMetrics.recordAiReport("generated", type);
 
 		return new AiWeeklyReportResponse(
 			type,

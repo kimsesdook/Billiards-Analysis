@@ -34,6 +34,7 @@ flowchart LR
     API["Spring Boot API\nModular Monolith"]
     DB[("MySQL 8.4\nFlyway")]
     Redis[("Redis 7.4\nTickets + Rate Limits")]
+    Metrics["Actuator + Micrometer\nPrometheus Metrics"]
     Socket["WebSocket\nRealtime Events"]
     MCP["Streamable HTTP MCP\nRead-only tools"]
     Gemini["Google Gemini\nOptional"]
@@ -44,6 +45,7 @@ flowchart LR
     Socket --> API
     API -->|"JPA"| DB
     API -->|"atomic tickets and counters"| Redis
+    API -->|"health and metrics"| Metrics
     MCP -->|"JWT"| API
     API -. "manual AI request only" .-> Gemini
     CI -->|"test, lint, build"| API
@@ -171,6 +173,14 @@ erDiagram
 - A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
 - The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
 
+### Operational Observability
+
+- Micrometer exposes JVM, HTTP, database-pool, Redis, and custom business metrics in Prometheus format.
+- Public liveness and readiness probes are available at `/actuator/health/liveness` and `/actuator/health/readiness`; readiness includes application state, MySQL, and Redis.
+- `/actuator/metrics` and `/actuator/prometheus` remain restricted to the `ADMIN` role.
+- Custom low-cardinality metrics cover login outcomes, rate-limit rejections by scope, AI report generation/cache/failure outcomes, and active WebSocket connections by channel.
+- Metrics never use member IDs, emails, room IDs, client addresses, or request IDs as tags.
+
 ### Transactional Game Completion
 
 - Only the room host can finish an in-progress game, and the request must match the latest scoreboard `stateVersion`.
@@ -225,7 +235,7 @@ erDiagram
 | Area | Technology |
 | --- | --- |
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4, React Router, Recharts, Vitest |
-| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket |
+| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer |
 | Data | MySQL 8.4, Redis 7.4, H2 for tests, Flyway |
 | AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
 | DevOps | Docker Compose, Nginx, GitHub Actions |
@@ -258,6 +268,8 @@ docker compose up --build
 | Frontend | http://localhost:3000 |
 | Backend API | http://localhost:8080 |
 | Health check | http://localhost:8080/actuator/health |
+| Liveness | http://localhost:8080/actuator/health/liveness |
+| Readiness | http://localhost:8080/actuator/health/readiness |
 | Swagger UI | http://localhost:8080/swagger-ui.html |
 | OpenAPI JSON | http://localhost:8080/v3/api-docs |
 | MySQL host port | localhost:13306 |

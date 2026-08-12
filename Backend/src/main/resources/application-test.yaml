@@ -22,6 +22,11 @@ spring:
         format_sql: true
 
 management:
+  endpoint:
+    health:
+      group:
+        readiness:
+          include: readinessState,db
   health:
     redis:
       enabled: false

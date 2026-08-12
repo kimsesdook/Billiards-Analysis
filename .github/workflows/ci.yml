@@ -111,7 +111,7 @@ jobs:
         shell: bash
         run: |
           for attempt in {1..90}; do
-            if curl --fail --silent http://localhost:8080/actuator/health > /dev/null \
+            if curl --fail --silent http://localhost:8080/actuator/health/readiness > /dev/null \
               && curl --fail --silent http://localhost:3000 > /dev/null; then
               exit 0
             fi

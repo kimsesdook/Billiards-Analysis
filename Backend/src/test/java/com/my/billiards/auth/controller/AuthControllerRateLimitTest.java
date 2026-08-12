@@ -12,6 +12,7 @@ import com.my.billiards.auth.service.AuthService;
 import com.my.billiards.auth.token.RefreshTokenCookieFactory;
 import com.my.billiards.common.ratelimit.RateLimitExceededException;
 import com.my.billiards.common.ratelimit.RateLimitService;
+import com.my.billiards.common.observability.BusinessMetrics;
 import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +25,8 @@ class AuthControllerRateLimitTest {
 		AuthController controller = new AuthController(
 			authService,
 			mock(RefreshTokenCookieFactory.class),
-			rateLimitService
+			rateLimitService,
+			mock(BusinessMetrics.class)
 		);
 		HttpServletRequest httpRequest = mock(HttpServletRequest.class);
 		when(httpRequest.getRemoteAddr()).thenReturn("203.0.113.10");
