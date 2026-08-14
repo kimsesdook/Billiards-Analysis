@@ -105,7 +105,7 @@ Rate limiting and WebSocket ticket issuance require Redis. Start only the epheme
 docker compose up -d redis
 ```
 
-The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses in-memory ticket and rate-limit stores and does not require Redis.
+The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses in-memory ticket, rate-limit, and AI report lock stores and does not require Redis.
 
 ## Distributed Rate Limits
 
@@ -191,7 +191,10 @@ The optional AI report feature generates a Korean-language coaching report from 
 - AI chat is disabled by default with `AI_CHAT_MODEL=none`, so starting the backend does not call an AI model.
 - `POST /api/ai-reports/weekly?type=3-Cushion` creates a report only when the authenticated user explicitly requests it.
 - A report is cached by member, game type, and report date. Repeating the same request returns the stored report without another model call.
-- Concurrent duplicate requests are serialized inside one backend process before a report is generated.
+- Concurrent duplicate requests are coordinated across backend instances with a Redis distributed lock before a report is generated.
+- Lock acquisition uses atomic `SET NX` with a 180-second TTL. Release uses a Lua compare-and-delete script, so an expired lock that has a new owner cannot be deleted by the previous owner.
+- A competing request waits up to 5 seconds for the first server's cached result and otherwise returns `409 AI_003`; Redis acquisition failures return `503 AI_004` without calling the model.
+- Lock identities are SHA-256 hashed in Redis, and the database unique constraint remains the final defense against duplicate report rows.
 - `GET /api/ai-reports/weekly?type=3-Cushion` retrieves today's cached report.
 - Without an API key, an AI request returns `503 AI_001`; the rest of the backend continues to work normally.
 
@@ -261,6 +264,7 @@ The backend currently includes:
 - Notification REST APIs and single-use-ticket WebSocket delivery
 - Redis-backed game room WebSocket tickets scoped to each room's participants
 - Redis-backed distributed limits for login, WebSocket ticket, and AI generation abuse prevention
+- Redis-backed AI report generation lock with owner-safe release and expiration recovery
 - Prometheus-compatible operational and business metrics with liveness/readiness probes
 - Versioned live game state with host-only updates and stale-write conflict detection
 - Transactional game-room completion with participant record generation and idempotent retries

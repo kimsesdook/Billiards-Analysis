@@ -33,7 +33,7 @@ flowchart LR
     Browser["React 19 SPA\nTypeScript + Vite"]
     API["Spring Boot API\nModular Monolith"]
     DB[("MySQL 8.4\nFlyway")]
-    Redis[("Redis 7.4\nTickets + Rate Limits")]
+    Redis[("Redis 7.4\nTickets + Limits + AI Locks")]
     Metrics["Actuator + Micrometer\nPrometheus Metrics"]
     Socket["WebSocket\nRealtime Events"]
     MCP["Streamable HTTP MCP\nRead-only tools"]
@@ -44,7 +44,7 @@ flowchart LR
     Browser <-->|"WebSocket + short-lived ticket"| Socket
     Socket --> API
     API -->|"JPA"| DB
-    API -->|"atomic tickets and counters"| Redis
+    API -->|"atomic tickets, counters, and locks"| Redis
     API -->|"health and metrics"| Metrics
     MCP -->|"JWT"| API
     API -. "manual AI request only" .-> Gemini
@@ -162,6 +162,7 @@ erDiagram
 - Redis stores only SHA-256 ticket hashes and consumes them atomically, preventing replay and binding game-room tickets to one room.
 - Redis Lua scripts enforce shared limits across backend instances: 5 login attempts per account and 30 per address in 5 minutes, 30 WebSocket tickets per minute, and 3 actual AI generations per day.
 - Rate-limit identities are SHA-256 hashed, and rejected requests return `429 Too Many Requests` with a browser-readable `Retry-After` header.
+- AI report generation uses a Redis distributed lock, so multiple backend instances cannot intentionally call Gemini for the same member, game type, and report date at the same time.
 
 - Spring Security와 JWT로 보호 API를 구성했습니다.
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
@@ -217,6 +218,8 @@ erDiagram
 - 사용자가 생성 버튼을 눌렀을 때만 AI 요청을 보냅니다.
 - 회원 ID, 이메일, 상대 이름, 메모, 개별 경기 기록은 전송하지 않고 주간 집계 통계만 전달합니다.
 - 리포트는 회원, 종목, 기준일 조합으로 저장하고 같은 요청은 캐시를 반환해 중복 호출을 줄입니다.
+- Redis `SET NX` 잠금은 여러 서버의 동시 생성 요청을 하나로 조정하고, 소유자 확인 Lua 해제와 TTL로 잘못된 잠금 삭제 및 장애 후 영구 잠금을 방지합니다.
+- Redis 조정 기능이 실패하면 모델을 호출하지 않고 `503 AI_004`를 반환하며, DB 유니크 제약조건이 마지막 중복 저장 방어선으로 동작합니다.
 - Gemini API 키는 백엔드의 로컬 환경 변수에서만 관리하며 React 코드, Docker 빌드 인자, Git에 넣지 않습니다.
 
 ### MCP Integration

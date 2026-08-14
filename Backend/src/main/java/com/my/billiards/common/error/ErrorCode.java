@@ -5,6 +5,8 @@ import org.springframework.http.HttpStatus;
 public enum ErrorCode {
 	AI_SERVICE_UNAVAILABLE("AI_001", HttpStatus.SERVICE_UNAVAILABLE, "AI analysis is not configured or temporarily unavailable."),
 	AI_ANALYSIS_FAILED("AI_002", HttpStatus.BAD_GATEWAY, "AI analysis could not be generated."),
+	AI_REPORT_GENERATION_IN_PROGRESS("AI_003", HttpStatus.CONFLICT, "An AI report is already being generated. Please try again shortly."),
+	AI_COORDINATION_UNAVAILABLE("AI_004", HttpStatus.SERVICE_UNAVAILABLE, "AI report coordination is temporarily unavailable."),
 	REALTIME_SERVICE_UNAVAILABLE("REALTIME_001", HttpStatus.SERVICE_UNAVAILABLE, "Realtime authentication is temporarily unavailable."),
 	RATE_LIMIT_EXCEEDED("RATE_LIMIT_001", HttpStatus.TOO_MANY_REQUESTS, "Too many requests. Please try again later."),
 	RATE_LIMIT_SERVICE_UNAVAILABLE("RATE_LIMIT_002", HttpStatus.SERVICE_UNAVAILABLE, "Request protection is temporarily unavailable."),
