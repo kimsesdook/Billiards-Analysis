@@ -120,6 +120,17 @@ jobs:
           docker compose ps
           exit 1
 
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+        with:
+          k6-version: "2.1.0"
+
+      - name: Run performance smoke test
+        env:
+          BASE_URL: http://localhost:8080
+          K6_PROFILE: smoke
+        run: k6 run -e BASE_URL="$BASE_URL" -e K6_PROFILE="$K6_PROFILE" performance/game-record-flow.js
+
       - name: Run Playwright E2E
         working-directory: Frontend
         env:

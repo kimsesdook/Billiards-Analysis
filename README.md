@@ -25,6 +25,7 @@
 - 방장 저장 큐와 WebSocket을 이용한 참가자 점수판 실시간 동기화
 - 명시적 요청 기반 Gemini 주간 AI 코칭 리포트
 - JWT로 보호된 읽기 전용 MCP 경기 분석 도구
+- k6 기반 인증·경기 기록 부하 테스트와 CI 성능 임계값
 
 ## Architecture
 
@@ -48,7 +49,7 @@ flowchart LR
     API -->|"health and metrics"| Metrics
     MCP -->|"JWT"| API
     API -. "manual AI request only" .-> Gemini
-    CI -->|"test, lint, build"| API
+    CI -->|"test, lint, build, performance smoke"| API
     CI -->|"test, lint, build"| Browser
 ```
 
@@ -241,7 +242,7 @@ erDiagram
 | Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer |
 | Data | MySQL 8.4, Redis 7.4, H2 for tests, Flyway |
 | AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
-| DevOps | Docker Compose, Nginx, GitHub Actions |
+| DevOps | Docker Compose, Nginx, GitHub Actions, k6 |
 
 ## Quality Gates
 
@@ -251,8 +252,9 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
 - Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, Redis, backend, and frontend
+- Performance: k6 authenticated game-record flow with error-rate and endpoint-specific p95 thresholds
 
-The E2E job runs only after the backend, frontend, and Compose checks pass. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.
+The E2E job runs only after the backend, frontend, and Compose checks pass. It executes a short k6 performance smoke gate before Playwright. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.
 
 The frontend AI report tests verify the selected game type, explicit `POST` generation request, and error propagation without calling Gemini, a database, or an external API.
 
@@ -319,6 +321,7 @@ npm run build
 
 - [Backend README](./Backend/README.md): profiles, API modules, Flyway, MCP, optional Gemini configuration
 - [Frontend README](./Frontend/README.md): frontend environment variables and commands
+- [Performance README](./performance/README.md): k6 profiles, thresholds, and local execution
 - [CI workflow](./.github/workflows/ci.yml): automated quality gates
 
 ## Current Scope
