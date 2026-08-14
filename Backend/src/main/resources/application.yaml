@@ -83,3 +83,6 @@ app:
     ai-generation-window-seconds: ${RATE_LIMIT_AI_GENERATION_WINDOW_SECONDS:86400}
   ai-report:
     model-name: ${GEMINI_MODEL:gemini-2.5-flash}
+    lock-ttl-seconds: ${AI_REPORT_LOCK_TTL_SECONDS:180}
+    lock-wait-seconds: ${AI_REPORT_LOCK_WAIT_SECONDS:5}
+    lock-poll-interval-millis: ${AI_REPORT_LOCK_POLL_INTERVAL_MILLIS:100}

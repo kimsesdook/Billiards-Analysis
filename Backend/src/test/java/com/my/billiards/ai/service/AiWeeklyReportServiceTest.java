@@ -3,6 +3,8 @@ package com.my.billiards.ai.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -12,6 +14,8 @@ import com.my.billiards.ai.config.AiReportProperties;
 import com.my.billiards.ai.domain.WeeklyAiReport;
 import com.my.billiards.ai.dto.AiWeeklyAnalysis;
 import com.my.billiards.ai.dto.AiWeeklyReportResponse;
+import com.my.billiards.ai.lock.AiReportLockLease;
+import com.my.billiards.ai.lock.AiReportLockStore;
 import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
@@ -25,6 +29,7 @@ import com.my.billiards.game.dto.WeeklyGameReportResponse;
 import com.my.billiards.game.dto.WeeklyGameSummary;
 import com.my.billiards.game.service.GameRecordService;
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -59,8 +64,13 @@ class AiWeeklyReportServiceTest {
 	@Mock
 	private BusinessMetrics businessMetrics;
 
+	@Mock
+	private AiReportLockStore aiReportLockStore;
+
 	private AiWeeklyReportService aiWeeklyReportService;
+	private AiReportProperties properties;
 	private final ObjectMapper objectMapper = new ObjectMapper();
+	private final AiReportLockLease lockLease = new AiReportLockLease("report-lock", "owner-token");
 	private final AiWeeklyAnalysis analysis = new AiWeeklyAnalysis(
 		"This week shows a stable scoring rhythm.",
 		List.of("Win rate improved."),
@@ -71,15 +81,20 @@ class AiWeeklyReportServiceTest {
 
 	@BeforeEach
 	void setUp() {
-		AiReportProperties properties = new AiReportProperties();
+		properties = new AiReportProperties();
 		properties.setModelName("gemini-2.5-flash");
+		properties.setLockWaitSeconds(1);
+		properties.setLockPollIntervalMillis(10);
+		lenient().when(aiReportLockStore.tryAcquire(anyString(), any(Duration.class)))
+			.thenReturn(Optional.of(lockLease));
 		aiWeeklyReportService = new AiWeeklyReportService(
 			weeklyAiReportRepository,
 			gameRecordService,
 			weeklyAiAnalysisGeneratorProvider,
 			properties,
 			rateLimitService,
-			businessMetrics
+			businessMetrics,
+			aiReportLockStore
 		);
 	}
 
@@ -106,6 +121,7 @@ class AiWeeklyReportServiceTest {
 		verify(rateLimitService).checkAiGeneration(MEMBER_ID);
 		verify(businessMetrics).recordAiReport("generated", GameType.THREE_CUSHION);
 		verify(weeklyAiReportRepository).save(any(WeeklyAiReport.class));
+		verify(aiReportLockStore).release(lockLease);
 	}
 
 	@Test
@@ -132,6 +148,7 @@ class AiWeeklyReportServiceTest {
 		verify(weeklyAiReportRepository, never()).save(any());
 		verify(rateLimitService, never()).checkAiGeneration(any());
 		verify(businessMetrics).recordAiReport("cache_hit", GameType.THREE_CUSHION);
+		verify(aiReportLockStore, never()).tryAcquire(anyString(), any(Duration.class));
 	}
 
 	@Test
@@ -190,6 +207,55 @@ class AiWeeklyReportServiceTest {
 			.isInstanceOf(BilliardsException.class);
 
 		verify(businessMetrics).recordAiReport("failed", GameType.THREE_CUSHION);
+		verify(aiReportLockStore).release(lockLease);
+	}
+
+	@Test
+	void generateTodayReportWaitsForTheReportCreatedByAnotherServer() throws Exception {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		WeeklyAiReport cachedReport = WeeklyAiReport.create(
+			MEMBER_ID,
+			GameType.THREE_CUSHION,
+			today.minusDays(6),
+			today,
+			objectMapper.writeValueAsString(analysis),
+			"gemini-2.5-flash"
+		);
+		when(weeklyAiReportRepository.findByMemberIdAndGameTypeAndReportEndDate(
+			MEMBER_ID,
+			GameType.THREE_CUSHION,
+			today
+		)).thenReturn(Optional.empty(), Optional.of(cachedReport));
+		when(aiReportLockStore.tryAcquire(anyString(), any(Duration.class))).thenReturn(Optional.empty());
+
+		AiWeeklyReportResponse result = aiWeeklyReportService.generateTodayReport(MEMBER_ID, GameType.THREE_CUSHION);
+
+		assertThat(result.analysis()).isEqualTo(analysis);
+		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
+		verify(rateLimitService, never()).checkAiGeneration(any());
+		verify(businessMetrics).recordAiReport("cache_hit", GameType.THREE_CUSHION);
+		verify(aiReportLockStore, never()).release(any());
+	}
+
+	@Test
+	void generateTodayReportReturnsConflictWhenAnotherServerDoesNotFinishInTime() {
+		LocalDate today = LocalDate.now(ZoneOffset.UTC);
+		properties.setLockWaitSeconds(0);
+		when(weeklyAiReportRepository.findByMemberIdAndGameTypeAndReportEndDate(
+			MEMBER_ID,
+			GameType.THREE_CUSHION,
+			today
+		)).thenReturn(Optional.empty());
+		when(aiReportLockStore.tryAcquire(anyString(), any(Duration.class))).thenReturn(Optional.empty());
+
+		assertThatThrownBy(() -> aiWeeklyReportService.generateTodayReport(MEMBER_ID, GameType.THREE_CUSHION))
+			.isInstanceOf(BilliardsException.class)
+			.extracting(exception -> ((BilliardsException) exception).getErrorCode())
+			.isEqualTo(ErrorCode.AI_REPORT_GENERATION_IN_PROGRESS);
+
+		verify(weeklyAiAnalysisGenerator, never()).generate(any(), any());
+		verify(rateLimitService, never()).checkAiGeneration(any());
+		verify(aiReportLockStore, never()).release(any());
 	}
 
 	private WeeklyGameReportResponse weeklyReport(int currentWeekGameCount) {

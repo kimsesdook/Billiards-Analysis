@@ -6,6 +6,8 @@ import com.my.billiards.ai.config.AiReportProperties;
 import com.my.billiards.ai.domain.WeeklyAiReport;
 import com.my.billiards.ai.dto.AiWeeklyAnalysis;
 import com.my.billiards.ai.dto.AiWeeklyReportResponse;
+import com.my.billiards.ai.lock.AiReportLockLease;
+import com.my.billiards.ai.lock.AiReportLockStore;
 import com.my.billiards.ai.repository.WeeklyAiReportRepository;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
@@ -15,13 +17,15 @@ import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.WeeklyGameReportResponse;
 import com.my.billiards.game.service.GameRecordService;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,7 +41,7 @@ public class AiWeeklyReportService {
 	private final AiReportProperties aiReportProperties;
 	private final RateLimitService rateLimitService;
 	private final BusinessMetrics businessMetrics;
-	private final ConcurrentMap<String, Object> generationLocks = new ConcurrentHashMap<>();
+	private final AiReportLockStore aiReportLockStore;
 	private final ObjectMapper objectMapper = new ObjectMapper();
 
 	@Transactional(readOnly = true)
@@ -53,32 +57,31 @@ public class AiWeeklyReportService {
 		return toResponse(report);
 	}
 
-	@Transactional
 	public AiWeeklyReportResponse generateTodayReport(Long memberId, GameType type) {
 		LocalDate reportEndDate = LocalDate.now(ZoneOffset.UTC);
-		String lockKey = memberId + ":" + type.name() + ":" + reportEndDate;
-		Object generationLock = generationLocks.computeIfAbsent(lockKey, ignored -> new Object());
+		Optional<AiWeeklyReportResponse> cachedReport = findCachedReport(memberId, type, reportEndDate);
+		if (cachedReport.isPresent()) {
+			return cachedReport.get();
+		}
 
-		synchronized (generationLock) {
-			try {
-				return generateTodayReport(memberId, type, reportEndDate);
-			} finally {
-				generationLocks.remove(lockKey, generationLock);
-			}
+		String lockIdentity = memberId + ":" + type.name() + ":" + reportEndDate;
+		Optional<AiReportLockLease> lease = aiReportLockStore.tryAcquire(
+			lockIdentity,
+			Duration.ofSeconds(aiReportProperties.getLockTtlSeconds())
+		);
+		if (lease.isEmpty()) {
+			return waitForGeneratedReport(memberId, type, reportEndDate);
+		}
+
+		try {
+			return findCachedReport(memberId, type, reportEndDate)
+				.orElseGet(() -> generateTodayReport(memberId, type, reportEndDate));
+		} finally {
+			aiReportLockStore.release(lease.get());
 		}
 	}
 
 	private AiWeeklyReportResponse generateTodayReport(Long memberId, GameType type, LocalDate reportEndDate) {
-		WeeklyAiReport existingReport = weeklyAiReportRepository
-			.findByMemberIdAndGameTypeAndReportEndDate(memberId, type, reportEndDate)
-			.orElse(null);
-
-		if (existingReport != null) {
-			AiWeeklyReportResponse response = toResponse(existingReport);
-			businessMetrics.recordAiReport("cache_hit", type);
-			return response;
-		}
-
 		WeeklyGameReportResponse weeklyReport = gameRecordService.getWeeklyReport(memberId, type, reportEndDate);
 		if (weeklyReport.currentWeek().totalGames() == 0) {
 			throw new BilliardsException(
@@ -99,14 +102,19 @@ public class AiWeeklyReportService {
 			throw exception;
 		}
 
-		WeeklyAiReport savedReport = weeklyAiReportRepository.save(WeeklyAiReport.create(
-			memberId,
-			type,
-			weeklyReport.currentWeekStartDate(),
-			reportEndDate,
-			writeAnalysis(analysis),
-			aiReportProperties.getModelName()
-		));
+		WeeklyAiReport savedReport;
+		try {
+			savedReport = weeklyAiReportRepository.save(WeeklyAiReport.create(
+				memberId,
+				type,
+				weeklyReport.currentWeekStartDate(),
+				reportEndDate,
+				writeAnalysis(analysis),
+				aiReportProperties.getModelName()
+			));
+		} catch (DataIntegrityViolationException exception) {
+			return findCachedReport(memberId, type, reportEndDate).orElseThrow(() -> exception);
+		}
 		businessMetrics.recordAiReport("generated", type);
 
 		return new AiWeeklyReportResponse(
@@ -117,6 +125,48 @@ public class AiWeeklyReportService {
 			savedReport.getCreatedAt(),
 			analysis
 		);
+	}
+
+	private Optional<AiWeeklyReportResponse> findCachedReport(
+		Long memberId,
+		GameType type,
+		LocalDate reportEndDate
+	) {
+		return weeklyAiReportRepository
+			.findByMemberIdAndGameTypeAndReportEndDate(memberId, type, reportEndDate)
+			.map(report -> {
+				businessMetrics.recordAiReport("cache_hit", type);
+				return toResponse(report);
+			});
+	}
+
+	private AiWeeklyReportResponse waitForGeneratedReport(
+		Long memberId,
+		GameType type,
+		LocalDate reportEndDate
+	) {
+		long waitNanos = Duration.ofSeconds(aiReportProperties.getLockWaitSeconds()).toNanos();
+		long deadline = System.nanoTime() + waitNanos;
+		while (System.nanoTime() < deadline) {
+			long remainingNanos = deadline - System.nanoTime();
+			long sleepMillis = Math.min(
+				aiReportProperties.getLockPollIntervalMillis(),
+				Math.max(1, TimeUnit.NANOSECONDS.toMillis(remainingNanos))
+			);
+			try {
+				Thread.sleep(sleepMillis);
+			} catch (InterruptedException exception) {
+				Thread.currentThread().interrupt();
+				break;
+			}
+
+			Optional<AiWeeklyReportResponse> generatedReport = findCachedReport(memberId, type, reportEndDate);
+			if (generatedReport.isPresent()) {
+				return generatedReport.get();
+			}
+		}
+
+		throw new BilliardsException(ErrorCode.AI_REPORT_GENERATION_IN_PROGRESS);
 	}
 
 	private AiWeeklyReportResponse toResponse(WeeklyAiReport report) {
