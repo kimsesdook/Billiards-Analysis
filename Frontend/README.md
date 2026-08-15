@@ -45,7 +45,8 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Lobby participants, friends, and event logs use explicit TypeScript models instead of `any[]` state.
 - Team assignments follow the shared server participant order; local-only team movement is not exposed as though it were synchronized.
 - Player capacity and four-ball finish rules use explicit union types instead of unchecked numeric casts.
-- Live-scoreboard extraction remains a separate change so scoring behavior stays independently testable.
+- `LiveGameScoreboard` owns the live score display and controls while `CreateGamePage` keeps scoring rules, API calls, and WebSocket synchronization.
+- Scoreboard players and component events use explicit TypeScript contracts so UI changes cannot silently alter the scoring engine.
 
 ## Commands
 

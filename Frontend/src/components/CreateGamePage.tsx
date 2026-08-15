@@ -1,9 +1,7 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
-  Play, Plus, Minus, Target, User, Sparkles, ChevronRight,
-  Settings, AlertCircle, Trophy, Timer, Volume2, VolumeX, Eye, HelpCircle, RefreshCw, CheckCircle2, Award,
-  Hourglass, Activity
+  Play, AlertCircle, RefreshCw, CheckCircle2, Award, Hourglass, Activity
 } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
 import { getFriends } from '../api/friends';
@@ -35,28 +33,16 @@ import {
   type LobbyLog,
   type LobbyPlayer,
 } from './GameRoomLobby';
+import {
+  LiveGameScoreboard,
+  type LiveScoreboardPlayer,
+} from './LiveGameScoreboard';
 
 interface CreateGamePageProps {
   onAdd: (record: GameRecordDraft) => Promise<GameRecord | void> | GameRecord | void;
 }
 
-interface ActivePlayer {
-  id: number;
-  memberId?: number;
-  name: string;
-  targetScore: number;
-  currentScore: number;
-  cushionScore?: number;
-  highRun: number;
-  inningScores: number[]; // points scored in each inning of their turn
-  cueBallColor: string; // 'white' | 'yellow' | 'red' | 'blue'
-  textColor: string;
-  bgColor: string;
-  borderColor: string;
-  isCushionPhase?: boolean;
-  isFinished?: boolean;
-  isMe?: boolean;
-}
+type ActivePlayer = LiveScoreboardPlayer;
 
 type GameInvitationNavigationState = {
   acceptedInvitation?: {
@@ -1373,6 +1359,29 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     });
   };
 
+  const handleActivePlayerCushionTransition = () => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
+    cueClickSound();
+    setPlayers((currentPlayers) => currentPlayers.map((player, index) => (
+      index === activePlayerIndex
+        ? { ...player, isCushionPhase: true }
+        : player
+    )));
+  };
+
+  const handleRequestGameFinish = () => {
+    if (!canControlLiveScoreboard) {
+      return;
+    }
+
+    const highestScorePlayer = [...players].sort((left, right) => right.currentScore - left.currentScore)[0];
+    setWinnerName(highestScorePlayer?.name || players[0]?.name || '');
+    setShowFinishedModal(true);
+  };
+
   // Finish active game and convert parameters to system persistent record list
   const handleFinalizeAndSaveRecord = async () => {
     if (isSavingRecord) return;
@@ -1566,533 +1575,34 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
       {/* 2. REAL-TIME MATCH SCOREBOARD VIEW */}
       {isPlaying && players.length > 0 && (
-        <div className="space-y-6">
-          
-          {/* Header Indicators panel */}
-          <div className="flex flex-wrap items-center justify-between gap-4 bg-[#07241c] px-6 py-4 rounded-3xl border border-[#134739] shadow-lg">
-            
-            {/* Left side: Stats */}
-            <div className="flex items-center gap-6">
-              {/* Inning Indicator */}
-              <div className="text-left">
-                <span className="text-[10px] text-emerald-400 font-bold block uppercase tracking-wider mb-0.5">이닝 (INNING)</span>
-                <p className="text-xl font-mono font-black text-white">{currentInning}회</p>
-              </div>
-
-              {/* Divider */}
-              <div className="hidden sm:block h-8 w-px bg-[#134739]" />
-
-              {/* Stopwatch ticker */}
-              <div className="flex items-center gap-2">
-                <Timer className="text-emerald-400 shrink-0" size={18} />
-                <div className="text-left">
-                  <span className="text-[10px] text-emerald-500/60 block font-bold uppercase mb-0.5">누적 경기 시간</span>
-                  <p className="text-lg font-mono font-bold text-white">
-                    {Math.floor(gameTime / 60).toString().padStart(2, '0')}:{(gameTime % 60).toString().padStart(2, '0')}
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            {/* Right side: Action buttons */}
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setSoundEnabled(!soundEnabled)}
-                className={cn(
-                  "p-2.5 rounded-xl border transition-colors",
-                  soundEnabled ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400" : "bg-zinc-800/80 border-zinc-700 text-zinc-500"
-                )}
-                title={soundEnabled ? '소리 끄기' : '소리 켜기'}
-              >
-                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              </button>
-
-              <button
-                onClick={() => setIsPaused(!isPaused)}
-                disabled={!canControlLiveScoreboard}
-                className={cn(
-                  "px-4 py-2.5 text-xs font-bold border rounded-xl transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
-                  isPaused 
-                    ? "bg-amber-500 border-amber-400 text-zinc-950" 
-                    : "bg-[#144b3c] border-[#227764] text-emerald-300 hover:text-white"
-                )}
-              >
-                {isPaused ? '경기 재개' : '일시정지'}
-              </button>
-
-              <button
-                onClick={() => {
-                  const highestScorePlayer = [...players].sort((a, b) => b.currentScore - a.currentScore)[0];
-                  setWinnerName(highestScorePlayer ? highestScorePlayer.name : players[0]?.name || '');
-                  setShowFinishedModal(true);
-                }}
-                disabled={!canControlLiveScoreboard}
-                className="px-4 py-2.5 text-xs font-black bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 rounded-xl flex items-center justify-center gap-1.5 shadow-md cursor-pointer hover:scale-105 transition-all"
-              >
-                <Trophy size={14} />
-                <span>경기 종료</span>
-              </button>
-            </div>
-          </div>
-
-          {gameRoomId && (
-            <div className={cn(
-              "flex items-center gap-2 px-4 py-3 rounded-xl border text-xs font-bold",
-              liveStateError
-                ? "bg-red-500/10 border-red-500/25 text-red-300"
-                : "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
-            )}>
-              {liveStateError ? (
-                <AlertCircle size={15} className="shrink-0" />
-              ) : isLiveStateReady ? (
-                <CheckCircle2 size={15} className="shrink-0" />
-              ) : (
-                <Hourglass size={15} className="shrink-0 animate-pulse" />
-              )}
-              <span>
-                {liveStateError
-                  || (!isLiveStateReady
-                    ? '실시간 점수판을 동기화하고 있습니다.'
-                    : isGameRoomHost
-                      ? '실시간 점수판이 연결되었습니다.'
-                      : '방장의 점수판을 실시간으로 보고 있습니다.')}
-              </span>
-            </div>
-          )}
-
-          {/* Active Shot-clock indicator bar */}
-          {enableShotClock && (
-            <div className="bg-zinc-950/40 p-1.5 rounded-full border border-emerald-950/50">
-              <div className="flex justify-between items-center px-4 mb-1">
-                <span className="text-[10px] font-bold tracking-widest text-[#9edac3]">이닝 제한 제한시간 (SHOT CLOCK)</span>
-                <span className={cn(
-                  "font-mono font-black text-sm",
-                  shotClockTime <= 10 ? "text-red-400 text-lg animate-ping" : "text-emerald-300"
-                )}>
-                  {shotClockTime}초
-                </span>
-              </div>
-              <div className="w-full h-3 bg-zinc-900 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: '100%' }}
-                  animate={{ width: `${(shotClockTime / shotClockLimit) * 100}%` }}
-                  transition={{ duration: 1, ease: 'linear' }}
-                  className={cn(
-                    "h-full rounded-full transition-all duration-300",
-                    shotClockTime <= 8 
-                      ? "bg-red-500 shadow-[0_0_10px_#ef4444]" 
-                      : shotClockTime <= 15 
-                        ? "bg-amber-500" 
-                        : "bg-emerald-500"
-                  )} 
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Team Mode Score Summaries */}
-          {mode === 'Team' && playerCount === 4 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 max-w-5xl mx-auto w-full mb-6 mt-1 animate-fadeIn">
-              {/* Team A (1팀: Player 1 + Player 3) */}
-              <div className="bg-[#0c4032] border border-emerald-500/30 p-4 rounded-3xl flex items-center justify-between shadow-lg shadow-emerald-500/5">
-                <div className="flex items-center gap-3 font-sans w-full sm:w-auto">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center font-mono font-black text-emerald-400 text-xs shrink-0 font-sans">
-                    1팀
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest block font-mono">1팀 (동료팀) • 합산</span>
-                    <span className="text-xs font-black text-emerald-100/95 block">
-                      {players.find(p => p.id === 1)?.name || '1번'} + {players.find(p => p.id === 3)?.name || '3번'}
-                    </span>
-                  </div>
-                </div>
-                {type === '4-Ball' && lastThreeCushions > 0 ? (
-                  <div className="flex items-center gap-4 shrink-0">
-                    {/* 알다마 합산 */}
-                    <div className="text-right border-r border-emerald-500/10 pr-3">
-                      <span className="text-[9px] font-bold text-emerald-400/50 uppercase tracking-widest block leading-none mb-1 font-mono">알다마</span>
-                      <span className="text-2xl font-mono font-black text-white">
-                        {((players.find(p => p.id === 1)?.currentScore || 0) + (players.find(p => p.id === 3)?.currentScore || 0))}
-                      </span>
-                    </div>
-                    {/* 3쿠션 합산 */}
-                    <div className="text-right pr-2">
-                      <span className="text-[9px] font-bold text-orange-400/80 uppercase tracking-widest block leading-none mb-1 font-mono">3쿠션</span>
-                      <span className="text-2xl font-mono font-black text-orange-400">
-                        {((players.find(p => p.id === 1)?.cushionScore || 0) + (players.find(p => p.id === 3)?.cushionScore || 0))}
-                      </span>
-                      <span className="text-orange-400/35 font-mono text-[10px] font-bold leading-none block mt-0.5">
-                        목표 {lastThreeCushions}개
-                      </span>
-                    </div>
-                    {/* 3쿠션 전환 버튼 */}
-                    <button
-                      type="button"
-                      onClick={() => handleTeamCushionTransition('A')}
-                      disabled={!canControlLiveScoreboard}
-                      className={cn(
-                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0 disabled:opacity-40 disabled:cursor-not-allowed",
-                        (players.find(p => p.id === 1)?.isCushionPhase && players.find(p => p.id === 3)?.isCushionPhase)
-                          ? "bg-amber-400 text-zinc-950 border-amber-300 font-black"
-                          : "bg-orange-500/15 text-orange-400 hover:bg-orange-500/30 border-orange-500/20"
-                      )}
-                    >
-                      3쿠션 전환
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-right shrink-0">
-                    <span className="text-[9px] font-bold text-emerald-400/40 uppercase tracking-widest block leading-none mb-1 font-mono">합산 현황</span>
-                    <span className="text-2xl font-mono font-black text-white">
-                      {((players.find(p => p.id === 1)?.currentScore || 0) + (players.find(p => p.id === 3)?.currentScore || 0))}
-                    </span>
-                  </div>
-                )}
-              </div>
-
-              {/* Team B (2팀: Player 2 + Player 4) */}
-              <div className="bg-[#4a1c1c]/25 border border-red-500/20 p-4 rounded-3xl flex items-center justify-between shadow-lg">
-                <div className="flex items-center gap-3 font-sans w-full sm:w-auto">
-                  <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center font-mono font-black text-[#f87171] text-xs shrink-0 font-sans">
-                    2팀
-                  </div>
-                  <div className="text-left">
-                    <span className="text-[10px] font-bold text-red-100 uppercase tracking-widest block font-mono">2팀 (상대팀) • 합산</span>
-                    <span className="text-xs font-black text-red-100/95 block">
-                      {players.find(p => p.id === 2)?.name || '2번'} + {players.find(p => p.id === 4)?.name || '4번'}
-                    </span>
-                  </div>
-                </div>
-                {type === '4-Ball' && lastThreeCushions > 0 ? (
-                  <div className="flex items-center gap-4 shrink-0">
-                    {/* 알다마 합산 */}
-                    <div className="text-right border-r border-red-500/10 pr-3">
-                      <span className="text-[9px] font-bold text-red-400/50 uppercase tracking-widest block leading-none mb-1 font-mono">알다마</span>
-                      <span className="text-2xl font-mono font-black text-white">
-                        {((players.find(p => p.id === 2)?.currentScore || 0) + (players.find(p => p.id === 4)?.currentScore || 0))}
-                      </span>
-                    </div>
-                    {/* 3쿠션 합산 */}
-                    <div className="text-right pr-2">
-                      <span className="text-[9px] font-bold text-orange-400/80 uppercase tracking-widest block leading-none mb-1 font-mono">3쿠션</span>
-                      <span className="text-2xl font-mono font-black text-orange-400">
-                        {((players.find(p => p.id === 2)?.cushionScore || 0) + (players.find(p => p.id === 4)?.cushionScore || 0))}
-                      </span>
-                      <span className="text-orange-400/35 font-mono text-[10px] font-bold leading-none block mt-0.5">
-                        목표 {lastThreeCushions}개
-                      </span>
-                    </div>
-                    {/* 3쿠션 전환 버튼 */}
-                    <button
-                      type="button"
-                      onClick={() => handleTeamCushionTransition('B')}
-                      disabled={!canControlLiveScoreboard}
-                      className={cn(
-                        "px-3 py-1.5 rounded-2xl font-black text-[10px] transition-all cursor-pointer border shadow-sm active:scale-95 leading-none shrink-0 disabled:opacity-40 disabled:cursor-not-allowed",
-                        (players.find(p => p.id === 2)?.isCushionPhase && players.find(p => p.id === 4)?.isCushionPhase)
-                          ? "bg-amber-400 text-zinc-950 border-amber-300 font-black"
-                          : "bg-orange-500/15 text-orange-400 hover:bg-orange-500/30 border-orange-500/20"
-                      )}
-                    >
-                      3쿠션 전환
-                    </button>
-                  </div>
-                ) : (
-                  <div className="text-right shrink-0">
-                    <span className="text-[9px] font-bold text-red-400/40 uppercase tracking-widest block leading-none mb-1 font-mono">합산 현황</span>
-                    <span className="text-2xl font-mono font-black text-white">
-                      {((players.find(p => p.id === 2)?.currentScore || 0) + (players.find(p => p.id === 4)?.currentScore || 0))}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Massive Live Score boxes - Grid display responsive to player numbers in a clean 2x2 quadrant layout */}
-          {(() => {
-            const renderPlayerCard = (p: any, idx: number, isActive: boolean, progressRatio: number, quadrantLabel: string, quadrantMini: string) => {
-              return (
-                <div
-                  key={p.id}
-                  className={cn(
-                    "relative p-6 rounded-[2.5rem] border transition-all duration-300 select-none text-left overflow-hidden min-h-[220px] flex flex-col justify-between",
-                    p.isFinished
-                      ? "bg-gradient-to-br from-[#1c180a] to-[#071d17] border-amber-500/60 shadow-[0_0_20px_rgba(245,158,11,0.2)]"
-                      : isActive 
-                        ? "bg-[#0f4d3d] border-emerald-400 ring-2 ring-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.25)]" 
-                        : "bg-[#0b3127] border-[#16503f] opacity-85 hover:opacity-100"
-                  )}
-                >
-                  {/* Finished Gold Watermark Trophy */}
-                  {p.isFinished && (
-                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-amber-500/10 pointer-events-none select-none z-0">
-                      <Award size={130} className="stroke-[1] animate-pulse" />
-                    </div>
-                  )}
-
-                  {/* Decorative cue ball layout top-right */}
-                  <div className="absolute top-5 right-5 flex items-center gap-2">
-                    <span className="text-[10px] font-black text-emerald-400/40 tracking-wider">
-                      {quadrantMini}
-                    </span>
-                    <span className={cn(
-                      "w-5 h-5 rounded-full inline-block shadow-lg border",
-                      p.cueBallColor === 'white' ? "bg-white border-zinc-200" : 
-                      p.cueBallColor === 'yellow' ? "bg-yellow-400 border-yellow-300" : 
-                      p.cueBallColor === 'red' ? "bg-red-500 border-red-400" : "bg-sky-500 border-sky-400"
-                    )} />
-                  </div>
-
-                  <div>
-                    {/* Grid Position Info Badge */}
-                    <div className="mb-2">
-                      <span className="text-[10px] font-black text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 inline-block uppercase tracking-wider mb-2">
-                        {quadrantLabel}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <h3 className="text-xl font-bold text-white tracking-tight flex items-center gap-1.5">
-                          {p.name}
-                          {p.isMe && <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-full">나</span>}
-                        </h3>
-                        {isActive && !p.isFinished && (
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping inline-block" />
-                        )}
-                      </div>
-                      <span className={cn(
-                        "text-[10px] font-bold uppercase tracking-widest block mt-1",
-                        p.isFinished ? "text-amber-400" : "text-emerald-400/60"
-                      )}>
-                        {p.isFinished 
-                          ? "🏆 경기 완료 (FINISHED)" 
-                          : isActive 
-                            ? "💡 공격 중 (ACTIVE)" 
-                            : "대기 열"}
-                      </span>
-                    </div>
-
-                    {/* Decorative Divider */}
-                    <div className={cn(
-                      "w-full h-px mt-4 mb-2 transition-all duration-300",
-                      isActive ? "bg-emerald-400/20" : "bg-emerald-700/10"
-                    )} />
-                  </div>
-
-                  {/* HUGE NUMERICAL SCORE DISPLAYS && Target info */}
-                  <div className="mt-4 flex items-end justify-between">
-                    <div className="flex flex-col">
-                      <div className="flex items-baseline gap-2">
-                        <span className={cn(
-                          "text-6xl md:text-7xl font-mono font-black tracking-tight leading-none",
-                          p.isFinished 
-                            ? "text-amber-400" 
-                            : p.isCushionPhase
-                              ? ((p.cushionScore || 0) >= lastThreeCushions ? "text-emerald-300 animate-pulse" : "text-orange-400")
-                              : isActive 
-                                ? "text-emerald-300"
-                                : "text-white"
-                        )}>
-                          {p.currentScore}
-                        </span>
-                      </div>
-                      {/* Minimalist 4-Ball Cushion Status Badge */}
-                      {type === '4-Ball' && lastThreeCushions > 0 && p.isCushionPhase && !p.isFinished && (
-                        <div className="text-[11px] font-bold text-orange-400 mt-2">
-                          🔥 마무리 쓰리쿠션 ({p.cushionScore || 0} / {lastThreeCushions})
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Highlight overlay if active or finished */}
-                    <div className="flex items-center gap-1.5">
-                      {p.isFinished ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-gradient-to-r from-amber-500 to-orange-500 text-zinc-950 text-[10px] font-black rounded-lg uppercase tracking-wider shadow-lg">
-                          🏆 COMPLETE
-                        </span>
-                      ) : isActive ? (
-                        <span className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-500 text-[#07241c] text-[10px] font-black rounded-lg uppercase tracking-wider shadow-lg animate-bounce">
-                          💡 TURN
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            };
-
-            const isTeam4Mode = mode === 'Team' && playerCount === 4;
-
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto w-full">
-                {isTeam4Mode ? (
-                  <>
-                    {/* Left Column: Team 1 (Player 1 & Player 3) */}
-                    <div className="space-y-6">
-                      {[1, 3].map(id => {
-                        const p = players.find(x => x.id === id);
-                        if (!p) return null;
-                        const idx = players.findIndex(x => x.id === id);
-                        const isActive = idx === activePlayerIndex;
-                        const progressRatio = Math.min(100, (p.currentScore / p.targetScore) * 100);
-                        const quadrantLabel = id === 1 ? `왼쪽 위 (1팀 • ${idx + 1}P)` : `왼쪽 아래 (1팀 • ${idx + 1}P)`;
-                        const quadrantMini = id === 1 ? "↖" : "↙";
-                        return renderPlayerCard(p, idx, isActive, progressRatio, quadrantLabel, quadrantMini);
-                      })}
-                    </div>
-
-                    {/* Right Column: Team 2 (Player 2 & Player 4) */}
-                    <div className="space-y-6">
-                      {[2, 4].map(id => {
-                        const p = players.find(x => x.id === id);
-                        if (!p) return null;
-                        const idx = players.findIndex(x => x.id === id);
-                        const isActive = idx === activePlayerIndex;
-                        const progressRatio = Math.min(100, (p.currentScore / p.targetScore) * 100);
-                        const quadrantLabel = id === 2 ? `오른쪽 위 (2팀 • ${idx + 1}P)` : `오른쪽 아래 (2팀 • ${idx + 1}P)`;
-                        const quadrantMini = id === 2 ? "↗" : "↘";
-                        return renderPlayerCard(p, idx, isActive, progressRatio, quadrantLabel, quadrantMini);
-                      })}
-                    </div>
-                  </>
-                ) : (
-                  players.map((p, idx) => {
-                    const isActive = idx === activePlayerIndex;
-                    const progressRatio = Math.min(100, (p.currentScore / p.targetScore) * 100);
-                    const quadrantLabel = idx === 0 ? "왼쪽 위 (1P)" : idx === 1 ? "오른쪽 위 (2P)" : idx === 2 ? "왼쪽 아래 (3P)" : "오른쪽 아래 (4P)";
-                    const quadrantMini = idx === 0 ? "↖" : idx === 1 ? "↗" : idx === 2 ? "↙" : "↘";
-                    return renderPlayerCard(p, idx, isActive, progressRatio, quadrantLabel, quadrantMini);
-                  })
-                )}
-              </div>
-            );
-          })()}
-
-          {/* ACTIVE TURN SCOREBOARD CONTROLLER PANEL */}
-          <div className="bg-[#0b3c2e] p-6 sm:p-8 rounded-[3rem] border border-[#1a5d4e] shadow-2xl relative">
-            
-            {/* Current Active User highlight bar */}
-            <div className="flex flex-wrap items-center justify-between border-b border-[#1a5d4e] pb-4 mb-6">
-              <div className="flex items-center gap-3">
-                <span className={cn(
-                  "w-4 h-4 rounded-full border shadow-sm",
-                  players[activePlayerIndex].cueBallColor === 'white' ? "bg-white border-zinc-200" : 
-                  players[activePlayerIndex].cueBallColor === 'yellow' ? "bg-yellow-400 border-yellow-300" : "bg-red-500 border-red-400"
-                )} />
-                <h3 className="text-lg font-black text-white">
-                  {players[activePlayerIndex].name} <span className="font-normal text-sm text-[#00ffa2]">선수 공격 중</span>
-                </h3>
-              </div>
-            </div>
-
-            {/* Controller Layout */}
-            <div className="flex flex-col gap-4">
-              
-              {/* 4구 전용 마무리 쓰리쿠션 전환 수동 제어기 (팀전인 경우에는 합산 상자에 배치되므로 여기선 노출하지 않음) */}
-              {type === '4-Ball' && lastThreeCushions > 0 && !players[activePlayerIndex].isCushionPhase && !(mode === 'Team' && playerCount === 4) && (
-                <div className="p-4 bg-[#144b3c]/50 rounded-2xl border border-dashed border-[#e9a65a]/30 flex flex-col sm:flex-row items-center justify-between gap-4">
-                  <div className="text-left w-full sm:w-auto">
-                    <span className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-widest block mb-1">
-                      4구 진행 상태 제어
-                    </span>
-                    <p className="text-sm font-bold text-white leading-tight">
-                      <span className="text-emerald-100">
-                        ⚪ 일반 볼(알) 점수 획득 단계 진행 중
-                      </span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setPlayers(prev => {
-                        const updated = [...prev];
-                        const active = { ...updated[activePlayerIndex] };
-                        active.isCushionPhase = true;
-                        updated[activePlayerIndex] = active;
-                        return updated;
-                      });
-                      cueClickSound();
-                    }}
-                    className="w-full sm:w-auto px-4 py-2 text-xs font-black rounded-xl cursor-pointer transition-all border bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 font-extrabold shadow-md"
-                  >
-                    🔴 3쿠션 전환
-                  </button>
-                </div>
-              )}
-
-              {/* Status Header for 3-Cushion Phase */}
-              {type === '4-Ball' && lastThreeCushions > 0 && players[activePlayerIndex].isCushionPhase && (
-                <div className="p-4 bg-orange-950/40 rounded-2xl border border-orange-500/20 text-center">
-                  <p className="text-sm font-black text-orange-400 animate-pulse flex items-center justify-center gap-2">
-                    🔥 현재 마무리 쓰리쿠션 단계 진행 중! ({lastThreeCushions}쿠션을 득점해야 승리합니다.)
-                  </p>
-                </div>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                
-                {players[activePlayerIndex].isCushionPhase ? (
-                  <>
-                    {/* 3-Cushion scoring point addition */}
-                    <button
-                      onClick={() => handleScoreChange(1)}
-                      disabled={isPaused || !canControlLiveScoreboard}
-                      className="h-20 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-950 font-black rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transform hover:-translate-y-1 transition-all"
-                    >
-                      <Plus size={24} />
-                      <span className="text-sm font-black block">🏆 3쿠션 득점</span>
-                    </button>
-
-                    {/* 3-Cushion point deduction */}
-                    <button
-                      onClick={() => handleScoreChange(-1)}
-                      disabled={isPaused || !canControlLiveScoreboard}
-                      className="h-20 bg-[#2b1f13] hover:bg-orange-500/10 hover:text-orange-300 disabled:opacity-40 disabled:cursor-not-allowed border border-orange-500/30 text-orange-400 font-bold rounded-2xl flex flex-col items-center justify-center gap-1 cursor-pointer transform hover:-translate-y-1 transition-all"
-                    >
-                      <Minus size={24} />
-                      <span className="text-sm font-bold block">3쿠션 감점 (수정)</span>
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {/* General Point addition */}
-                    <button
-                      onClick={() => handleScoreChange(1)}
-                      disabled={isPaused || !canControlLiveScoreboard}
-                      className="h-20 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-[#092e23] font-black rounded-2xl flex flex-col items-center justify-center gap-1 shadow-lg cursor-pointer transform hover:-translate-y-1 transition-all"
-                    >
-                      <Plus size={24} />
-                      <span className="text-sm font-bold block">1점 득점</span>
-                    </button>
-
-                    {/* General Deduct point (safe correction) */}
-                    <button
-                      onClick={() => handleScoreChange(-1)}
-                      disabled={isPaused || !canControlLiveScoreboard}
-                      className="h-20 bg-[#1a3830] hover:bg-red-500/10 hover:text-red-300 disabled:opacity-40 text-emerald-500 rounded-2xl flex flex-col items-center justify-center gap-1 border border-[#2d8a75]/30 cursor-pointer transform hover:-translate-y-1 transition-all"
-                    >
-                      <Minus size={24} />
-                      <span className="text-sm font-bold block">1점 감점 (수정)</span>
-                    </button>
-                  </>
-                )}
- 
-                {/* Next Turn Trigger */}
-                <button
-                  onClick={handleEndInning}
-                  disabled={isPaused || !canControlLiveScoreboard}
-                  className="h-20 bg-blue-600 hover:bg-blue-500 disabled:opacity-40 text-white rounded-2xl flex flex-col items-center justify-center gap-1 shadow-md cursor-pointer transform hover:-translate-y-1 transition-all"
-                >
-                  <ChevronRight size={24} />
-                  <span className="text-sm font-bold block">이닝 완료 / 교대</span>
-                </button>
- 
-              </div>
-
-            </div>
-          </div>
-        </div>
+        <LiveGameScoreboard
+          players={players}
+          currentInning={currentInning}
+          activePlayerIndex={activePlayerIndex}
+          gameTime={gameTime}
+          isPaused={isPaused}
+          soundEnabled={soundEnabled}
+          hasGameRoom={gameRoomId !== null}
+          liveStateError={liveStateError}
+          isLiveStateReady={isLiveStateReady}
+          isGameRoomHost={isGameRoomHost}
+          canControl={canControlLiveScoreboard}
+          enableShotClock={enableShotClock}
+          shotClockTime={shotClockTime}
+          shotClockLimit={shotClockLimit}
+          gameType={type}
+          gameMode={mode}
+          playerCount={playerCount}
+          lastThreeCushions={lastThreeCushions}
+          onToggleSound={() => setSoundEnabled((enabled) => !enabled)}
+          onTogglePause={() => setIsPaused((paused) => !paused)}
+          onRequestFinish={handleRequestGameFinish}
+          onTeamCushionTransition={handleTeamCushionTransition}
+          onActivePlayerCushionTransition={handleActivePlayerCushionTransition}
+          onScoreChange={handleScoreChange}
+          onEndInning={() => handleEndInning()}
+        />
       )}
-
       {/* 3. GAME ROOM SUCCESSFUL FINISH MODAL */}
       <AnimatePresence>
         {showFinishedModal && (
