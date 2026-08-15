@@ -36,6 +36,7 @@ Run only the architecture rules:
 - `local`: MySQL-based local development profile
 - `docker`: MySQL and Redis-based Docker Compose profile
 - `test`: H2-based test profile for fast context and repository tests
+- `prod`: fail-fast production profile that requires externally supplied MySQL, Redis, JWT, and HTTPS frontend settings
 
 ## API Documentation
 
@@ -142,6 +143,29 @@ docker compose up -d redis
 ```
 
 The default connection is `localhost:6379`; override it with `REDIS_HOST` and `REDIS_PORT` when needed. The `test` profile uses in-memory ticket, rate-limit, and AI report lock stores and does not require Redis.
+
+## Production Profile
+
+`application-prod.yaml` contains no default database credentials, Redis password, JWT secret, or frontend origin. The root `.env.example` is a configuration checklist only; Spring Boot and Gradle do not load it automatically, and real values must stay outside Git.
+
+The `prod` profile stops application startup when any of these conditions is violated:
+
+- `DB_URL` is not a MySQL JDBC URL using `sslMode=VERIFY_IDENTITY`, or the database credentials are missing or weak.
+- `REDIS_HOST` or `REDIS_PASSWORD` is missing, or `REDIS_SSL_ENABLED` is not `true`.
+- `JWT_SECRET` is shorter than 32 bytes or resembles a development placeholder.
+- `FRONTEND_URL` is not a single HTTPS origin, uses localhost or a wildcard, or contains a path, query, or fragment.
+- The refresh cookie is not secure, local administrator bootstrap is enabled, or `local`, `docker`, or `test` is active beside `prod`.
+- Actuator exposure is broader than `health` and `info`.
+
+Database and Redis passwords must contain at least 16 characters. Validation errors list property names only and never print supplied secret values. The profile also disables SQL output, hides server error details, honors reverse-proxy headers, and enables graceful shutdown.
+
+After the required infrastructure and environment variables have been configured, start the production profile with:
+
+```powershell
+.\gradlew.bat bootRun --args="--spring.profiles.active=prod"
+```
+
+This command intentionally fails before serving traffic when the environment is incomplete or unsafe.
 
 ## Distributed Rate Limits
 
