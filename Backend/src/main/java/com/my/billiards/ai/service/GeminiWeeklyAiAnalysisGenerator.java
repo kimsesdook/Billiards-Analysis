@@ -24,6 +24,7 @@ public class GeminiWeeklyAiAnalysisGenerator implements WeeklyAiAnalysisGenerato
 		""";
 
 	private final ObjectProvider<ChatModel> chatModelProvider;
+	private final AiProviderResilience aiProviderResilience;
 
 	@Override
 	public AiWeeklyAnalysis generate(WeeklyGameReportResponse weeklyReport, GameStatisticsResponse statistics) {
@@ -36,12 +37,12 @@ public class GeminiWeeklyAiAnalysisGenerator implements WeeklyAiAnalysisGenerato
 		}
 
 		try {
-			return ChatClient.create(chatModel)
+			return aiProviderResilience.execute(() -> ChatClient.create(chatModel)
 				.prompt()
 				.system(SYSTEM_PROMPT)
 				.user(createUserPrompt(weeklyReport, statistics))
 				.call()
-				.entity(AiWeeklyAnalysis.class, spec -> spec.useProviderStructuredOutput());
+				.entity(AiWeeklyAnalysis.class, spec -> spec.useProviderStructuredOutput()));
 		} catch (BilliardsException exception) {
 			throw exception;
 		} catch (RuntimeException exception) {
