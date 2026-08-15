@@ -28,6 +28,7 @@ import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
 import { motion, AnimatePresence } from 'motion/react';
+import { GameRoomCreateForm } from './GameRoomCreateForm';
 
 interface CreateGamePageProps {
   onAdd: (record: GameRecordDraft) => Promise<GameRecord | void> | GameRecord | void;
@@ -1520,7 +1521,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     const isP1Winner = p1.isFinished || (!p2.isFinished && (p1.currentScore / p1.targetScore >= p2.currentScore / p2.targetScore));
 
     // Build the record data
-    const finishedMatchData = {
+    const finishedMatchData: GameRecordDraft = {
       date: new Date().toISOString(),
       type,
       mode,
@@ -1528,9 +1529,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       opponentScore: p2 ? p2.currentScore : 0,
       innings: totalInningsCount,
       highRun: p1.highRun,
-      playerCount: playerCount as any,
+      playerCount,
       rank: playerCount > 2 ? players.findIndex(p => p.id === p1.id) + 1 : undefined, // simple rank proxy
-      lastThreeCushions: type === '4-Ball' ? (lastThreeCushions as any) : undefined,
+      lastThreeCushions: type === '4-Ball' ? lastThreeCushions : undefined,
       notes: notes.trim() || `실시간 경기 진행 완료 (이닝: ${totalInningsCount}회)`,
       opponentName: p2 ? p2.name : '기타',
       inningScores: p1.inningScores,
@@ -1574,193 +1575,26 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       
       {/* 1. ROOM CREATION VIEW */}
       {!isPlaying && !isLobby && (
-        <div className="max-w-xl mx-auto">
-          <div className="mb-6 text-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-400/20 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-3">
-              <RefreshCw size={12} className="animate-spin" />
-              실시간 경기방 개설
-            </span>
-            <h1 className="text-3xl font-black text-white tracking-tight flex items-center justify-center gap-2">
-              <Target className="text-emerald-400" size={28} />
-              당구 게임방 생성
-            </h1>
-            <p className="text-emerald-100/60 mt-1 font-medium text-xs">
-              선수들의 핸디/다마 정보를 입력하고, 실시간 턴제 디지털 스코어보드를 시작하세요.
-            </p>
-          </div>
-
-          <div className="bg-[#0b3c2e] p-6 sm:p-8 rounded-[2.5rem] border border-[#1a5d4e] shadow-2xl relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-              <Trophy size={140} className="text-emerald-400 rotate-12" />
-            </div>
-
-            <form onSubmit={handleStartRealtimeGame} className="space-y-6 text-left relative z-10 text-emerald-50">
-
-              <div>
-                <label htmlFor="game-room-name" className="block text-xs font-bold text-emerald-400/85 uppercase tracking-widest mb-2">
-                  게임방 이름
-                </label>
-                <input
-                  id="game-room-name"
-                  type="text"
-                  required
-                  maxLength={50}
-                  value={roomName}
-                  onChange={(event) => setRoomName(event.target.value)}
-                  disabled={isGameRoomCreating}
-                  className="w-full bg-[#144b3c] border border-[#1d6352] rounded-xl px-4 py-3 text-sm font-bold text-white outline-none focus:border-emerald-400 disabled:opacity-60"
-                  placeholder="게임방 이름을 입력하세요"
-                />
-              </div>
-
-              {/* 경기 방식 설정 (개인전 vs 팀전) */}
-              <div>
-                <label className="block text-xs font-bold text-[#e9a65a] uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-orange-400 animate-ping" />
-                  경기 방식 설정 (개인전 vs 팀전)
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['Individual', 'Team'] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => {
-                        setMode(m);
-                        if (m === 'Team') {
-                          setPlayerCount(4); // Force 4 players for team match (2:2)
-                        }
-                      }}
-                      className={cn(
-                        "py-3 px-4 rounded-2xl text-xs font-bold transition-all border flex items-center justify-center gap-2 cursor-pointer",
-                        mode === m
-                          ? "bg-emerald-500 border-emerald-400 text-[#0a3d2e] shadow-lg shadow-emerald-500/10 font-black"
-                          : "bg-[#144b3c] border-[#1d6352] text-emerald-100/60 hover:text-white"
-                      )}
-                    >
-                      <Users size={14} />
-                      {m === 'Individual' ? '개인전 (Individual)' : '2 : 2 복식 팀전 (Team)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* 경기 인원수 설정 */}
-              <div>
-                <label className="block text-xs font-bold text-emerald-400/85 uppercase tracking-widest mb-2">
-                  경기 인원수 설정
-                </label>
-                {mode === 'Team' ? (
-                  <div className="bg-[#144b3c]/50 border border-dashed border-emerald-500/30 text-emerald-300 text-xs font-black p-3.5 rounded-2xl text-center flex items-center justify-center gap-2 animate-fadeIn">
-                    <Users size={14} className="text-emerald-400 shrink-0" />
-                    <span>복식 팀전은 <span className="text-white font-extrabold underline decoration-2 decoration-emerald-400 underline-offset-4">4인 플레이 (2:2)</span>로 고정되어 시작합니다.</span>
-                  </div>
-                ) : (
-                  <div className="flex bg-[#144b3c] p-1 rounded-2xl border border-[#1d6352] animate-fadeIn">
-                    {[2, 3, 4].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => {
-                          setPlayerCount(num as any);
-                        }}
-                        className={cn(
-                          "flex-1 py-3 rounded-xl text-xs font-bold transition-all cursor-pointer text-center",
-                          playerCount === num 
-                            ? "bg-emerald-500 text-[#0a3d2e] font-extrabold shadow-md" 
-                            : "text-emerald-100/50 hover:text-white"
-                        )}
-                      >
-                        {num}인 플레이 ({num}인 전)
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* 경기 종목 설정 (3구 4구) */}
-              <div>
-                <label className="block text-xs font-bold text-emerald-400/85 uppercase tracking-widest mb-2">
-                  경기 종목 (3구 vs 4구)
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(['3-Cushion', '4-Ball'] as const).map((t) => (
-                    <button
-                      key={t}
-                      type="button"
-                      onClick={() => setType(t)}
-                      className={cn(
-                        "py-3 px-4 rounded-2xl text-sm font-bold transition-all border flex items-center justify-center gap-2 cursor-pointer",
-                        type === t 
-                          ? "bg-emerald-500 border-emerald-400 text-[#0a3d2e] shadow-lg shadow-emerald-500/10" 
-                          : "bg-[#144b3c] border-[#1d6352] text-emerald-100/60 hover:text-white"
-                      )}
-                    >
-                      <span className={cn(
-                        "w-2.5 h-2.5 rounded-full animate-pulse",
-                        type === t 
-                          ? "bg-[#0a3d2e]" 
-                          : "bg-[#1d6352]"
-                      )} />
-                      {t === '3-Cushion' ? '3구 당구 (3-Cushion)' : '4구 당구 (4-Ball)'}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Teams Choice if 4 players (Moved to top of form) */}
-
-              {/* 4구 전용: 마지막 쓰리쿠션 목표 개수 설정 */}
-              {type === '4-Ball' && (
-                <div className="bg-[#144b3c]/35 p-4 rounded-2xl border border-dashed border-[#e9a65a]/30">
-                  <label className="block text-xs font-bold text-[#e9a65a] uppercase tracking-widest mb-2.5 flex items-center gap-1.5">
-                    <Target size={14} className="text-orange-400" />
-                    4구 전용: 마지막 쓰리쿠션(쿠션 수) 설정
-                  </label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {[0, 1, 2].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => setLastThreeCushions(num as any)}
-                        className={cn(
-                          "py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer",
-                          lastThreeCushions === num 
-                            ? "bg-[#e9a65a]/20 border-[#e9a65a] text-[#ffd6aa] font-black shadow-lg" 
-                            : "bg-[#144b3c] border-[#1d6352] text-emerald-100/40 hover:border-[#e9a65a]/30"
-                        )}
-                      >
-                        {num === 0 ? '쿠션 없음' : `마지막 ${num}쿠션`}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="text-[10px] text-emerald-300/65 mt-2 leading-relaxed">
-                    구질에 따라 4구 기본 다마(점수)를 모두 친 이후, <strong className="text-orange-400">마지막에 성공해야 하는 쓰리쿠션의 개수</strong>를 결정합니다. (0, 1, 혹은 2개 설정)
-                  </p>
-                </div>
-              )}
-
-              {gameRoomError && (
-                <p className="text-xs font-semibold text-rose-200" role="alert">
-                  {gameRoomError}
-                </p>
-              )}
-
-              {/* Start Match button */}
-              <button
-                type="submit"
-                disabled={isGameRoomCreating}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-60 text-[#0a3d2e] font-black py-4 rounded-2xl transition-all shadow-xl flex items-center justify-center gap-2 text-base mt-2 cursor-pointer"
-              >
-                {isGameRoomCreating ? (
-                  <RefreshCw size={18} className="animate-spin" />
-                ) : (
-                  <Play size={18} fill="currentColor" />
-                )}
-                {isGameRoomCreating ? '게임방 생성 중...' : '실시간 경기 예약 및 게임방 입장'}
-              </button>
-            </form>
-          </div>
-        </div>
+        <GameRoomCreateForm
+          roomName={roomName}
+          gameMode={mode}
+          playerCount={playerCount}
+          gameType={type}
+          lastThreeCushions={lastThreeCushions}
+          isSubmitting={isGameRoomCreating}
+          errorMessage={gameRoomError}
+          onRoomNameChange={setRoomName}
+          onGameModeChange={(nextMode) => {
+            setMode(nextMode);
+            if (nextMode === 'Team') {
+              setPlayerCount(4);
+            }
+          }}
+          onPlayerCountChange={setPlayerCount}
+          onGameTypeChange={setType}
+          onLastThreeCushionsChange={setLastThreeCushions}
+          onSubmit={handleStartRealtimeGame}
+        />
       )}
 
       {/* 1.5. INTERACTIVE MULTIPLAYER LOBBY ROOM */}

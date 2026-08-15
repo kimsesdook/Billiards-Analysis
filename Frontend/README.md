@@ -38,6 +38,12 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - The settings UI exposes only server-backed account operations. Device-session management, account deletion, and nickname availability are not shown until matching backend APIs exist.
 - Deterministic record-based handicap calculation is labeled separately from the optional Gemini coaching report.
 
+## Game Room UI
+
+- `GameRoomCreateForm` owns the room creation controls while `CreateGamePage` coordinates API calls and screen transitions.
+- Player capacity and four-ball finish rules use explicit union types instead of unchecked numeric casts.
+- Lobby and live-scoreboard extraction are handled as separate changes so realtime behavior remains independently testable.
+
 ## Commands
 
 ```powershell
