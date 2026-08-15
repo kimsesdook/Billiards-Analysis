@@ -31,6 +31,13 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Logout revokes the backend session before clearing frontend authentication state.
 - WebSocket clients request a 30-second ticket through the authenticated REST API before every connection and reconnection, so access tokens never appear in WebSocket URLs.
 
+## Account Settings
+
+- `AccountSettingsModal` owns profile and password form state instead of adding those responsibilities to the application shell.
+- Automatic handicap calculation is a pure, unit-tested domain function in `src/lib/handicap.ts`.
+- The settings UI exposes only server-backed account operations. Device-session management, account deletion, and nickname availability are not shown until matching backend APIs exist.
+- Deterministic record-based handicap calculation is labeled separately from the optional Gemini coaching report.
+
 ## Commands
 
 ```powershell
