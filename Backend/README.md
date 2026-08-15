@@ -50,6 +50,26 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 - A valid inbound `X-Request-Id` is reused; otherwise, the backend generates a UUID.
 - The request ID is included in server logs to connect a client error with its backend log entries.
 
+## OpenTelemetry Tracing
+
+- Spring Boot OpenTelemetry continues the W3C `traceparent` header across HTTP requests.
+- Each log line includes `requestId`, `traceId`, and `spanId` for correlation without logging request bodies or tokens.
+- Trace sampling defaults to 10% through `TRACING_SAMPLING_PROBABILITY`; the test profile uses 100% for deterministic verification.
+- Gemini provider work creates a `billiards.ai.provider` observation with bounded `provider` and `operation` attributes. Observation context and the request ID are propagated into the dedicated AI executor.
+- Member IDs, emails, room IDs, prompts, model responses, and request IDs are not attached as span attributes.
+- OTLP trace, metric, and log exports are disabled by default. Starting the application without a collector sends no telemetry externally and creates no observability service charge.
+
+After an OpenTelemetry Collector has been intentionally configured, trace export can be enabled for that terminal session:
+
+```powershell
+$env:OTEL_TRACES_EXPORT_ENABLED="true"
+$env:OTEL_EXPORTER_OTLP_TRACES_ENDPOINT="http://localhost:4318/v1/traces"
+$env:TRACING_SAMPLING_PROBABILITY="0.1"
+.\gradlew.bat bootRun
+```
+
+Metrics remain available locally through the administrator-only Prometheus endpoint. OTLP metric and log export stay disabled.
+
 ## Error Observability
 
 - Expected business and validation errors are logged at `WARN` with error codes and error counts only.

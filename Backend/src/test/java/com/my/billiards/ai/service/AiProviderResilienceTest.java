@@ -10,23 +10,47 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
+import io.micrometer.context.ContextExecutorService;
+import io.micrometer.context.ContextRegistry;
+import io.micrometer.context.ContextSnapshotFactory;
+import io.micrometer.context.integration.Slf4jThreadLocalAccessor;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationHandler;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.time.Duration;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.MDC;
 
 class AiProviderResilienceTest {
 
 	private ExecutorService executorService;
 	private CircuitBreakerRegistry circuitBreakerRegistry;
+	private ObservationRegistry observationRegistry;
 	private AiProviderResilience resilience;
 
 	@BeforeEach
 	void setUp() {
-		executorService = Executors.newSingleThreadExecutor();
+		observationRegistry = ObservationRegistry.create();
+		observationRegistry.observationConfig().observationHandler(new ObservationHandler<>() {
+			@Override
+			public boolean supportsContext(Observation.Context context) {
+				return true;
+			}
+		});
+		ContextRegistry contextRegistry = new ContextRegistry()
+			.registerThreadLocalAccessor(new ObservationThreadLocalAccessor(observationRegistry))
+			.registerThreadLocalAccessor(new Slf4jThreadLocalAccessor("requestId"));
+		ContextSnapshotFactory snapshotFactory = ContextSnapshotFactory.builder()
+			.contextRegistry(contextRegistry)
+			.build();
+		executorService = ContextExecutorService.wrap(Executors.newSingleThreadExecutor(), snapshotFactory);
 		CircuitBreakerConfig circuitBreakerConfig = CircuitBreakerConfig.custom()
 			.slidingWindowSize(2)
 			.minimumNumberOfCalls(2)
@@ -43,18 +67,36 @@ class AiProviderResilienceTest {
 		resilience = new AiProviderResilience(
 			circuitBreakerRegistry,
 			timeLimiterRegistry,
-			executorService
+			executorService,
+			observationRegistry
 		);
 	}
 
 	@AfterEach
 	void tearDown() {
+		MDC.remove("requestId");
 		executorService.shutdownNow();
 	}
 
 	@Test
 	void returnsSuccessfulProviderResponse() {
 		assertThat(resilience.execute(() -> "analysis")).isEqualTo("analysis");
+	}
+
+	@Test
+	void propagatesTheAiObservationAndRequestIdToTheProviderThread() {
+		AtomicReference<String> currentObservation = new AtomicReference<>();
+		AtomicReference<String> currentRequestId = new AtomicReference<>();
+		MDC.put("requestId", "ai-test-request");
+
+		resilience.execute(() -> {
+			currentObservation.set(observationRegistry.getCurrentObservation().getContext().getName());
+			currentRequestId.set(MDC.get("requestId"));
+			return "analysis";
+		});
+
+		assertThat(currentObservation).hasValue("billiards.ai.provider");
+		assertThat(currentRequestId).hasValue("ai-test-request");
 	}
 
 	@Test

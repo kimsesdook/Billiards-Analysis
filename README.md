@@ -35,7 +35,7 @@ flowchart LR
     API["Spring Boot API\nModular Monolith"]
     DB[("MySQL 8.4\nFlyway")]
     Redis[("Redis 7.4\nTickets + Limits + AI Locks")]
-    Metrics["Actuator + Micrometer\nPrometheus Metrics"]
+    Metrics["Actuator + Micrometer\nMetrics + OpenTelemetry Traces"]
     Socket["WebSocket\nRealtime Events"]
     MCP["Streamable HTTP MCP\nRead-only tools"]
     Gemini["Google Gemini\nOptional"]
@@ -175,6 +175,9 @@ erDiagram
 - Every HTTP response returns `X-Request-Id`, and the same value is written to backend logs.
 - A valid request ID from a gateway or client is preserved; malformed or missing values are replaced with a generated UUID.
 - The header is exposed through CORS so browser clients can connect an error response to its server-side log entries.
+- OpenTelemetry continues inbound W3C `traceparent` context and writes `traceId` and `spanId` beside the request ID in every backend log line.
+- Gemini provider execution is recorded as `billiards.ai.provider`, and its trace context is propagated into the bounded AI executor.
+- Trace sampling defaults to 10%. OTLP trace, metric, and log export are disabled until a collector is intentionally configured, so local startup sends no telemetry to an external service.
 
 ### Operational Observability
 
@@ -241,7 +244,7 @@ erDiagram
 | Area | Technology |
 | --- | --- |
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4, React Router, Recharts, Vitest |
-| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer, Resilience4j |
+| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer, OpenTelemetry, Resilience4j |
 | Data | MySQL 8.4, Redis 7.4, H2 for tests, Flyway |
 | AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
 | DevOps | Docker Compose, Nginx, GitHub Actions, k6 |

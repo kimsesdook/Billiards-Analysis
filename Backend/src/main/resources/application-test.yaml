@@ -30,6 +30,9 @@ management:
   health:
     redis:
       enabled: false
+  tracing:
+    sampling:
+      probability: 1.0
 
 app:
   rate-limit:
