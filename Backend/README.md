@@ -15,6 +15,22 @@ This backend is designed as a modular monolith first. The package boundaries are
 - `notice`: public announcements
 - `contact`: public and private user inquiries with owner-based access control
 
+## Architecture Tests
+
+ArchUnit turns the modular-monolith boundaries into executable tests. The rules run with the regular Gradle test task, so every pull request checks them in GitHub Actions.
+
+- Controllers cannot access repositories directly; persistence work must pass through services.
+- Spring services cannot depend on controllers, and domain classes cannot depend on controller, service, repository, DTO, or WebSocket packages.
+- REST controllers, Spring Data repositories, Spring services, and JPA entities must follow their package and naming conventions.
+- Field injection with `@Autowired` is prohibited in favor of explicit constructor injection.
+- The `ai`, `auth`, `contact`, `friend`, `game`, `invitation`, `member`, `notice`, and `notification` business modules must remain free of dependency cycles.
+
+Run only the architecture rules:
+
+```powershell
+.\gradlew.bat test --tests "com.my.billiards.architecture.*"
+```
+
 ## Profiles
 
 - `local`: MySQL-based local development profile
