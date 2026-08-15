@@ -164,6 +164,7 @@ erDiagram
 - Redis Lua scripts enforce shared limits across backend instances: 5 login attempts per account and 30 per address in 5 minutes, 30 WebSocket tickets per minute, and 3 actual AI generations per day.
 - Rate-limit identities are SHA-256 hashed, and rejected requests return `429 Too Many Requests` with a browser-readable `Retry-After` header.
 - AI report generation uses a Redis distributed lock, so multiple backend instances cannot intentionally call Gemini for the same member, game type, and report date at the same time.
+- Resilience4j protects Gemini with a bounded executor, a 20-second timeout, and a circuit breaker. Automatic retries are disabled to avoid duplicate model charges.
 
 - Spring Security와 JWT로 보호 API를 구성했습니다.
 - API와 MCP 도구 모두 JWT에서 현재 사용자를 식별합니다.
@@ -181,6 +182,7 @@ erDiagram
 - Public liveness and readiness probes are available at `/actuator/health/liveness` and `/actuator/health/readiness`; readiness includes application state, MySQL, and Redis.
 - `/actuator/metrics` and `/actuator/prometheus` remain restricted to the `ADMIN` role.
 - Custom low-cardinality metrics cover login outcomes, rate-limit rejections by scope, AI report generation/cache/failure outcomes, and active WebSocket connections by channel.
+- Resilience4j exports Gemini circuit-breaker state, call outcomes, and timeout outcomes through the same administrator-only metrics endpoints.
 - Metrics never use member IDs, emails, room IDs, client addresses, or request IDs as tags.
 
 ### Transactional Game Completion
@@ -239,7 +241,7 @@ erDiagram
 | Area | Technology |
 | --- | --- |
 | Frontend | React 19, TypeScript, Vite 6, Tailwind CSS 4, React Router, Recharts, Vitest |
-| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer |
+| Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer, Resilience4j |
 | Data | MySQL 8.4, Redis 7.4, H2 for tests, Flyway |
 | AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
 | DevOps | Docker Compose, Nginx, GitHub Actions, k6 |

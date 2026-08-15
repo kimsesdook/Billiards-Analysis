@@ -127,6 +127,8 @@ Micrometer publishes JVM, HTTP, connection-pool, Redis, and business metrics thr
 - `billiards.rate.limit.rejections`: rejected requests grouped by bounded policy `scope`
 - `billiards.ai.report.requests`: AI report `generated`, `cache_hit`, and `failed` counters grouped by game type
 - `billiards.websocket.connections.active`: current notification and game-room WebSocket connection gauges
+- `resilience4j.circuitbreaker.calls` and `resilience4j.circuitbreaker.state`: Gemini provider call outcomes and circuit state
+- `resilience4j.timelimiter.calls`: completed and timed-out Gemini provider calls
 
 The tags intentionally exclude member IDs, emails, room IDs, client addresses, and request IDs to prevent sensitive data exposure and unbounded metric cardinality. Readiness includes the application state, MySQL, and Redis; the test profile excludes Redis because it uses in-memory stores.
 
@@ -195,6 +197,9 @@ The optional AI report feature generates a Korean-language coaching report from 
 - Lock acquisition uses atomic `SET NX` with a 180-second TTL. Release uses a Lua compare-and-delete script, so an expired lock that has a new owner cannot be deleted by the previous owner.
 - A competing request waits up to 5 seconds for the first server's cached result and otherwise returns `409 AI_003`; Redis acquisition failures return `503 AI_004` without calling the model.
 - Lock identities are SHA-256 hashed in Redis, and the database unique constraint remains the final defense against duplicate report rows.
+- Gemini calls run in a dedicated bounded executor with 4 threads and an 8-request queue, preventing a slow provider from exhausting HTTP request threads.
+- A call that exceeds 20 seconds is cancelled and returns `504 AI_005`. The circuit breaker opens for 30 seconds when at least 5 of the latest 10 calls are 50% failed or slow, then permits 2 recovery probes.
+- An open circuit or saturated AI executor returns `503 AI_001` without invoking Gemini. Spring AI retry attempts are fixed at 1, so provider calls are never retried automatically and cannot create duplicate charges through this application.
 - `GET /api/ai-reports/weekly?type=3-Cushion` retrieves today's cached report.
 - Without an API key, an AI request returns `503 AI_001`; the rest of the backend continues to work normally.
 
@@ -208,6 +213,8 @@ $env:GEMINI_MODEL="gemini-2.5-flash"
 ```
 
 The configured output cap is 350 tokens and no scheduled job invokes the model. Keep the Gemini account on its free tier and do not enable Google Cloud billing unless a later deployment plan explicitly requires it.
+
+The resilience limits can be tuned with `AI_CALL_TIMEOUT`, `AI_SLOW_CALL_DURATION`, `AI_CIRCUIT_OPEN_DURATION`, `AI_EXECUTOR_THREADS`, and `AI_EXECUTOR_QUEUE_CAPACITY`. The defaults are intended for a small deployment; measure production traffic before increasing concurrency because more simultaneous model calls can increase cost.
 
 ## Notice APIs
 

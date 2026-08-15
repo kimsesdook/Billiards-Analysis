@@ -10,6 +10,8 @@ spring:
       connect-timeout: 2s
       timeout: 2s
   ai:
+    retry:
+      max-attempts: 1
     model:
       chat: ${AI_CHAT_MODEL:none}
     google:
@@ -56,6 +58,25 @@ management:
     tags:
       application: ${spring.application.name}
 
+resilience4j:
+  circuitbreaker:
+    instances:
+      gemini-ai:
+        sliding-window-type: count-based
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: ${AI_SLOW_CALL_DURATION:10s}
+        wait-duration-in-open-state: ${AI_CIRCUIT_OPEN_DURATION:30s}
+        permitted-number-of-calls-in-half-open-state: 2
+        automatic-transition-from-open-to-half-open-enabled: true
+  timelimiter:
+    instances:
+      gemini-ai:
+        timeout-duration: ${AI_CALL_TIMEOUT:20s}
+        cancel-running-future: true
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -86,3 +107,5 @@ app:
     lock-ttl-seconds: ${AI_REPORT_LOCK_TTL_SECONDS:180}
     lock-wait-seconds: ${AI_REPORT_LOCK_WAIT_SECONDS:5}
     lock-poll-interval-millis: ${AI_REPORT_LOCK_POLL_INTERVAL_MILLIS:100}
+    executor-threads: ${AI_EXECUTOR_THREADS:4}
+    executor-queue-capacity: ${AI_EXECUTOR_QUEUE_CAPACITY:8}

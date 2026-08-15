@@ -17,7 +17,11 @@ class GeminiWeeklyAiAnalysisGeneratorTest {
 		@SuppressWarnings("unchecked")
 		ObjectProvider<ChatModel> chatModelProvider = mock(ObjectProvider.class);
 		when(chatModelProvider.getIfAvailable()).thenReturn(null);
-		GeminiWeeklyAiAnalysisGenerator generator = new GeminiWeeklyAiAnalysisGenerator(chatModelProvider);
+		AiProviderResilience aiProviderResilience = mock(AiProviderResilience.class);
+		GeminiWeeklyAiAnalysisGenerator generator = new GeminiWeeklyAiAnalysisGenerator(
+			chatModelProvider,
+			aiProviderResilience
+		);
 
 		assertThatThrownBy(() -> generator.generate(null, null))
 			.isInstanceOf(BilliardsException.class)

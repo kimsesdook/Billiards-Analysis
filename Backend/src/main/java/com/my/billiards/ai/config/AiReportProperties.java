@@ -22,4 +22,10 @@ public class AiReportProperties {
 
 	@Min(10)
 	private long lockPollIntervalMillis = 100;
+
+	@Min(1)
+	private int executorThreads = 4;
+
+	@Min(1)
+	private int executorQueueCapacity = 8;
 }
