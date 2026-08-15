@@ -254,6 +254,7 @@ erDiagram
 GitHub Actions runs on every pull request to `main` and every push to `main`.
 
 - Backend: Java 17, Gradle, Spring Boot tests
+- Architecture: ArchUnit layer, naming, constructor-injection, and business-module cycle rules
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
 - Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, Redis, backend, and frontend
