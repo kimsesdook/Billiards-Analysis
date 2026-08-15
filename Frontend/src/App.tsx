@@ -39,13 +39,7 @@ import {
   Bell,
   UserPlus,
   Settings,
-  Trash2,
   Shield,
-  Calendar,
-  Smartphone,
-  Laptop,
-  Globe,
-  Key
 } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameRecordPage, GameRecordSearchParams, GameStatistics, PlayerStats, GameType } from './types';
 import { format } from 'date-fns';
@@ -77,7 +71,7 @@ import {
   getGameInvitations,
   type GameInvitation,
 } from './api/gameInvitations';
-import { changeMyPassword, getMyProfile, updateMyProfile, type MemberProfile } from './api/memberProfile';
+import { getMyProfile, type MemberProfile } from './api/memberProfile';
 import { logout, restoreSession } from './api/auth';
 import { ApiClientError, addUnauthorizedListener, getApiErrorMessage, refreshAuthSession } from './api/client';
 import {
@@ -101,6 +95,8 @@ import {
   subscribeAuthSession,
   updateStoredAuthMember,
 } from './api/authStorage';
+import { calculateAutomaticHandicaps } from './lib/handicap';
+import { AccountSettingsModal } from './components/AccountSettingsModal';
 
 const StatsChart = lazy(() => import('./components/StatsChart').then(({ StatsChart }) => ({ default: StatsChart })));
 const GuidePage = lazy(() => import('./components/GuidePage').then(({ GuidePage }) => ({ default: GuidePage })));
@@ -271,33 +267,12 @@ function AppContent() {
     return saved ? parseInt(saved, 10) : 250;
   });
 
-  const [settingsTab, setSettingsTab] = useState<'profile' | 'preferences' | 'security' | 'withdraw'>('profile');
-  const [settingsName, setSettingsName] = useState('');
-  const [settingsNickname, setSettingsNickname] = useState('');
-  const [settingsNicknameChecked, setSettingsNicknameChecked] = useState(true);
-  const [settingsCushionCount, setSettingsCushionCount] = useState<number>(1);
-  const [settingsDama3, setSettingsDama3] = useState<number>(200);
-  const [settingsDama4, setSettingsDama4] = useState<number>(250);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [withdrawReason, setWithdrawReason] = useState('');
-  const [withdrawConfirmed, setWithdrawConfirmed] = useState(false);
-  const [isProfileSaving, setIsProfileSaving] = useState(false);
-  const [isPasswordChanging, setIsPasswordChanging] = useState(false);
-
   const applyMemberProfile = useCallback((profile: MemberProfile) => {
     setUserName(profile.name);
     setUserNickname(profile.nickname);
     setUserCushionCount(profile.targetCushionCount);
     setUserDama3(profile.threeBallHandicap);
     setUserDama4(profile.fourBallHandicap);
-    setSettingsName(profile.name);
-    setSettingsNickname(profile.nickname);
-    setSettingsCushionCount(profile.targetCushionCount);
-    setSettingsDama3(profile.threeBallHandicap);
-    setSettingsDama4(profile.fourBallHandicap);
-    setSettingsNicknameChecked(true);
     localStorage.setItem('billiards_name', profile.name);
     localStorage.setItem('billiards_nickname', profile.nickname);
     localStorage.setItem('billiards_cushion_count', profile.targetCushionCount.toString());
@@ -310,353 +285,27 @@ function AppContent() {
     }
   }, []);
 
-  // My Page related states: Registration date, last login level, login history, toggles, devices
-  const [joinDate] = useState(() => {
-    const saved = localStorage.getItem('billiards_join_date');
-    if (!saved) {
-      const now = new Date();
-      const joinStr = new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]; // joined 8 days ago
-      localStorage.setItem('billiards_join_date', joinStr);
-      return joinStr;
-    }
-    return saved;
-  });
-
-  const [lastLoginDate] = useState(() => {
-    const saved = localStorage.getItem('billiards_last_login');
-    if (!saved) {
-      const parts = new Date();
-      const formatted = `${parts.getFullYear()}-${String(parts.getMonth() + 1).padStart(2, '0')}-${String(parts.getDate()).padStart(2, '0')} ${String(parts.getHours()).padStart(2, '0')}:${String(parts.getMinutes()).padStart(2, '0')}`;
-      localStorage.setItem('billiards_last_login', formatted);
-      return formatted;
-    }
-    return saved;
-  });
-
-  const [loginHistory, setLoginHistory] = useState(() => {
-    const saved = localStorage.getItem('billiards_login_history');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    const initialList = [
-      { id: 1, date: '2026-06-13 16:24:44', ip: '211.234.56.78', device: 'Chrome on macOS (현재 기기)' },
-      { id: 2, date: '2026-06-12 11:20:15', ip: '211.234.56.78', device: 'Safari on iPhone' },
-      { id: 3, date: '2026-06-10 18:45:09', ip: '112.169.34.120', device: 'Chrome on Windows 11' },
-    ];
-    localStorage.setItem('billiards_login_history', JSON.stringify(initialList));
-    return initialList;
-  });
-
-  const [activeDevices, setActiveDevices] = useState(() => {
-    const saved = localStorage.getItem('billiards_active_devices');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {}
-    }
-    const initialDevices = [
-      { id: 'dev-1', device: 'Chrome on macOS', ip: '211.234.56.78', location: '서울, 대한민국', isCurrent: true, lastActive: '방금 전' },
-      { id: 'dev-2', device: 'Safari on iPhone 15', ip: '211.234.56.90', location: '경기, 대한민국', isCurrent: false, lastActive: '2시간 전' },
-      { id: 'dev-3', device: 'Chrome on Windows 11', ip: '112.169.34.120', location: '부산, 대한민국', isCurrent: false, lastActive: '3일 전' }
-    ];
-    localStorage.setItem('billiards_active_devices', JSON.stringify(initialDevices));
-    return initialDevices;
-  });
-
-  const [alertMatch, setAlertMatch] = useState(() => {
-    const saved = localStorage.getItem('alert_match');
-    return saved ? saved === 'true' : true;
-  });
-  const [alertFriend, setAlertFriend] = useState(() => {
-    const saved = localStorage.getItem('alert_friend');
-    return saved ? saved === 'true' : true;
-  });
-  const [alertAiReport, setAlertAiReport] = useState(() => {
-    const saved = localStorage.getItem('alert_aireport');
-    return saved ? saved === 'true' : true;
-  });
-  const [alertSystem, setAlertSystem] = useState(() => {
-    const saved = localStorage.getItem('alert_system');
-    return saved ? saved === 'true' : false;
-  });
-
-  const handleToggleAlert = (key: 'match' | 'friend' | 'aireport' | 'system', value: boolean) => {
-    localStorage.setItem(`alert_${key}`, value.toString());
-    if (key === 'match') setAlertMatch(value);
-    if (key === 'friend') setAlertFriend(value);
-    if (key === 'aireport') setAlertAiReport(value);
-    if (key === 'system') setAlertSystem(value);
-  };
-
-  const handleLogoutAllDevices = () => {
-    if (window.confirm('현재 기기를 제외한 다른 모든 기기에서 로그아웃하시겠습니까?')) {
-      const remaining = activeDevices.filter(d => d.isCurrent);
-      setActiveDevices(remaining);
-      localStorage.setItem('billiards_active_devices', JSON.stringify(remaining));
-
-      const newNotif: AppNotification = {
-        id: `notif-${Date.now()}`,
-        title: '보안 알림: 모든 기기 로그아웃 완료',
-        message: '현재 활성화 세션을 제외한 다른 모든 기기에서의 자격 증명이 말소 처리되었습니다.',
-        time: '방금 전',
-        isNew: true,
-        type: 'system'
-      };
-      setNotifications(prev => [newNotif, ...prev]);
-      alert('다른 모든 기기에서 안전하게 로그아웃되었습니다.');
-    }
-  };
-
-  const handleLogoutDevice = (id: string, name: string) => {
-    if (window.confirm(`선택하신 기기 [${name}]를 강제 로그아웃 시키시겠습니까?`)) {
-      const updated = activeDevices.filter(d => d.id !== id);
-      setActiveDevices(updated);
-      localStorage.setItem('billiards_active_devices', JSON.stringify(updated));
-
-      const newNotif: AppNotification = {
-        id: `notif-${Date.now()}`,
-        title: '보안 알림: 특정 기기 접속 해제',
-        message: `${name} 기기의 로그인 접속이 해제되었습니다.`,
-        time: '방금 전',
-        isNew: true,
-        type: 'system'
-      };
-      setNotifications(prev => [newNotif, ...prev]);
-      alert('접속이 해제되었습니다.');
-    }
-  };
-
-  // Helper function to calculate auto-handicaps based on records and cushionCount in 4-Ball
-  const calculateAutoHandicaps = (currentRecords: GameRecord[], cushionCount: number) => {
-    const mdClampDama = (val: number) => {
-      const list = [50, 80, 100, 120, 150, 180, 200, 250, 300, 400, 500, 700, 1000];
-      return list.reduce((prev, curr) => Math.abs(curr - val) < Math.abs(prev - val) ? curr : prev);
-    };
-
-    const tripleMatches = currentRecords.filter(r => r.type === '3-Cushion');
-    const fourMatches = currentRecords.filter(r => r.type === '4-Ball');
-
-    let winRate3 = 50;
-    let avgHighrun3 = 3;
-    if (tripleMatches.length > 0) {
-      const wins = tripleMatches.filter(r => r.win).length;
-      winRate3 = (wins / tripleMatches.length) * 100;
-      avgHighrun3 = tripleMatches.reduce((acc, r) => acc + (r.highRun || 0), 0) / tripleMatches.length;
-    }
-
-    let winRate4 = 50;
-    let avgHighrun4 = 6;
-    if (fourMatches.length > 0) {
-      const wins = fourMatches.filter(r => r.win).length;
-      winRate4 = (wins / fourMatches.length) * 100;
-      avgHighrun4 = fourMatches.reduce((acc, r) => acc + (r.highRun || 0), 0) / fourMatches.length;
-    }
-
-    let autoDama3 = 150;
-    if (avgHighrun3 >= 7) autoDama3 = 300;
-    else if (avgHighrun3 >= 5) autoDama3 = 250;
-    else if (avgHighrun3 >= 4) autoDama3 = 200;
-    else if (avgHighrun3 >= 3) autoDama3 = 180;
-    else if (avgHighrun3 >= 2) autoDama3 = 120;
-    else autoDama3 = 100;
-
-    if (winRate3 > 60) autoDama3 = mdClampDama(autoDama3 + 20);
-    else if (winRate3 > 55) autoDama3 = mdClampDama(autoDama3 + 10);
-    else if (winRate3 < 40) autoDama3 = mdClampDama(autoDama3 - 20);
-
-    let autoDama4 = 200;
-    if (avgHighrun4 >= 15) autoDama4 = 400;
-    else if (avgHighrun4 >= 10) autoDama4 = 300;
-    else if (avgHighrun4 >= 8) autoDama4 = 250;
-    else if (avgHighrun4 >= 6) autoDama4 = 200;
-    else if (avgHighrun4 >= 4) autoDama4 = 150;
-    else autoDama4 = 100;
-
-    // 4구 시 마무리 3쿠션 개수 (0, 1, 2)에 따른 수지 보정
-    if (cushionCount === 0) {
-      autoDama4 += 55; // 마무리 3쿠션이 없는 경우, 상대적으로 기본 수지(다마)를 더 높게 산정
-    } else if (cushionCount === 2) {
-      autoDama4 -= 50; // 마무리 3쿠션이 2개인 경우, 까다로운 마무리 조건으로 인해 실전 기준 수지를 낮춰 노출
-    }
-
-    if (winRate4 > 60) autoDama4 = mdClampDama(autoDama4 + 50);
-    else if (winRate4 > 55) autoDama4 = mdClampDama(autoDama4 + 30);
-    else if (winRate4 < 40) autoDama4 = mdClampDama(autoDama4 - 30);
-
-    return {
-      dama3: Math.max(50, Math.min(1000, autoDama3)),
-      dama4: Math.max(50, Math.min(1000, autoDama4))
-    };
-  };
-
   // Dynamic automatic calculation sync
   useEffect(() => {
-    const { dama3, dama4 } = calculateAutoHandicaps(records, userCushionCount);
-    setUserDama3(dama3);
-    setUserDama4(dama4);
-    localStorage.setItem('billiards_dama3', dama3.toString());
-    localStorage.setItem('billiards_dama4', dama4.toString());
+    const { threeBallHandicap, fourBallHandicap } = calculateAutomaticHandicaps(records, userCushionCount);
+    setUserDama3(threeBallHandicap);
+    setUserDama4(fourBallHandicap);
+    localStorage.setItem('billiards_dama3', threeBallHandicap.toString());
+    localStorage.setItem('billiards_dama4', fourBallHandicap.toString());
   }, [records, userCushionCount]);
 
-  // Initialize settings input values from localstorage when modal opens or mounted
-  useEffect(() => {
-    if (isSettingsOpen) {
-      setSettingsName(localStorage.getItem('billiards_name') || '사용자');
-      setSettingsNickname(localStorage.getItem('billiards_nickname') || '사용자');
-      setSettingsNicknameChecked(true);
-      const savedCushion = localStorage.getItem('billiards_cushion_count');
-      const parsedCushion = savedCushion ? parseInt(savedCushion, 10) : 1;
-      setSettingsCushionCount(parsedCushion);
-      
-      // Calculate preview dama scores dynamically
-      const { dama3, dama4 } = calculateAutoHandicaps(records, parsedCushion);
-      setSettingsDama3(dama3);
-      setSettingsDama4(dama4);
-
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setWithdrawReason('');
-      setWithdrawConfirmed(false);
-    }
-  }, [isSettingsOpen, records]);
-
-  // Real-time update preview of dama when settings cushion count changes
-  useEffect(() => {
-    if (isSettingsOpen) {
-      const { dama3, dama4 } = calculateAutoHandicaps(records, settingsCushionCount);
-      setSettingsDama3(dama3);
-      setSettingsDama4(dama4);
-    }
-  }, [settingsCushionCount, isSettingsOpen, records]);
-
-  const handleSaveProfileWithApi = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!settingsName.trim()) {
-      alert('이름을 입력해 주세요.');
-      return;
-    }
-    if (!settingsNickname.trim()) {
-      alert('닉네임을 입력해 주세요.');
-      return;
-    }
-
-    const originalNickname = localStorage.getItem('billiards_nickname') || '사용자';
-    if (settingsNickname.trim() !== originalNickname && !settingsNicknameChecked) {
-      alert('닉네임 중복 확인을 해주세요.');
-      return;
-    }
-
-    const { dama3, dama4 } = calculateAutoHandicaps(records, settingsCushionCount);
-    setIsProfileSaving(true);
-
-    try {
-      const profile = await updateMyProfile({
-        name: settingsName.trim(),
-        nickname: settingsNickname.trim(),
-        targetCushionCount: settingsCushionCount,
-        threeBallHandicap: dama3,
-        fourBallHandicap: dama4,
-      });
-
-      applyMemberProfile(profile);
-      setNotifications((prev) => [
-        {
-          id: `notif-${Date.now()}`,
-          title: '프로필 설정 완료',
-          message: `회원 정보가 서버에 저장되었습니다. 3구 수지 ${profile.threeBallHandicap}점, 4구 수지 ${profile.fourBallHandicap}점으로 반영했습니다.`,
-          time: '방금 전',
-          isNew: true,
-          type: 'system',
-        },
-        ...prev,
-      ]);
-      setIsSettingsOpen(false);
-      alert(`회원 정보가 수정되었습니다.\n\n- 3구 수지: ${profile.threeBallHandicap}점\n- 4구 수지: ${profile.fourBallHandicap}점`);
-    } catch (error) {
-      alert(getApiErrorMessage(error));
-    } finally {
-      setIsProfileSaving(false);
-    }
-  };
-
-  const handleChangePasswordWithApi = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentPassword) {
-      alert('현재 비밀번호를 입력해 주세요.');
-      return;
-    }
-    if (!newPassword || !confirmPassword) {
-      alert('새 비밀번호를 입력해 주세요.');
-      return;
-    }
-    if (newPassword.length < 8) {
-      alert('새 비밀번호는 8자 이상이어야 합니다.');
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      alert('새 비밀번호가 일치하지 않습니다.');
-      return;
-    }
-
-    setIsPasswordChanging(true);
-    try {
-      await changeMyPassword({
-        currentPassword,
-        newPassword,
-      });
-      setCurrentPassword('');
-      setNewPassword('');
-      setConfirmPassword('');
-      setNotifications((prev) => [
-        {
-          id: `notif-${Date.now()}`,
-          title: '비밀번호 변경 완료',
-          message: '계정 비밀번호가 서버에 안전하게 반영되었습니다.',
-          time: '방금 전',
-          isNew: true,
-          type: 'system',
-        },
-        ...prev,
-      ]);
-      alert('비밀번호가 성공적으로 변경되었습니다.');
-    } catch (error) {
-      alert(getApiErrorMessage(error));
-    } finally {
-      setIsPasswordChanging(false);
-    }
-  };
-
-  const handleWithdraw = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!withdrawConfirmed) {
-      alert('동의 항목에 체크해야 진행할 수 있습니다.');
-      return;
-    }
-
-    try {
-      await logout();
-    } catch (error) {
-      alert(getApiErrorMessage(error));
-      return;
-    }
-    
-    localStorage.removeItem('billiards_nickname');
-    localStorage.removeItem('billiards_dama3');
-    localStorage.removeItem('billiards_dama4');
-    localStorage.removeItem('billiards_records');
-    localStorage.removeItem('billiards_friends');
-    clearAuthSession();
-    
-    alert('회원 탈퇴가 완료되었습니다. 그동안 Billiards Analytics를 이용해 주셔서 감사합니다.');
-    setIsLoggedIn(false);
-    setIsSettingsOpen(false);
-    setIsUserMenuOpen(false);
-  };
-
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  const addSystemNotification = useCallback((title: string, message: string) => {
+    setNotifications((current) => [{
+      id: `notif-${Date.now()}`,
+      title,
+      message,
+      time: '방금 전',
+      isNew: true,
+      type: 'system',
+    }, ...current]);
+  }, []);
 
   const [headerFriendsCount, setHeaderFriendsCount] = useState(0);
   const [headerRequests, setHeaderRequests] = useState<FriendRequest[]>([]);
@@ -1940,30 +1589,16 @@ function AppContent() {
                                     </h4>
                                     <span className="text-[8px] font-black px-1.5 py-0.5 rounded bg-amber-400/10 text-amber-400 border border-amber-400/20 uppercase leading-none">Me</span>
                                   </div>
-                                </div>
-                              </div>
-                              
-                              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1a5d4e]/50 text-[10px] text-emerald-100/60 font-medium pb-1">
-                                <div className="space-y-0.5">
-                                  <span className="flex items-center gap-1 text-[9px] text-emerald-300 font-bold">
-                                    <Calendar size={10} /> 가입일
-                                  </span>
-                                  <span className="font-mono text-emerald-50 font-black block">{joinDate}</span>
-                                </div>
-                                <div className="space-y-0.5">
-                                  <span className="flex items-center gap-1 text-[9px] text-emerald-300 font-bold">
-                                    <History size={10} /> 최근 로그인
-                                  </span>
-                                  <span className="font-mono text-emerald-50 font-black block truncate" title={lastLoginDate}>
-                                    {lastLoginDate}
-                                  </span>
+                                  <p className="max-w-44 truncate text-[10px] font-medium text-emerald-100/55">
+                                    {authSession?.member.email}
+                                  </p>
                                 </div>
                               </div>
                             </div>
 
                             {/* Mini Metrics Dashboard */}
                             <div className="p-4 bg-[#0d4d3b] border-b border-[#1a5d4e]/40">
-                              <div className="grid grid-cols-3 gap-2">
+                              <div className="grid grid-cols-2 gap-2">
                                 <div className="bg-[#1a5d4e]/30 border border-[#1a5d4e]/40 p-2.5 rounded-xl text-center">
                                   <span className="text-[8px] font-black text-emerald-100/50 block uppercase leading-none mb-1">3C 수지</span>
                                   <span className="text-xs font-mono font-black text-emerald-50">{userDama3}점</span>
@@ -1971,10 +1606,6 @@ function AppContent() {
                                 <div className="bg-[#1a5d4e]/30 border border-[#1a5d4e]/40 p-2.5 rounded-xl text-center">
                                   <span className="text-[8px] font-black text-emerald-100/50 block uppercase leading-none mb-1">4구 수지</span>
                                   <span className="text-xs font-mono font-black text-emerald-50">{userDama4}점</span>
-                                </div>
-                                <div className="bg-[#1a5d4e]/30 border border-[#1a5d4e]/40 p-2.5 rounded-xl text-center">
-                                  <span className="text-[8px] font-black text-emerald-100/50 block uppercase leading-none mb-1">최근 승률</span>
-                                  <span className="text-xs font-mono font-black text-emerald-50">58.3%</span>
                                 </div>
                               </div>
                             </div>
@@ -2533,527 +2164,20 @@ function AppContent() {
         </div>
       </footer>
 
-      {/* Settings (My Page) Modal */}
-      <AnimatePresence>
-        {isSettingsOpen && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            {/* Overlay */}
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsSettingsOpen(false)}
-              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-            />
-
-            {/* Modal Body */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="relative w-full max-w-lg bg-[#0d4d3b] border border-[#1a5d4e] rounded-3xl shadow-2xl overflow-hidden z-10 text-white"
-            >
-              {/* Header */}
-              <div className="p-6 border-b border-[#1a5d4e] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                    <Settings size={18} />
-                  </div>
-                  <div className="text-left">
-                    <h2 className="text-base font-black text-emerald-50">설정 및 마이페이지</h2>
-                    <p className="text-[10px] text-emerald-300/60 font-semibold font-mono">My Account & Preferences</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="p-1.5 hover:bg-[#1a5d4e] rounded-xl text-emerald-100/50 hover:text-white transition-all"
-                >
-                  <X size={20} />
-                </button>
-              </div>
-
-              {/* Tabs */}
-              <div className="flex border-b border-[#1a5d4e]/40 bg-[#0a3d2e]/40 p-1.5 gap-1 text-[11px] font-black overflow-x-auto scrollbar-none">
-                <button
-                  type="button"
-                  onClick={() => setSettingsTab('profile')}
-                  className={cn(
-                    "flex-1 py-2 px-2.5 rounded-lg text-center transition-all whitespace-nowrap",
-                    settingsTab === 'profile'
-                      ? "bg-emerald-500 text-[#0a3d2e] shadow"
-                      : "text-emerald-100/60 hover:text-white hover:bg-[#1a5d4e]/30"
-                  )}
-                >
-                  프로필 설정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettingsTab('preferences')}
-                  className={cn(
-                    "flex-1 py-2 px-2.5 rounded-lg text-center transition-all whitespace-nowrap",
-                    settingsTab === 'preferences'
-                      ? "bg-emerald-500 text-[#0a3d2e] shadow"
-                      : "text-emerald-100/60 hover:text-white hover:bg-[#1a5d4e]/30"
-                  )}
-                >
-                  알림 설정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettingsTab('security')}
-                  className={cn(
-                    "flex-1 py-2 px-2.5 rounded-lg text-center transition-all whitespace-nowrap",
-                    settingsTab === 'security'
-                      ? "bg-emerald-500 text-[#0a3d2e] shadow"
-                      : "text-emerald-100/60 hover:text-white hover:bg-[#1a5d4e]/30"
-                  )}
-                >
-                  보안 및 기기 설정
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSettingsTab('withdraw')}
-                  className={cn(
-                    "py-2 px-2.5 rounded-lg text-center transition-all whitespace-nowrap ml-auto",
-                    settingsTab === 'withdraw'
-                      ? "bg-orange-600/80 text-white shadow animate-pulse"
-                      : "text-orange-400 hover:text-orange-300 hover:bg-orange-500/10"
-                  )}
-                >
-                  탈퇴
-                </button>
-              </div>
-
-              {/* Content Panels */}
-              <div className="p-6">
-                {settingsTab === 'profile' && (
-                  <form onSubmit={handleSaveProfileWithApi} className="space-y-4">
-                    {/* Name Input */}
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-black uppercase text-emerald-400">이름</label>
-                      <input
-                        type="text"
-                        value={settingsName}
-                        onChange={(e) => setSettingsName(e.target.value)}
-                        placeholder="이름을 입력해 주세요"
-                        className="w-full bg-[#1a5d4e]/50 border border-[#1a5d4e] rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                      />
-                    </div>
-
-                    {/* Nickname Input with Unique Check */}
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-black uppercase text-emerald-400">닉네임</label>
-                      <div className="flex gap-2">
-                        <input
-                          type="text"
-                          value={settingsNickname}
-                          onChange={(e) => {
-                            setSettingsNickname(e.target.value);
-                            const originalNickname = localStorage.getItem('billiards_nickname') || '사용자';
-                            if (e.target.value.trim() === originalNickname) {
-                              setSettingsNicknameChecked(true);
-                            } else {
-                              setSettingsNicknameChecked(false);
-                            }
-                          }}
-                          placeholder="활동할 고유 닉네임을 입력하세요"
-                          className="flex-1 bg-[#1a5d4e]/50 border border-[#1a5d4e] rounded-xl px-4 py-3 text-sm font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                          maxLength={12}
-                        />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const nick = settingsNickname.trim();
-                            if (!nick) {
-                              alert('닉네임을 입력해 주세요.');
-                              return;
-                            }
-                            const forbidden = [
-                              '신림동3구왕', '죽빵킬러', '예각의마술사', '무회전샷', '황오시', '빈쿠션달인',
-                              '밀어치기달인', '오시대장', '더블레일', '끌어치기고수', '원쿠션제왕', '당구의신',
-                              '하점자클럽', '예술구전설', '큐걸이장인'
-                            ];
-                            if (forbidden.some(fn => fn === nick)) {
-                              alert('이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.');
-                              setSettingsNicknameChecked(false);
-                              return;
-                            }
-                            try {
-                              const cached = localStorage.getItem('billiards_friends');
-                              if (cached) {
-                                const friends = JSON.parse(cached);
-                                if (friends.some((f: any) => f.nickname === nick)) {
-                                  alert('이미 사용 중인 닉네임입니다. 다른 닉네임을 입력해 주세요.');
-                                  setSettingsNicknameChecked(false);
-                                  return;
-                                }
-                              }
-                            } catch (_) {}
-
-                            setSettingsNicknameChecked(true);
-                            alert('사용 가능한 닉네임입니다.');
-                          }}
-                          className={cn(
-                            "px-4 rounded-xl font-black text-xs transition-all whitespace-nowrap border uppercase tracking-wider",
-                            settingsNicknameChecked 
-                              ? "bg-[#0d4d3b] text-emerald-400 border-emerald-500/30" 
-                              : "bg-emerald-500 text-[#0a3d2e] border-[#1a5d4e] hover:bg-emerald-400"
-                          )}
-                        >
-                          {settingsNicknameChecked ? '확인됨' : '중복확인'}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 4구 시 3쿠션 마무리 방식 설정 */}
-                    <div className="space-y-1.5 text-left">
-                      <div className="flex justify-between items-center">
-                        <label className="text-[10px] font-black uppercase text-emerald-400 flex items-center gap-1">
-                          4구 수지 표시 방식 설정 (마무리 기준)
-                        </label>
-                        <span className="text-[10px] font-black text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">수지 자동 연동</span>
-                      </div>
-                      <p className="text-[10px] text-emerald-100/60 leading-relaxed mb-2 font-semibold">
-                        본인의 평소 4구 마무리 플레이 방식(마무리 3쿠션 개수)을 설정해 주세요. 선택하신 마무리 조건의 난이도에 따라 AI가 대국 통계 데이터를 분석하여, 최적의 4구 수지(다마)를 자동으로 맞춤 계산하여 안내하고 표시합니다.
-                      </p>
-                      
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { count: 0, label: '마무리 없음' },
-                          { count: 1, label: '3쿠션 1개' },
-                          { count: 2, label: '3쿠션 2개' }
-                        ].map(({ count, label }) => (
-                          <button
-                            key={count}
-                            type="button"
-                            onClick={() => setSettingsCushionCount(count)}
-                            className={cn(
-                              "py-2 px-1 text-xs font-black rounded-xl border transition-all text-center flex flex-col items-center justify-center gap-0.5",
-                              settingsCushionCount === count
-                                ? "bg-emerald-500 border-emerald-400 text-[#0a3d2e] shadow-lg shadow-emerald-500/10"
-                                : "bg-[#1a5d4e]/30 border-[#1a5d4e]/50 text-emerald-100/80 hover:bg-[#1a5d4e]/50 hover:text-white"
-                            )}
-                          >
-                            <span className="text-sm font-mono leading-none">{count}</span>
-                            <span className="text-[9px] leading-none shrink-0 font-bold">{label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 실시간 AI 분석 수지 확인 (읽기 전용) */}
-                    <div className="bg-[#0a3d2e]/60 border border-[#1a5d4e]/60 rounded-2xl p-4 space-y-3">
-                      <div className="flex items-center justify-between border-b border-[#1a5d4e]/40 pb-2">
-                        <span className="text-[10px] font-black text-emerald-300">실시간 AI 산출 수지 (기록 기반 자동 보정)</span>
-                        <span className="text-[8px] font-black text-emerald-200/50 uppercase leading-none px-1.5 py-0.5 rounded border border-[#1a5d4e] bg-[#0d4d3b]">AI Calibrated</span>
-                      </div>
-                      
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-0.5 text-left">
-                          <label className="text-[9px] font-semibold text-emerald-100/50 block">3구 수지</label>
-                          <div className="flex items-baseline gap-1 font-mono">
-                            <span className="text-lg font-black text-emerald-100">{settingsDama3}</span>
-                            <span className="text-[10px] font-bold text-emerald-100/60">점</span>
-                          </div>
-                          <span className="text-[8px] text-emerald-100/30 leading-none">대국 에버리지 기반 자동 산출</span>
-                        </div>
-                        
-                        <div className="space-y-0.5 text-left relative">
-                          <label className="text-[9px] font-semibold text-emerald-100/50 block">4구 수지</label>
-                          <div className="flex items-baseline gap-1 font-mono">
-                            <span className="text-lg font-black text-amber-400">{settingsDama4}</span>
-                            <span className="text-[10px] font-bold text-amber-400/60">점</span>
-                          </div>
-                          <span className="text-[8px] text-amber-400/50 leading-none font-semibold">마무리 {settingsCushionCount}개 기준 맞춤 보정됨</span>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        type="submit"
-                        disabled={isProfileSaving}
-                        className="w-full py-3.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all text-xs uppercase tracking-wider"
-                      >
-                        {isProfileSaving ? '프로필 저장 중...' : '프로필 저장하기 (AI 자동 수지 적용)'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-
-                {settingsTab === 'preferences' && (
-                  <div className="space-y-4">
-                    <div className="text-left py-1">
-                      <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest mb-1">알림 수신 동의 및 푸시 설정</h3>
-                      <p className="text-[10px] text-emerald-100/60 leading-relaxed font-semibold">
-                        대대 및 중대 매치 매칭 소식과 경기 정보, 친구 소식을 실시간으로 알려드립니다.
-                      </p>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      {/* Match Invitation Alerts */}
-                      <div className="flex items-center justify-between p-3.5 bg-[#0a3d2e]/40 border border-[#1a5d4e]/50 rounded-2xl">
-                        <div className="text-left space-y-0.5">
-                          <label className="text-xs font-black text-emerald-100 block">친선 경기 및 교류 대국 제안 알림</label>
-                          <span className="text-[9px] text-emerald-100/40 font-semibold block">동호인 친구가 친선 경기를 요청하면 푸시 알림을 보냅니다.</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAlert('match', !alertMatch)}
-                          className={cn(
-                            "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 focus:outline-none shrink-0",
-                            alertMatch ? "bg-emerald-500" : "bg-[#145745]"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-5 h-5 rounded-full bg-white transition-all shadow-md transform",
-                            alertMatch ? "translate-x-5" : "translate-x-0"
-                          )} />
-                        </button>
-                      </div>
-
-                      {/* Friend Status Alerts */}
-                      <div className="flex items-center justify-between p-3.5 bg-[#0a3d2e]/40 border border-[#1a5d4e]/50 rounded-2xl">
-                        <div className="text-left space-y-0.5">
-                          <label className="text-xs font-black text-emerald-100 block">친구 신청 및 수락 알림</label>
-                          <span className="text-[9px] text-emerald-100/40 font-semibold block">누군가 나를 친구로 추가하거나 신청 결과를 알려줍니다.</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAlert('friend', !alertFriend)}
-                          className={cn(
-                            "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 focus:outline-none shrink-0",
-                            alertFriend ? "bg-emerald-500" : "bg-[#145745]"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-5 h-5 rounded-full bg-white transition-all shadow-md transform",
-                            alertFriend ? "translate-x-5" : "translate-x-0"
-                          )} />
-                        </button>
-                      </div>
-
-                      {/* AI Analytics Reports Alerts */}
-                      <div className="flex items-center justify-between p-3.5 bg-[#0a3d2e]/40 border border-[#1a5d4e]/50 rounded-2xl">
-                        <div className="text-left space-y-0.5">
-                          <label className="text-xs font-black text-emerald-100 block">AI 맞춤 분석 및 주간 리포트 알림</label>
-                          <span className="text-[9px] text-emerald-100/40 font-semibold block">대국 이력의 정밀 통계 및 AI 정밀 분석 리포트를 알림으로 알립니다.</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAlert('aireport', !alertAiReport)}
-                          className={cn(
-                            "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 focus:outline-none shrink-0",
-                            alertAiReport ? "bg-emerald-500" : "bg-[#145745]"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-5 h-5 rounded-full bg-white transition-all shadow-md transform",
-                            alertAiReport ? "translate-x-5" : "translate-x-0"
-                          )} />
-                        </button>
-                      </div>
-
-                      {/* System Tips alerts */}
-                      <div className="flex items-center justify-between p-3.5 bg-[#0a3d2e]/40 border border-[#1a5d4e]/50 rounded-2xl">
-                        <div className="text-left space-y-0.5">
-                          <label className="text-xs font-black text-emerald-100 block">서비스 소식 및 공지사항 팁 알림</label>
-                          <span className="text-[9px] text-emerald-100/40 font-semibold block">새로운 업데이트 소식과 공지사항 알림을 발송합니다.</span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleAlert('system', !alertSystem)}
-                          className={cn(
-                            "w-11 h-6 rounded-full transition-colors relative flex items-center p-0.5 focus:outline-none shrink-0",
-                            alertSystem ? "bg-emerald-500" : "bg-[#145745]"
-                          )}
-                        >
-                          <div className={cn(
-                            "w-5 h-5 rounded-full bg-white transition-all shadow-md transform",
-                            alertSystem ? "translate-x-5" : "translate-x-0"
-                          )} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {settingsTab === 'security' && (
-                  <div className="space-y-6">
-                    {/* 전체 로그인 기기 관리 */}
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between">
-                        <div className="text-left">
-                          <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
-                            <Shield size={12} className="text-emerald-400" />
-                            전체 로그인 기기 관리
-                          </h3>
-                          <p className="text-[10px] text-emerald-100/60 font-semibold">현재 계정으로 로그인된 모든 세션 기기 목록입니다.</p>
-                        </div>
-                        {activeDevices.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={handleLogoutAllDevices}
-                            className="px-2.5 py-1.5 bg-red-500 hover:bg-red-400 text-white text-[10px] font-black rounded-lg transition-all flex items-center gap-1 leading-none uppercase tracking-wide shrink-0"
-                          >
-                            <LogOut size={10} />
-                            모든 기기 로그아웃
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                        {activeDevices.map((dev) => (
-                          <div 
-                            key={dev.id} 
-                            className={cn(
-                              "flex items-center justify-between p-3 rounded-2xl border transition-all text-left",
-                              dev.isCurrent 
-                                ? "bg-emerald-950/40 border-emerald-500/40" 
-                                : "bg-[#0a3d2e]/30 border-[#1a5d4e]/40"
-                            )}
-                          >
-                            <div className="flex items-start gap-2.5">
-                              <div className="p-2 bg-[#1a5d4e]/40 rounded-xl text-emerald-300 mt-0.5">
-                                {dev.device.toLowerCase().includes('phone') ? <Smartphone size={14} /> : <Laptop size={14} />}
-                              </div>
-                              <div className="space-y-0.5">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs font-black text-emerald-100">{dev.device}</span>
-                                  {dev.isCurrent && (
-                                    <span className="text-[8px] font-black bg-emerald-500/20 text-emerald-300 px-1 py-0.2 rounded border border-emerald-500/30 uppercase leading-none">CURRENT</span>
-                                  )}
-                                </div>
-                                <div className="flex flex-col sm:flex-row sm:items-center gap-1 text-[9px] text-emerald-100/40 font-semibold font-mono">
-                                  <span>{dev.ip}</span>
-                                  <span className="hidden sm:inline text-emerald-100/20">•</span>
-                                  <span>{dev.location}</span>
-                                  <span className="hidden sm:inline text-emerald-100/20">•</span>
-                                  <span className="text-emerald-100/50">{dev.lastActive}</span>
-                                </div>
-                              </div>
-                            </div>
-                            
-                            {!dev.isCurrent && (
-                              <button
-                                type="button"
-                                onClick={() => handleLogoutDevice(dev.id, dev.device)}
-                                className="p-1 px-2.5 rounded-lg border border-emerald-500/20 hover:border-red-500/30 hover:bg-red-500/10 text-emerald-100/60 hover:text-red-400 text-[10px] font-bold transition-all"
-                              >
-                                로그아웃
-                              </button>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* 비밀번호 변경 */}
-                    <div className="border-t border-[#1a5d4e]/40 pt-4 space-y-3">
-                      <div className="text-left">
-                        <h3 className="text-xs font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1.5">
-                          <Key size={12} className="text-emerald-400" />
-                          보안 비밀번호 변경
-                        </h3>
-                        <p className="text-[10px] text-emerald-100/60 font-semibold mb-2">원활한 대국 관리를 위해 주기적으로 비밀번호를 변경해 주세요.</p>
-                      </div>
-
-                      <form onSubmit={handleChangePasswordWithApi} className="space-y-3">
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                          <div className="space-y-1 text-left">
-                            <label className="text-[9px] font-black uppercase text-emerald-400/80">현재 비밀번호</label>
-                            <input
-                              type="password"
-                              value={currentPassword}
-                              onChange={(e) => setCurrentPassword(e.target.value)}
-                              placeholder="••••••••"
-                              className="w-full bg-[#1a5d4e]/50 border border-[#1a5d4e] rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                            />
-                          </div>
-                          <div className="space-y-1 text-left">
-                            <label className="text-[9px] font-black uppercase text-emerald-400/80">새 비밀번호</label>
-                            <input
-                              type="password"
-                              value={newPassword}
-                              onChange={(e) => setNewPassword(e.target.value)}
-                              placeholder="새 비밀번호"
-                              className="w-full bg-[#1a5d4e]/50 border border-[#1a5d4e] rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                            />
-                          </div>
-                          <div className="space-y-1 text-left">
-                            <label className="text-[9px] font-black uppercase text-emerald-400/80">새 비밀번호 확인</label>
-                            <input
-                              type="password"
-                              value={confirmPassword}
-                              onChange={(e) => setConfirmPassword(e.target.value)}
-                              placeholder="다시 입력"
-                              className="w-full bg-[#1a5d4e]/50 border border-[#1a5d4e] rounded-xl px-3 py-2 text-xs font-bold text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
-                            />
-                          </div>
-                        </div>
-
-                        <button
-                          type="submit"
-                          disabled={isPasswordChanging}
-                          className="w-full py-2.5 bg-emerald-500 text-[#0a3d2e] font-black rounded-xl hover:bg-emerald-400 hover:shadow-lg hover:shadow-emerald-500/10 disabled:opacity-60 disabled:cursor-not-allowed transition-all text-[11px] uppercase tracking-wider"
-                        >
-                          {isPasswordChanging ? '비밀번호 변경 중...' : '비밀번호 업데이트 적용'}
-                        </button>
-                      </form>
-                    </div>
-                  </div>
-                )}
-
-                {settingsTab === 'withdraw' && (
-                  <form onSubmit={handleWithdraw} className="space-y-4">
-                    <div className="bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-xl p-4 text-xs font-semibold leading-relaxed text-left">
-                      ⚠️ 계정 탈퇴 시 대국 매치 내역, 전적 통계, 수지 로그 및 등록된 모든 친구 정보가 영구적으로 파괴되며, 이 작업은 취소하거나 복구할 수 없습니다.
-                    </div>
-
-                    <div className="space-y-1 text-left">
-                      <label className="text-[10px] font-black uppercase text-orange-400">탈퇴 사유 (선택)</label>
-                      <textarea
-                        value={withdrawReason}
-                        onChange={(e) => setWithdrawReason(e.target.value)}
-                        placeholder="서비스 이용 중 어떤 점이 불편하셨는지 공유해주세요."
-                        className="w-full h-24 bg-[#1a5d4e]/30 border border-[#1a5d4e] rounded-xl px-4 py-3 text-xs font-medium text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50 border-r-0 border-l-0 border-t-0 border-b border-orange-500 resize-none rounded-b-none"
-                      />
-                    </div>
-
-                    <div className="flex items-start gap-2.5 p-1 text-left cursor-pointer select-none" onClick={() => setWithdrawConfirmed(!withdrawConfirmed)}>
-                      <div className={cn(
-                        "w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5",
-                        withdrawConfirmed ? "bg-orange-500 border-orange-500 text-white" : "border-[#1a5d4e]"
-                      )}>
-                        {withdrawConfirmed && <X size={10} />}
-                      </div>
-                      <span className="text-[11px] text-emerald-100/70 font-semibold leading-tight">
-                        위 유의사항을 모두 숙지하였으며, 영구 삭제 처리에 전적으로 동의합니다.
-                      </span>
-                    </div>
-
-                    <div className="pt-4">
-                      <button
-                        type="submit"
-                        disabled={!withdrawConfirmed}
-                        className={cn(
-                          "w-full py-3.5 font-black rounded-xl text-xs uppercase tracking-wider transition-all",
-                          withdrawConfirmed 
-                            ? "bg-orange-500 text-white hover:bg-orange-400 hover:shadow-lg hover:shadow-orange-500/10 cursor-pointer" 
-                            : "bg-emerald-100/10 text-emerald-100/30 cursor-not-allowed"
-                        )}
-                      >
-                        회원 탈퇴 완료
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
+      <AccountSettingsModal
+        isOpen={isSettingsOpen}
+        profile={{
+          name: userName,
+          nickname: userNickname,
+          targetCushionCount: userCushionCount,
+          threeBallHandicap: userDama3,
+          fourBallHandicap: userDama4,
+        }}
+        records={records}
+        onClose={() => setIsSettingsOpen(false)}
+        onProfileUpdated={applyMemberProfile}
+        onNotification={addSystemNotification}
+      />
       {/* Game invitation modal with backdrop blur */}
       <AnimatePresence>
         {incomingInvitation && (
