@@ -1,9 +1,9 @@
 import React, { useCallback, useState, useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Play, Plus, Minus, RotateCcw, Target, User, Sparkles, ChevronRight, 
-  Settings, AlertCircle, ArrowLeft, ArrowRight, Trophy, Timer, Volume2, VolumeX, Eye, HelpCircle, RefreshCw, CheckCircle2, Award,
-  Copy, Users, MessageSquare, Hourglass, Activity, Check, Info
+import {
+  Play, Plus, Minus, Target, User, Sparkles, ChevronRight,
+  Settings, AlertCircle, Trophy, Timer, Volume2, VolumeX, Eye, HelpCircle, RefreshCw, CheckCircle2, Award,
+  Hourglass, Activity
 } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameType, GameMode } from '../types';
 import { getFriends } from '../api/friends';
@@ -29,6 +29,12 @@ import { cn } from '../lib/utils';
 import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameRoomCreateForm } from './GameRoomCreateForm';
+import {
+  GameRoomLobby,
+  type LobbyFriend,
+  type LobbyLog,
+  type LobbyPlayer,
+} from './GameRoomLobby';
 
 interface CreateGamePageProps {
   onAdd: (record: GameRecordDraft) => Promise<GameRecord | void> | GameRecord | void;
@@ -51,13 +57,6 @@ interface ActivePlayer {
   isFinished?: boolean;
   isMe?: boolean;
 }
-
-type BilliardFriend = {
-  id: number;
-  name: string;
-  threeBallHandicap: number;
-  fourBallHandicap: number;
-};
 
 type GameInvitationNavigationState = {
   acceptedInvitation?: {
@@ -89,7 +88,7 @@ const getLiveStateSignature = (draft: GameRoomLiveStateDraft) => JSON.stringify(
 
 const CUE_BALL_COLORS = ['white', 'yellow', 'red', 'blue'];
 
-const createLobbyPlayers = (gameRoom: GameRoom, currentMemberId?: number) =>
+const createLobbyPlayers = (gameRoom: GameRoom, currentMemberId?: number): LobbyPlayer[] =>
   Array.from({ length: gameRoom.playerCapacity }, (_, index) => {
     const participant = gameRoom.participants[index];
 
@@ -180,11 +179,11 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [isLiveStateReady, setIsLiveStateReady] = useState(false);
   const [liveStateError, setLiveStateError] = useState<string | null>(null);
   const [lobbyCode, setLobbyCode] = useState<string>('');
-  const [lobbyPlayers, setLobbyPlayers] = useState<any[]>([]);
-  const [lobbyLogs, setLobbyLogs] = useState<any[]>([]);
+  const [lobbyPlayers, setLobbyPlayers] = useState<LobbyPlayer[]>([]);
+  const [lobbyLogs, setLobbyLogs] = useState<LobbyLog[]>([]);
   const [copySuccess, setCopySuccess] = useState<boolean>(false);
 
-  const [billiardFriends, setBilliardFriends] = useState<BilliardFriend[]>([]);
+  const [billiardFriends, setBilliardFriends] = useState<LobbyFriend[]>([]);
   const [isBilliardFriendsLoading, setIsBilliardFriendsLoading] = useState(false);
   const [billiardFriendsError, setBilliardFriendsError] = useState<string | null>(null);
   const [invitedFriendIds, setInvitedFriendIds] = useState<number[]>([]);
@@ -936,69 +935,6 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setShowExitLobbyConfirm(false);
   };
 
-  // Modify individual handicaps/targets right in the lobby
-  const handleUpdateLobbyPlayerTarget = (id: number, delta: number) => {
-    cueClickSound();
-    setLobbyPlayers(prev => prev.map(p => {
-      if (p.id === id) {
-        return { ...p, targetScore: Math.max(1, p.targetScore + delta) };
-      }
-      return p;
-    }));
-  };
-
-  // Switch lobby slots to flexibly change teams
-  const handleMoveLobbyPlayer = (id: number, direction: 'left' | 'right' | 'up' | 'down') => {
-    cueClickSound();
-    let targetId = id;
-    if (direction === 'right') {
-      if (id === 1) targetId = 2;
-      if (id === 3) targetId = 4;
-    } else if (direction === 'left') {
-      if (id === 2) targetId = 1;
-      if (id === 4) targetId = 3;
-    } else if (direction === 'down') {
-      if (id === 1) targetId = 3;
-      if (id === 2) targetId = 4;
-    } else if (direction === 'up') {
-      if (id === 3) targetId = 1;
-      if (id === 4) targetId = 2;
-    }
-
-    if (targetId === id) return;
-
-    setLobbyPlayers(prev => {
-      const copy = prev.map(p => ({ ...p }));
-      const p1Idx = copy.findIndex(p => p.id === id);
-      const p2Idx = copy.findIndex(p => p.id === targetId);
-
-      if (p1Idx !== -1 && p2Idx !== -1) {
-        const temp = { ...copy[p1Idx] };
-
-        // Copy everything except ID from p2 to p1
-        copy[p1Idx].name = copy[p2Idx].name;
-        copy[p1Idx].memberId = copy[p2Idx].memberId;
-        copy[p1Idx].role = copy[p2Idx].role;
-        copy[p1Idx].isJoined = copy[p2Idx].isJoined;
-        copy[p1Idx].isReady = copy[p2Idx].isReady;
-        copy[p1Idx].cueBallColor = copy[p2Idx].cueBallColor;
-        copy[p1Idx].targetScore = copy[p2Idx].targetScore;
-        copy[p1Idx].isMe = copy[p2Idx].isMe;
-
-        // Copy from temp (originally p1) to p2
-        copy[p2Idx].name = temp.name;
-        copy[p2Idx].memberId = temp.memberId;
-        copy[p2Idx].role = temp.role;
-        copy[p2Idx].isJoined = temp.isJoined;
-        copy[p2Idx].isReady = temp.isReady;
-        copy[p2Idx].cueBallColor = temp.cueBallColor;
-        copy[p2Idx].targetScore = temp.targetScore;
-        copy[p2Idx].isMe = temp.isMe;
-      }
-      return copy;
-    });
-  };
-
   const isLobbyFull = lobbyPlayers.length === playerCount && lobbyPlayers.every((player) => player.isJoined);
   const areAllLobbyPlayersReady = isLobbyFull && lobbyPlayers.every((player) => player.isReady);
   const currentLobbyPlayer = lobbyPlayers.find((player) => player.isMe);
@@ -1124,7 +1060,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     }
   }, [gameRoomId, gameRoomStatus, isLobby, isLobbyFull]);
 
-  const handleInviteFriend = async (friend: BilliardFriend) => {
+  const handleInviteFriend = async (friend: LobbyFriend) => {
     if (!gameRoomId) {
       setBilliardFriendsError('게임방 정보를 찾을 수 없습니다. 게임방을 다시 생성해 주세요.');
       return;
@@ -1599,510 +1535,33 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
       {/* 1.5. INTERACTIVE MULTIPLAYER LOBBY ROOM */}
       {!isPlaying && isLobby && (
-        <div className="max-w-4xl mx-auto space-y-6">
-          <div className="flex justify-start">
-            <button
-              type="button"
-              onClick={() => setShowExitLobbyConfirm(true)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-xl text-xs font-bold transition-all cursor-pointer active:scale-95"
-            >
-              <ArrowLeft size={14} />
-              대기방 나가기
-            </button>
-          </div>
-
-          <div className="text-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-500/10 border border-orange-500/20 text-orange-400 text-xs font-bold uppercase tracking-wider mb-3">
-              <Hourglass size={12} className="animate-spin" />
-              매칭 및 게임 대기 상태
-            </span>
-            <h1 className="text-3xl font-black text-white tracking-tight flex items-center justify-center gap-2">
-              <Users className="text-emerald-400" size={28} />
-              실시간 당구 게임 대기방
-            </h1>
-            <p className="text-emerald-100/60 mt-1 font-medium text-xs">
-              대기방에 동료 및 상대 선수가 하나둘 접속하고 있습니다. 모든 선수가 접속 완료하면 경기를 시작할 수 있습니다.
-            </p>
-            <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
-              <span className="border border-emerald-400/20 bg-[#0b3c2e] px-3 py-2 font-bold text-emerald-100">
-                {roomName}
-              </span>
-              <button
-                type="button"
-                onClick={() => void handleCopyLobbyCode()}
-                className="inline-flex items-center gap-1.5 border border-amber-400/25 bg-amber-400/10 px-3 py-2 font-mono font-black text-amber-200 transition-colors hover:bg-amber-400/15"
-                title="입장 코드 복사"
-              >
-                {copySuccess ? <Check size={13} /> : <Copy size={13} />}
-                {copySuccess ? '복사됨' : lobbyCode}
-              </button>
-            </div>
-            {gameRoomError && (
-              <p className="mt-3 text-xs font-semibold text-rose-200" role="alert">
-                {gameRoomError}
-              </p>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            
-            {/* Left/Middle Column: Participant list */}
-            <div className="md:col-span-2 space-y-4">
-
-              {/* Roster list */}
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-400/80 uppercase tracking-widest">
-                    참가 예정 선수 구성 ({lobbyPlayers.filter(p => p.isJoined).length} / {playerCount}명 입장)
-                  </span>
-                  <span className="text-xs text-emerald-300/60 font-mono">
-                    {type === '3-Cushion' ? '3구 당구 UMB' : '4구 당구'} • {mode === 'Individual' ? '개인전' : '팀전'}
-                  </span>
-                </div>
-                {(() => {
-                  const renderLobbyPlayer = (lp: any) => {
-                    const isSelf = lp.isMe;
-                    
-                    // Style attributes based on cue ball colors
-                    const ballColorsMap: Record<string, { bg: string; border: string; glow: string; text: string }> = {
-                      white: { bg: 'bg-white', border: 'border-zinc-200', glow: 'shadow-[0_0_12px_rgba(255,255,255,0.2)]', text: 'text-zinc-800' },
-                      yellow: { bg: 'bg-yellow-400', border: 'border-yellow-300', glow: 'shadow-[0_0_12px_rgba(251,191,36,0.3)]', text: 'text-yellow-950' },
-                      red: { bg: 'bg-red-500', border: 'border-red-400', glow: 'shadow-[0_0_12px_rgba(239,68,68,0.3)]', text: 'text-white' },
-                      orange: { bg: 'bg-orange-500', border: 'border-orange-400', glow: 'shadow-[0_0_12px_rgba(249,115,22,0.3)]', text: 'text-white' },
-                      blue: { bg: 'bg-sky-500', border: 'border-sky-400', glow: 'shadow-[0_0_12px_rgba(14,165,233,0.3)]', text: 'text-white' },
-                    };
-
-                    const style = ballColorsMap[lp.cueBallColor] || ballColorsMap.white;
-
-                    if (!lp.isJoined) {
-                      return (
-                        <div 
-                          key={lp.id}
-                          className="relative h-[120px] rounded-[2rem] border-2 border-dashed border-[#1d6352]/40 bg-[#07241c]/40 hover:bg-[#092e24]/60 transition-all duration-300 flex flex-col items-center justify-center p-4 text-center group"
-                        >
-                          <div className="flex items-center gap-2">
-                            <div className="w-8 h-8 rounded-full border border-dashed border-[#1d6352] bg-[#0c382c]/40 flex items-center justify-center text-emerald-400/40 group-hover:scale-105 group-hover:border-emerald-400 group-hover:text-emerald-400 transition-all duration-300">
-                              <Plus size={14} className="animate-pulse" />
-                            </div>
-                            <span className="text-xs font-black text-emerald-400/50 uppercase tracking-widest block font-sans">
-                              슬롯 {lp.id} 비어있음
-                            </span>
-                          </div>
-                          <span className="text-[10px] text-emerald-300/35 mt-1">
-                            우측 하단 친구 목록에서 초대해 주세요.
-                          </span>
-                        </div>
-                      );
-                    }
-
-                    return (
-                      <div 
-                        key={lp.id}
-                        className={cn(
-                          "relative h-[120px] rounded-[2rem] border p-5 transition-all duration-300 flex flex-col justify-between overflow-hidden group hover:scale-[1.01]",
-                          lp.isReady
-                            ? "bg-gradient-to-br from-[#0c4032] to-[#06241a] border-emerald-400/60 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-                            : "bg-gradient-to-br from-[#0b3c2e] to-[#07241c] border-[#1d6352] shadow-md"
-                        )}
-                      >
-                        {/* Interactive dynamic background glow effect for active deck */}
-                        <div className="absolute -top-12 -right-12 w-28 h-28 bg-emerald-500/5 rounded-full blur-2xl group-hover:bg-emerald-500/10 transition-all duration-500" />
-                        
-                        {/* Upper row: Avatar & Status */}
-                        <div className="flex items-start justify-between z-10 w-full">
-                          <div className="flex items-center gap-3">
-                            <span className={cn(
-                              "w-10 h-10 rounded-full border-2 flex items-center justify-center font-black text-sm relative select-none",
-                              style.bg,
-                              style.border,
-                              style.glow,
-                              style.text
-                            )}>
-                              {lp.id}
-                              {/* Pulse ring if ready */}
-                              {lp.isReady && (
-                                <span className="absolute -inset-1 rounded-full border border-emerald-400 animate-ping opacity-35" />
-                              )}
-                            </span>
-                            
-                            <div className="text-left w-full">
-                              <div className="flex items-center gap-1.5 leading-none">
-                                <span className="text-[9px] uppercase font-bold tracking-widest text-emerald-300/40 font-mono">
-                                  {isSelf ? "MY SLOT" : `CUE PLAYER ${lp.id}`}
-                                </span>
-                                {isSelf && (
-                                  <span className="text-[8px] font-black bg-emerald-400 text-zinc-950 px-1 py-0.2 rounded-md">나</span>
-                                )}
-                              </div>
-                              <h4 className="font-sans font-black text-white text-sm sm:text-base tracking-tight leading-none mt-1">
-                                {lp.name}
-                              </h4>
-                            </div>
-                          </div>
-
-                          {/* Level/Role status badge */}
-                          <div className="text-right">
-                            {lp.isReady ? (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] bg-emerald-500/10 text-emerald-400 font-bold px-2 py-0.5 rounded-full border border-emerald-500/20 animate-pulse">
-                                Ready
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-0.5 text-[9px] bg-amber-500/10 text-amber-400 font-bold px-2 py-0.5 rounded-full border border-amber-500/20">
-                                Setting
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* Middle status tagline badge */}
-                        <div className="text-left mt-2 pl-1 z-10 flex justify-between items-center w-full">
-                          <span className={cn(
-                            "inline-flex items-center gap-1 font-mono text-[9px] uppercase font-bold tracking-widest",
-                            lp.isReady ? "text-emerald-400" : "text-amber-400/80"
-                          )}>
-                            {lp.isReady ? "● READY TO DUEL" : "○ PREPARING CUE"}
-                          </span>
-                          {mode === 'Team' && playerCount === 4 && (
-                            <div className="flex items-center gap-1.5">
-                              {/* Up/Down buttons */}
-                              {(lp.id === 1 || lp.id === 2) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMoveLobbyPlayer(lp.id, 'down')}
-                                  className="w-5 h-5 rounded bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 text-[10px] font-black tracking-wider transition-all cursor-pointer flex items-center justify-center active:scale-95"
-                                  title="아래 순서로 이동"
-                                >
-                                  ↓
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMoveLobbyPlayer(lp.id, 'up')}
-                                  className="w-5 h-5 rounded bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 text-[10px] font-black tracking-wider transition-all cursor-pointer flex items-center justify-center active:scale-95"
-                                  title="위 순서로 이동"
-                                >
-                                  ↑
-                                </button>
-                              )}
-
-                              {/* Left/Right buttons */}
-                              {(lp.id === 1 || lp.id === 3) ? (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMoveLobbyPlayer(lp.id, 'right')}
-                                  className="px-1.5 py-0.5 rounded-lg bg-amber-500/10 hover:bg-amber-500 text-amber-300 hover:text-zinc-950 border border-amber-500/20 text-[9px] font-black tracking-wider transition-all cursor-pointer flex items-center gap-0.5 active:scale-95"
-                                  title="2팀으로 이동"
-                                >
-                                  <span>2팀 이동</span>
-                                  <ArrowRight size={10} />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleMoveLobbyPlayer(lp.id, 'left')}
-                                  className="px-1.5 py-0.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-zinc-950 border border-emerald-500/20 text-[9px] font-black tracking-wider transition-all cursor-pointer flex items-center gap-0.5 active:scale-95"
-                                  title="1팀으로 이동"
-                                >
-                                  <ArrowLeft size={10} />
-                                  <span>1팀 이동</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  };
-
-                  if (mode === 'Team' && playerCount === 4) {
-                    return (
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 relative mt-4">
-                        {/* Mid VS Badge overlay */}
-                        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none hidden md:flex items-center justify-center">
-                          <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-amber-500 to-amber-600 border-2 border-[#09352a] text-[#09352a] font-mono font-black text-xs flex items-center justify-center shadow-lg shadow-amber-500/10 uppercase italic tracking-wider">
-                            VS
-                          </div>
-                        </div>
-
-                        {/* Team A (Left column) */}
-                        <div className="space-y-4 bg-[#0a2f26] p-5 rounded-[2.5rem] border border-emerald-500/20">
-                          <div className="flex items-center justify-between border-b border-emerald-500/10 pb-2 mb-1">
-                            <span className="text-xs font-black text-emerald-400 tracking-wider flex items-center gap-1.5 font-sans">
-                              <span className="w-2 rounded-full h-2 bg-emerald-400 shrink-0" />
-                              1팀 (동료팀)
-                            </span>
-                          </div>
-                          <div className="space-y-3">
-                            {[1, 3].map(id => {
-                              const lp = lobbyPlayers.find(p => p.id === id);
-                              if (!lp) return null;
-                              return renderLobbyPlayer(lp);
-                            })}
-                          </div>
-                        </div>
-
-                        {/* Team B (Right column) */}
-                        <div className="space-y-4 bg-[#3d1a1a]/15 p-5 rounded-[2.5rem] border border-red-500/10">
-                          <div className="flex items-center justify-between border-b border-red-500/10 pb-2 mb-1">
-                            <span className="text-xs font-black text-red-400 tracking-wider flex items-center gap-1.5 font-sans">
-                              <span className="w-2 rounded-full h-2 bg-red-400 shrink-0 animate-pulse" />
-                              2팀 (상대팀)
-                            </span>
-                          </div>
-                          <div className="space-y-3">
-                            {[2, 4].map(id => {
-                              const lp = lobbyPlayers.find(p => p.id === id);
-                              if (!lp) return null;
-                              return renderLobbyPlayer(lp);
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  }
-
-                  // Default Individual Grid (2 columns on landscape screens)
-                  return (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-                      {lobbyPlayers.map((lp) => renderLobbyPlayer(lp))}
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Friends eligible for a server-backed game invitation */}
-              <div className="bg-[#0b3c2e]/60 p-5 rounded-[2rem] border border-[#1d6352]/50 text-left">
-                <div className="flex items-center justify-between mb-3 border-b border-[#1a5d4e]/40 pb-2">
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-xs uppercase font-extrabold text-[#ffd6aa] tracking-widest flex items-center gap-1.5 font-sans">
-                      <Users size={14} className="text-emerald-400" />
-                      초대 가능한 당구 친구 ({billiardFriends.length}명)
-                    </h3>
-                  </div>
-                  <span className="text-[10px] text-emerald-300/40 font-sans">친구에게 경기 초대를 보냅니다</span>
-                </div>
-
-                {isBilliardFriendsLoading ? (
-                  <div className="flex min-h-24 items-center justify-center gap-2 text-xs font-semibold text-emerald-200/70">
-                    <Activity size={15} className="animate-pulse" />
-                    친구 목록을 불러오는 중입니다.
-                  </div>
-                ) : billiardFriendsError ? (
-                  <div className="flex min-h-24 flex-col items-center justify-center gap-3 text-center">
-                    <p className="text-xs font-semibold text-rose-200">{billiardFriendsError}</p>
-                    <button
-                      type="button"
-                      onClick={() => void loadBilliardFriends()}
-                      className="inline-flex items-center gap-1 text-xs font-bold text-emerald-300 hover:text-emerald-100"
-                    >
-                      <RefreshCw size={13} />
-                      다시 불러오기
-                    </button>
-                  </div>
-                ) : billiardFriends.length === 0 ? (
-                  <div className="flex min-h-24 items-center justify-center text-xs font-semibold text-emerald-200/60">
-                    초대할 친구가 없습니다.
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[160px] overflow-y-auto pr-1 scrollbar-thin">
-                    {billiardFriends.map((friend) => {
-                      const isInvited = invitedFriendIds.includes(friend.id);
-                      const isSending = invitationSendingMemberId === friend.id;
-                      const openSlotCount = lobbyPlayers.filter((player) => !player.isJoined).length;
-                      const isInvitationLimitReached = invitedFriendIds.length >= openSlotCount;
-
-                      return (
-                        <div
-                          key={friend.id}
-                          className={cn(
-                            "flex items-center justify-between p-2.5 rounded-xl border transition-all text-xs",
-                            isInvited
-                              ? "bg-[#144b3c]/20 border-amber-500/20"
-                              : "bg-[#0a3327]/60 border-[#1a5d4e]/30 hover:border-[#22725e]"
-                          )}
-                        >
-                          <div className="flex items-center gap-2.5">
-                            <div className="w-5 h-5 rounded-full border border-emerald-300 bg-emerald-300 flex items-center justify-center font-bold text-[9px] text-[#0a3d2e] shadow-sm">
-                              🎱
-                            </div>
-                            <div className="text-left font-sans">
-                              <p className="font-bold text-white leading-none mb-0.5">{friend.name}</p>
-                              <span className="inline-flex px-2 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[10px] font-extrabold font-sans">
-                                친구
-                              </span>
-                            </div>
-                          </div>
-
-                          <button
-                            type="button"
-                            disabled={isInvited || isSending || isInvitationLimitReached}
-                            onClick={() => void handleInviteFriend(friend)}
-                            className={cn(
-                              "px-2.5 py-1 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer active:scale-95 flex items-center gap-1 font-sans",
-                              isInvited || isSending
-                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/10 cursor-default"
-                                : isInvitationLimitReached
-                                  ? "bg-zinc-800 text-zinc-500 border border-zinc-700/40 cursor-not-allowed"
-                                  : "bg-emerald-500 hover:bg-emerald-400 text-[#0a3d2e] shadow-sm font-black"
-                            )}
-                          >
-                            {isSending ? (
-                              <>
-                                <Hourglass size={10} className="animate-spin" />
-                                전송 중
-                              </>
-                            ) : isInvited ? (
-                              <>
-                                <Hourglass size={10} />
-                                응답 대기
-                              </>
-                            ) : isInvitationLimitReached ? (
-                              "초대 대기 중"
-                            ) : (
-                              "초대"
-                            )}
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-            </div>
-
-            {/* Right Column: Simulated Chat Console with Event logs */}
-            <div className="bg-[#0b3c2e] p-5 rounded-[2.5rem] border border-[#1a5d4e] shadow-xl flex flex-col justify-between h-[450px]">
-              <div className="flex flex-col h-full justify-between">
-                <div>
-                  <h3 className="text-xs uppercase font-extrabold text-[#ffd6aa] tracking-widest pb-2 border-b border-[#1a5d4e]/40 flex items-center gap-1.5">
-                    <MessageSquare size={14} className="text-orange-400" />
-                    대기방 알림 및 접속 현황
-                  </h3>
-                  
-                  {/* Messages container */}
-                  <div className="overflow-y-auto space-y-2 mt-3 text-left text-[11px] font-mono h-[320px] scrollbar-thin pr-1">
-                    {lobbyLogs.map((log) => (
-                      <div 
-                        key={log.id} 
-                        className={cn(
-                          "p-2.5 rounded-xl text-left border leading-normal",
-                          log.type === 'system' 
-                            ? "bg-emerald-950/40 border-emerald-900/40 text-emerald-300" 
-                            : log.type === 'announcement'
-                              ? "bg-orange-500/5 border-orange-500/10 text-orange-300"
-                              : "bg-[#144b3c]/35 border-[#1d6352]/30 text-emerald-50/95"
-                        )}
-                      >
-                        <p>{log.text}</p>
-                        <span className="text-[8px] text-emerald-300/35 mt-1 block tracking-tight text-right">{log.time}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Simulated lobby chat helper advice */}
-                <p className="text-[9px] text-[#ffd6aa]/45 border-t border-[#1a5d4e]/30 pt-2 text-center">
-                  {gameRoomId
-                    ? '모든 참가자가 입장하고 준비를 완료하면 방장이 경기를 시작할 수 있습니다.'
-                    : '대기방의 모든 참가자가 입장하면 경기 시작 버튼에 빛이 들어옵니다.'}
-                </p>
-              </div>
-            </div>
-
-          </div>
-
-          {/* Bottom actions Panel */}
-          <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
-            {gameRoomId ? (
-              <>
-                {!isGameRoomHost && currentLobbyPlayer && (
-                  <button
-                    type="button"
-                    onClick={() => void handleToggleReady()}
-                    disabled={Boolean(gameRoomAction) || gameRoomStatus !== 'WAITING'}
-                    className={cn(
-                      "inline-flex w-full items-center justify-center gap-2 rounded-xl border px-8 py-4 text-sm font-black transition-all sm:w-auto",
-                      currentLobbyPlayer.isReady
-                        ? "border-amber-400/30 bg-amber-400/10 text-amber-200 hover:bg-amber-400/15"
-                        : "border-emerald-400 bg-emerald-500 text-[#07241c] hover:bg-emerald-400",
-                      "disabled:cursor-not-allowed disabled:opacity-60"
-                    )}
-                  >
-                    {gameRoomAction === 'ready' ? (
-                      <RefreshCw size={16} className="animate-spin" />
-                    ) : currentLobbyPlayer.isReady ? (
-                      <RotateCcw size={16} />
-                    ) : (
-                      <Check size={16} />
-                    )}
-                    {gameRoomAction === 'ready'
-                      ? '준비 상태 변경 중...'
-                      : currentLobbyPlayer.isReady
-                        ? '준비 해제'
-                        : '준비 완료'}
-                  </button>
-                )}
-
-                {isGameRoomHost ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleStartGameRoom()}
-                    disabled={!areAllLobbyPlayersReady || Boolean(gameRoomAction) || gameRoomStatus !== 'WAITING'}
-                    className={cn(
-                      "inline-flex w-full items-center justify-center gap-2 rounded-xl px-12 py-4 text-sm font-black transition-all sm:w-auto",
-                      areAllLobbyPlayersReady && gameRoomStatus === 'WAITING'
-                        ? "bg-emerald-500 text-[#07241c] shadow-lg shadow-emerald-500/15 hover:bg-emerald-400 active:scale-95"
-                        : "cursor-not-allowed border border-[#1d6352] bg-transparent text-emerald-300/60"
-                    )}
-                  >
-                    {gameRoomAction === 'start' ? (
-                      <RefreshCw size={16} className="animate-spin" />
-                    ) : (
-                      <Play size={16} fill="currentColor" />
-                    )}
-                    <span>{gameRoomAction === 'start' ? '경기 시작 요청 중...' : '경기 시작하기'}</span>
-                    {!isLobbyFull && (
-                      <span className="text-xs opacity-75">
-                        ({lobbyPlayers.filter((player) => player.isJoined).length}/{playerCount} 입장)
-                      </span>
-                    )}
-                    {isLobbyFull && !areAllLobbyPlayersReady && (
-                      <span className="text-xs opacity-75">
-                        ({lobbyPlayers.filter((player) => player.isReady).length}/{playerCount} 준비)
-                      </span>
-                    )}
-                  </button>
-                ) : (
-                  <span className="text-xs font-bold text-emerald-200/65">
-                    {currentLobbyPlayer?.isReady
-                      ? '방장이 경기를 시작하기를 기다리고 있습니다.'
-                      : '준비를 완료하면 방장이 경기를 시작할 수 있습니다.'}
-                  </span>
-                )}
-              </>
-            ) : (
-              <button
-                type="button"
-                onClick={handleLaunchGameFromLobby}
-                className={cn(
-                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-12 py-4 text-sm font-black transition-all sm:w-auto",
-                  isLobbyFull
-                    ? "bg-emerald-500 text-[#07241c] shadow-lg shadow-emerald-500/15 hover:bg-emerald-400 active:scale-95"
-                    : "border border-[#1d6352] bg-transparent text-emerald-300/60"
-                )}
-              >
-                <Play size={16} fill="currentColor" />
-                <span>경기 시작하기</span>
-                {!isLobbyFull && (
-                  <span className="text-xs opacity-75">
-                    ({lobbyPlayers.filter((player) => player.isJoined).length}/{playerCount} 대기)
-                  </span>
-                )}
-              </button>
-            )}
-          </div>
-        </div>
+        <GameRoomLobby
+          roomName={roomName}
+          lobbyCode={lobbyCode}
+          copySuccess={copySuccess}
+          errorMessage={gameRoomError}
+          players={lobbyPlayers}
+          playerCount={playerCount}
+          gameType={type}
+          gameMode={mode}
+          logs={lobbyLogs}
+          friends={billiardFriends}
+          friendsLoading={isBilliardFriendsLoading}
+          friendsError={billiardFriendsError}
+          invitedFriendIds={invitedFriendIds}
+          invitationSendingMemberId={invitationSendingMemberId}
+          hasPersistedRoom={Boolean(gameRoomId)}
+          isHost={isGameRoomHost}
+          roomStatus={gameRoomStatus}
+          roomAction={gameRoomAction}
+          onExit={() => setShowExitLobbyConfirm(true)}
+          onCopyCode={handleCopyLobbyCode}
+          onRetryFriends={loadBilliardFriends}
+          onInviteFriend={handleInviteFriend}
+          onToggleReady={handleToggleReady}
+          onStartRoom={handleStartGameRoom}
+          onStartLocalGame={handleLaunchGameFromLobby}
+        />
       )}
 
       {/* 2. REAL-TIME MATCH SCOREBOARD VIEW */}

@@ -41,8 +41,11 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 ## Game Room UI
 
 - `GameRoomCreateForm` owns the room creation controls while `CreateGamePage` coordinates API calls and screen transitions.
+- `GameRoomLobby` renders participants, invitations, room events, and ready/start controls while realtime requests remain in the parent coordinator.
+- Lobby participants, friends, and event logs use explicit TypeScript models instead of `any[]` state.
+- Team assignments follow the shared server participant order; local-only team movement is not exposed as though it were synchronized.
 - Player capacity and four-ball finish rules use explicit union types instead of unchecked numeric casts.
-- Lobby and live-scoreboard extraction are handled as separate changes so realtime behavior remains independently testable.
+- Live-scoreboard extraction remains a separate change so scoring behavior stays independently testable.
 
 ## Commands
 
