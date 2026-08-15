@@ -1,5 +1,11 @@
 package com.my.billiards.ai.config;
 
+import io.micrometer.context.ContextExecutorService;
+import io.micrometer.context.ContextRegistry;
+import io.micrometer.context.ContextSnapshotFactory;
+import io.micrometer.context.integration.Slf4jThreadLocalAccessor;
+import io.micrometer.observation.ObservationRegistry;
+import io.micrometer.observation.contextpropagation.ObservationThreadLocalAccessor;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ThreadFactory;
@@ -15,9 +21,12 @@ import org.springframework.context.annotation.Configuration;
 public class AiResilienceConfig {
 
 	@Bean(name = "aiProviderExecutor", destroyMethod = "shutdown")
-	public ExecutorService aiProviderExecutor(AiReportProperties properties) {
+	public ExecutorService aiProviderExecutor(
+		AiReportProperties properties,
+		ObservationRegistry observationRegistry
+	) {
 		int threads = properties.getExecutorThreads();
-		return new ThreadPoolExecutor(
+		ExecutorService executorService = new ThreadPoolExecutor(
 			threads,
 			threads,
 			0L,
@@ -26,6 +35,13 @@ public class AiResilienceConfig {
 			aiThreadFactory(),
 			new ThreadPoolExecutor.AbortPolicy()
 		);
+		ContextRegistry contextRegistry = new ContextRegistry()
+			.registerThreadLocalAccessor(new ObservationThreadLocalAccessor(observationRegistry))
+			.registerThreadLocalAccessor(new Slf4jThreadLocalAccessor("requestId"));
+		ContextSnapshotFactory snapshotFactory = ContextSnapshotFactory.builder()
+			.contextRegistry(contextRegistry)
+			.build();
+		return ContextExecutorService.wrap(executorService, snapshotFactory);
 	}
 
 	private ThreadFactory aiThreadFactory() {

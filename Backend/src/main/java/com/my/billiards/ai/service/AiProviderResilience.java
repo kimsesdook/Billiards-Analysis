@@ -7,6 +7,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import io.github.resilience4j.timelimiter.TimeLimiterRegistry;
+import io.micrometer.observation.Observation;
+import io.micrometer.observation.ObservationRegistry;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.RejectedExecutionException;
@@ -25,18 +27,28 @@ public class AiProviderResilience {
 	private final CircuitBreaker circuitBreaker;
 	private final TimeLimiter timeLimiter;
 	private final ExecutorService executorService;
+	private final ObservationRegistry observationRegistry;
 
 	public AiProviderResilience(
 		CircuitBreakerRegistry circuitBreakerRegistry,
 		TimeLimiterRegistry timeLimiterRegistry,
-		@Qualifier("aiProviderExecutor") ExecutorService executorService
+		@Qualifier("aiProviderExecutor") ExecutorService executorService,
+		ObservationRegistry observationRegistry
 	) {
 		this.circuitBreaker = circuitBreakerRegistry.circuitBreaker(INSTANCE_NAME);
 		this.timeLimiter = timeLimiterRegistry.timeLimiter(INSTANCE_NAME);
 		this.executorService = executorService;
+		this.observationRegistry = observationRegistry;
 	}
 
 	public <T> T execute(Supplier<T> aiCall) {
+		return Observation.createNotStarted("billiards.ai.provider", observationRegistry)
+			.lowCardinalityKeyValue("provider", "google-genai")
+			.lowCardinalityKeyValue("operation", "weekly-report")
+			.observe(() -> executeProtected(aiCall));
+	}
+
+	private <T> T executeProtected(Supplier<T> aiCall) {
 		try {
 			return circuitBreaker.executeCallable(() ->
 				timeLimiter.executeFutureSupplier(() -> executorService.submit(aiCall::get))
