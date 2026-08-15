@@ -221,6 +221,14 @@ erDiagram
 - Dependabot checks Gradle, npm, GitHub Actions, and Docker dependencies weekly. Minor and patch updates are grouped, open version-update pull requests are limited to one per ecosystem, and nothing is auto-merged.
 - These checks require no external scanner account or scanner API key.
 
+### Production Configuration Safety
+
+- The `prod` profile has no fallback database credentials, Redis password, JWT secret, or frontend origin.
+- Startup validation requires verified MySQL TLS, encrypted Redis transport with authentication, a strong JWT secret, HTTPS-only CORS, and secure refresh cookies.
+- Development profiles cannot be combined with `prod`, administrator bootstrap remains disabled, and Actuator exposure is restricted to `health` and `info`.
+- SQL output and detailed server errors are disabled, reverse-proxy headers are honored, and shutdown waits for in-flight work.
+- Validation failures report property names without echoing passwords, tokens, or connection values.
+
 ### Database Change Management
 
 - Flyway SQL 마이그레이션으로 테이블, 인덱스, 제약조건 변경 이력을 Git에서 관리합니다.
@@ -265,6 +273,7 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Backend: Java 17, Gradle, Spring Boot tests
 - Architecture: ArchUnit layer, naming, constructor-injection, and business-module cycle rules
 - Security: scanner self-tests, secret and private-key detection, sensitive filename checks, and full-SHA GitHub Action enforcement
+- Production: fail-fast profile contract and security validation tests for credentials, TLS, CORS, cookies, profiles, and Actuator exposure
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
 - Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, Redis, backend, and frontend
@@ -340,7 +349,8 @@ npm run build
 - [Performance README](./performance/README.md): k6 profiles, thresholds, and local execution
 - [CI workflow](./.github/workflows/ci.yml): automated quality gates
 - [Security scanner](./scripts/security/check-secrets.mjs): offline repository secret and workflow pin checks
+- [Production environment contract](./.env.example): required deployment variables without real secret values
 
 ## Current Scope
 
-The project is ready for local Docker-based development and automated CI validation. A production deployment and a real Gemini request are intentionally deferred until a separate budget, provider policy, and operational plan are agreed on.
+The project is ready for local Docker-based development, automated CI validation, and fail-fast production configuration. A production deployment and a real Gemini request are intentionally deferred until a separate budget, provider policy, and operational plan are agreed on.
