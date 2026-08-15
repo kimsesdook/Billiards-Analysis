@@ -25,6 +25,17 @@ import { issueGameRoomWebSocketTicket } from '../api/websocketTickets';
 import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
+import {
+  activatePlayerCushionPhase,
+  advanceScoreboardTurn,
+  applyScoreChange,
+  buildTurnHistoryEntry,
+  createScoreboardSnapshot,
+  selectScoreboardWinner,
+  toggleTeamCushionPhase,
+  type ScoreboardPlayer,
+  type ScoreboardSnapshot,
+} from '../lib/scoringEngine';
 import { motion, AnimatePresence } from 'motion/react';
 import { GameRoomCreateForm } from './GameRoomCreateForm';
 import {
@@ -33,16 +44,13 @@ import {
   type LobbyLog,
   type LobbyPlayer,
 } from './GameRoomLobby';
-import {
-  LiveGameScoreboard,
-  type LiveScoreboardPlayer,
-} from './LiveGameScoreboard';
+import { LiveGameScoreboard } from './LiveGameScoreboard';
 
 interface CreateGamePageProps {
   onAdd: (record: GameRecordDraft) => Promise<GameRecord | void> | GameRecord | void;
 }
 
-type ActivePlayer = LiveScoreboardPlayer;
+type ActivePlayer = ScoreboardPlayer;
 
 type GameInvitationNavigationState = {
   acceptedInvitation?: {
@@ -237,7 +245,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [shotClockTime, setShotClockTime] = useState<number>(40);
   const [matchHistory, setMatchHistory] = useState<string[]>([]); // Logger text
-  const [stateHistory, setStateHistory] = useState<any[]>([]); // For Undoing
+  const [stateHistory, setStateHistory] = useState<ScoreboardSnapshot[]>([]); // For Undoing
 
   // Game completion review overlay state
   const [showFinishedModal, setShowFinishedModal] = useState<boolean>(false);
@@ -1083,226 +1091,102 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   };
 
   // State recording function to allow Undo functionality
-  const pushStateToHistory = (customPlayers = players, customInning = currentInning, customActiveIdx = activePlayerIndex, customTurnPts = currentTurnPoints) => {
-    // Save snapshot of critical variables
-    const snapshot = {
-      players: JSON.parse(JSON.stringify(customPlayers)),
+  const pushStateToHistory = (
+    customPlayers = players,
+    customInning = currentInning,
+    customActiveIdx = activePlayerIndex,
+    customTurnPts = currentTurnPoints,
+  ) => {
+    const snapshot = createScoreboardSnapshot({
+      players: customPlayers,
       currentInning: customInning,
       activePlayerIndex: customActiveIdx,
       currentTurnPoints: customTurnPts,
-      shotClockTime: shotClockTime,
-      matchHistory: [...matchHistory]
-    };
-    setStateHistory(prev => [...prev, snapshot]);
+      shotClockTime,
+      matchHistory,
+    });
+    setStateHistory((currentHistory) => [...currentHistory, snapshot]);
   };
 
-  // Perform point alterations for the current turn
   const handleScoreChange = (amount: number) => {
     if (!canControlLiveScoreboard) {
       return;
     }
 
-    const targetPlayer = players[activePlayerIndex];
-    if (!targetPlayer) {
-      return;
-    }
-    const isCushion = type === '4-Ball' && lastThreeCushions > 0 && targetPlayer.isCushionPhase;
-
-    if (isCushion) {
-      const prevCushion = targetPlayer.cushionScore || 0;
-      if (amount > 0 && prevCushion >= lastThreeCushions) {
-        return; // Prevent exceeding the required cushion target
-      }
-      if (amount < 0 && prevCushion <= 0) {
-        return; // Prevent going below 0
-      }
-    } else if (amount < 0 && currentTurnPoints <= 0) {
+    const result = applyScoreChange({
+      players,
+      activePlayerIndex,
+      currentInning,
+      currentTurnPoints,
+      amount,
+      gameType: type,
+      lastThreeCushions,
+    });
+    if (!result) {
       return;
     }
 
     cueClickSound();
-    
-    // Create state undo snapshot beforehand
     pushStateToHistory();
+    setPlayers(result.players);
+    setCurrentTurnPoints(result.currentTurnPoints);
 
-    if (isCushion) {
-      const prevCushion = targetPlayer.cushionScore || 0;
-      const newCushion = prevCushion + amount;
-
-      setPlayers(prevPlayers => {
-        const updated = [...prevPlayers];
-        const playerCopy = { ...updated[activePlayerIndex] };
-        
-        playerCopy.cushionScore = newCushion;
-        
-        // Let's also record this turn's score progress in the current inning
-        const prevInningScore = playerCopy.inningScores[currentInning - 1] || 0;
-        const newInningScore = prevInningScore + amount;
-        const updatedInningScores = [...playerCopy.inningScores];
-        updatedInningScores[currentInning - 1] = newInningScore;
-        playerCopy.inningScores = updatedInningScores;
-
-        playerCopy.highRun = Math.max(0, ...updatedInningScores);
-
-        // Automatic drop out of cushion phase if regular score drops and cushionScore is negative (optional safety)
-        if (newCushion < 0) {
-          playerCopy.cushionScore = 0;
-        }
-
-        updated[activePlayerIndex] = playerCopy;
-        return updated;
-      });
-
-      setCurrentTurnPoints(prev => prev + amount);
-
-      // Play victory cue or success sound if target met
-      if (newCushion >= lastThreeCushions && amount > 0) {
-        levelSucceededSound();
-      }
-    } else {
-      const newTurnPoints = currentTurnPoints + amount;
-      setCurrentTurnPoints(newTurnPoints);
-      
-      setPlayers(prevPlayers => {
-        const updated = [...prevPlayers];
-        const playerCopy = { ...updated[activePlayerIndex] };
-        
-        const prevInningScore = playerCopy.inningScores[currentInning - 1] || 0;
-        playerCopy.currentScore = playerCopy.currentScore - prevInningScore + newTurnPoints;
-        
-        const updatedInningScores = [...playerCopy.inningScores];
-        updatedInningScores[currentInning - 1] = newTurnPoints;
-        playerCopy.inningScores = updatedInningScores;
-
-        playerCopy.highRun = Math.max(0, ...updatedInningScores);
-
-        // AUTO-TRANSITION TO CUSHION PHASE WHEN TARGET REGULAR SCORE ACHIEVED
-        if (type === '4-Ball' && lastThreeCushions > 0) {
-          if (playerCopy.currentScore >= playerCopy.targetScore) {
-            playerCopy.isCushionPhase = true;
-          } else {
-            playerCopy.isCushionPhase = false;
-          }
-        }
-        
-        updated[activePlayerIndex] = playerCopy;
-        return updated;
-      });
-
-      // Play success sound if target regular score met
-      const tempScore = targetPlayer.currentScore - (targetPlayer.inningScores[currentInning - 1] || 0) + newTurnPoints;
-      if (tempScore >= targetPlayer.targetScore && amount > 0) {
-        levelSucceededSound();
-      }
+    if (result.reachedTarget && amount > 0) {
+      levelSucceededSound();
     }
   };
 
-  // Set turn scores to 0 (direct pass / miss)
-  const handleZeroInningScore = () => {
+  const handleEndInning = () => {
     if (!canControlLiveScoreboard) {
       return;
     }
 
-    pushStateToHistory();
-    setCurrentTurnPoints(0);
-    
-    setPlayers(prevPlayers => {
-      const updated = [...prevPlayers];
-      const playerCopy = { ...updated[activePlayerIndex] };
-      const updatedInningScores = [...playerCopy.inningScores];
-      updatedInningScores[currentInning - 1] = 0;
-      playerCopy.inningScores = updatedInningScores;
-      updated[activePlayerIndex] = playerCopy;
-      return updated;
+    const activePlayer = players[activePlayerIndex];
+    if (!activePlayer) {
+      return;
+    }
+
+    const result = advanceScoreboardTurn({
+      players,
+      activePlayerIndex,
+      currentInning,
+      startingPlayerIndex: startingPlayerIdx,
+      gameType: type,
+      lastThreeCushions,
     });
-
-    handleEndInning();
-  };
-
-  // End Inning turn and swap players
-  const handleEndInning = (overridePlayers?: ActivePlayer[] | any) => {
-    if (!canControlLiveScoreboard) {
+    if (!result) {
       return;
     }
 
     turnSwitchSound();
-    
-    const currentPlayersList = Array.isArray(overridePlayers) ? overridePlayers : players;
-    const activePlayer = currentPlayersList[activePlayerIndex];
-    if (!activePlayer) return;
+    setMatchHistory((currentHistory) => [
+      ...currentHistory,
+      buildTurnHistoryEntry(
+        activePlayer,
+        currentInning,
+        currentTurnPoints,
+        type,
+        lastThreeCushions,
+      ),
+    ]);
 
-    const currentScore = activePlayer.currentScore;
-    const currentCushionScore = activePlayer.cushionScore || 0;
-
-    // Check if player reaches target score limit
-    const isTargetMet = type === '4-Ball'
-      ? (lastThreeCushions === 0 
-          ? currentScore >= activePlayer.targetScore 
-          : (activePlayer.isCushionPhase && currentCushionScore >= lastThreeCushions))
-      : (currentScore >= activePlayer.targetScore);
-
-    // Log this action to history stream
-    const cushionSuffix = (type === '4-Ball' && lastThreeCushions > 0) ? ` (3쿠션: ${currentCushionScore}/${lastThreeCushions})` : '';
-    const logItem = `[이닝 ${currentInning}] ${activePlayer.name}: +${currentTurnPoints}점 (누적: ${currentScore}점)${cushionSuffix}`;
-    setMatchHistory(prev => [...prev, logItem]);
-
-    // Create deep copied list of players
-    let updatedPlayers = [...currentPlayersList];
-    const wasAlreadyFinished = !!activePlayer.isFinished;
-
-    if (isTargetMet && !wasAlreadyFinished) {
-      updatedPlayers[activePlayerIndex] = {
-        ...activePlayer,
-        isFinished: true
-      };
-      setPlayers(updatedPlayers);
+    if (result.newlyFinished) {
+      setPlayers(result.players);
       levelSucceededSound();
     }
 
-    // Advance to next turn index of unfinished player
-    let nextPlayerIndex = activePlayerIndex;
-    let nextInning = currentInning;
-    let foundNext = false;
-
-    // Search sequentially for the next player who hasn't finished
-    for (let step = 1; step <= updatedPlayers.length; step++) {
-      const idx = (activePlayerIndex + step) % updatedPlayers.length;
-      
-      if (idx === startingPlayerIdx) {
-        nextInning = currentInning + 1;
-      }
-      
-      if (!updatedPlayers[idx].isFinished) {
-        nextPlayerIndex = idx;
-        foundNext = true;
-        break;
-      }
-    }
-
-    // If no one is left unfinished
-    if (!foundNext) {
-      const highestScorePlayer = [...updatedPlayers].sort((a, b) => {
-        const aMet = a.isFinished ? 1 : 0;
-        const bMet = b.isFinished ? 1 : 0;
-        if (aMet !== bMet) return bMet - aMet;
-        if (type === '4-Ball' && lastThreeCushions > 0) {
-          return (b.cushionScore || 0) - (a.cushionScore || 0);
-        }
-        return b.currentScore - a.currentScore;
-      })[0];
-      setWinnerName(highestScorePlayer ? highestScorePlayer.name : updatedPlayers[0]?.name || '경기가 종료되었습니다');
+    if (result.allPlayersFinished) {
+      setWinnerName(result.winner?.name || '경기가 종료되었습니다');
       setShowFinishedModal(true);
       levelSucceededSound();
       return;
     }
 
-    // Reset turn indicators
     setCurrentTurnPoints(0);
-    setActivePlayerIndex(nextPlayerIndex);
-    setCurrentInning(nextInning);
+    setActivePlayerIndex(result.activePlayerIndex);
+    setCurrentInning(result.currentInning);
     setShotClockTime(shotClockLimit);
   };
-
   // Undo system
   const handleUndoAction = () => {
     if (!canControlLiveScoreboard || stateHistory.length === 0) return;
@@ -1342,21 +1226,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     // Save state history before editing so that users can Undo
     pushStateToHistory();
 
-    setPlayers(prev => {
-      const memberIds = teamId === 'A' ? [1, 3] : [2, 4];
-      const isCurrentlyCushion = prev.some(p => memberIds.includes(p.id) && p.isCushionPhase);
-      const newState = forceState !== undefined ? forceState : !isCurrentlyCushion;
-
-      return prev.map(p => {
-        if (memberIds.includes(p.id)) {
-          return { 
-            ...p, 
-            isCushionPhase: newState
-          };
-        }
-        return p;
-      });
-    });
+    setPlayers((currentPlayers) => toggleTeamCushionPhase(currentPlayers, teamId, forceState));
   };
 
   const handleActivePlayerCushionTransition = () => {
@@ -1365,11 +1235,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     }
 
     cueClickSound();
-    setPlayers((currentPlayers) => currentPlayers.map((player, index) => (
-      index === activePlayerIndex
-        ? { ...player, isCushionPhase: true }
-        : player
-    )));
+    setPlayers((currentPlayers) => activatePlayerCushionPhase(currentPlayers, activePlayerIndex));
   };
 
   const handleRequestGameFinish = () => {
@@ -1377,7 +1243,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       return;
     }
 
-    const highestScorePlayer = [...players].sort((left, right) => right.currentScore - left.currentScore)[0];
+    const highestScorePlayer = selectScoreboardWinner(players, type, lastThreeCushions);
     setWinnerName(highestScorePlayer?.name || players[0]?.name || '');
     setShowFinishedModal(true);
   };
