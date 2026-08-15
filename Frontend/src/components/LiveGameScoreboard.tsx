@@ -14,28 +14,11 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 import type { GameMode, GameType } from '../types';
+import type { LastThreeCushions, ScoreboardPlayer } from '../lib/scoringEngine';
 import { cn } from '../lib/utils';
 
-export interface LiveScoreboardPlayer {
-  id: number;
-  memberId?: number;
-  name: string;
-  targetScore: number;
-  currentScore: number;
-  cushionScore?: number;
-  highRun: number;
-  inningScores: number[];
-  cueBallColor: string;
-  textColor: string;
-  bgColor: string;
-  borderColor: string;
-  isCushionPhase?: boolean;
-  isFinished?: boolean;
-  isMe?: boolean;
-}
-
 interface LiveGameScoreboardProps {
-  players: LiveScoreboardPlayer[];
+  players: ScoreboardPlayer[];
   currentInning: number;
   activePlayerIndex: number;
   gameTime: number;
@@ -52,7 +35,7 @@ interface LiveGameScoreboardProps {
   gameType: GameType;
   gameMode: GameMode;
   playerCount: 2 | 3 | 4;
-  lastThreeCushions: 0 | 1 | 2;
+  lastThreeCushions: LastThreeCushions;
   onToggleSound: () => void;
   onTogglePause: () => void;
   onRequestFinish: () => void;
@@ -63,12 +46,12 @@ interface LiveGameScoreboardProps {
 }
 
 interface PlayerCardProps {
-  player: LiveScoreboardPlayer;
+  player: ScoreboardPlayer;
   isActive: boolean;
   quadrantLabel: string;
   quadrantMini: string;
   gameType: GameType;
-  lastThreeCushions: 0 | 1 | 2;
+  lastThreeCushions: LastThreeCushions;
 }
 
 const cueBallClassName = (cueBallColor: string) => {
@@ -291,7 +274,7 @@ export function LiveGameScoreboard({
     );
   };
 
-  const playerCard = (player: LiveScoreboardPlayer) => {
+  const playerCard = (player: ScoreboardPlayer) => {
     const index = players.findIndex((candidate) => candidate.id === player.id);
     const labels = ['왼쪽 위 (1P)', '오른쪽 위 (2P)', '왼쪽 아래 (3P)', '오른쪽 아래 (4P)'];
     const miniLabels = ['↖', '↗', '↙', '↘'];

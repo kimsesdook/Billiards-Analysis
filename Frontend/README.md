@@ -47,6 +47,8 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Player capacity and four-ball finish rules use explicit union types instead of unchecked numeric casts.
 - `LiveGameScoreboard` owns the live score display and controls while `CreateGamePage` keeps scoring rules, API calls, and WebSocket synchronization.
 - Scoreboard players and component events use explicit TypeScript contracts so UI changes cannot silently alter the scoring engine.
+- `scoringEngine.ts` implements immutable score changes, four-ball finish-cushion rules, turn advancement, winner selection, and typed undo snapshots as framework-independent domain functions.
+- Scoring engine tests cover score invariants, target transitions, team cushion state, completed-player skipping, and undo isolation.
 
 ## Commands
 
