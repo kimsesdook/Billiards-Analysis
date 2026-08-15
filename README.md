@@ -212,6 +212,15 @@ erDiagram
 - Expected business and validation errors are logged at `WARN` without request values or custom exception messages.
 - Unexpected errors are logged at `ERROR` with an exception type and source location, not the exception message.
 
+### Repository Supply Chain Security
+
+- The root `.gitignore` excludes local environment files, private keys, keystores, and common cloud credential files from every project directory.
+- A dependency-free Node.js scanner checks tracked and unignored files for high-confidence API key, token, and private-key formats without printing matched secret values.
+- The same scanner rejects external GitHub Actions that are not pinned to a full 40-character commit SHA.
+- All current workflow actions are SHA-pinned, while version comments keep the workflow readable and allow Dependabot to propose reviewed updates.
+- Dependabot checks Gradle, npm, GitHub Actions, and Docker dependencies weekly. Minor and patch updates are grouped, open version-update pull requests are limited to one per ecosystem, and nothing is auto-merged.
+- These checks require no external scanner account or scanner API key.
+
 ### Database Change Management
 
 - Flyway SQL 마이그레이션으로 테이블, 인덱스, 제약조건 변경 이력을 Git에서 관리합니다.
@@ -247,7 +256,7 @@ erDiagram
 | Backend | Java 17, Spring Boot 4, Spring MVC, Spring Data JPA, Spring Security, WebSocket, Actuator, Micrometer, OpenTelemetry, Resilience4j |
 | Data | MySQL 8.4, Redis 7.4, H2 for tests, Flyway |
 | AI And Protocol | Spring AI, Google Gemini, Streamable HTTP MCP |
-| DevOps | Docker Compose, Nginx, GitHub Actions, k6 |
+| DevOps | Docker Compose, Nginx, GitHub Actions, Dependabot, k6 |
 
 ## Quality Gates
 
@@ -255,6 +264,7 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 
 - Backend: Java 17, Gradle, Spring Boot tests
 - Architecture: ArchUnit layer, naming, constructor-injection, and business-module cycle rules
+- Security: scanner self-tests, secret and private-key detection, sensitive filename checks, and full-SHA GitHub Action enforcement
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
 - Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, Redis, backend, and frontend
@@ -329,6 +339,7 @@ npm run build
 - [Frontend README](./Frontend/README.md): frontend environment variables and commands
 - [Performance README](./performance/README.md): k6 profiles, thresholds, and local execution
 - [CI workflow](./.github/workflows/ci.yml): automated quality gates
+- [Security scanner](./scripts/security/check-secrets.mjs): offline repository secret and workflow pin checks
 
 ## Current Scope
 
