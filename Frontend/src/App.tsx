@@ -341,19 +341,10 @@ function AppContent() {
   // Mock visitor counts
   const [visitors] = useState({ today: 124, total: 15420, active: 42 });
 
-  const fillMissingInningScores = <T extends { innings: number; highRun: number; inningScores?: number[] }>(record: T): T => {
-    if (record.inningScores && record.inningScores.length > 0) {
-      return record;
-    }
-
-    return {
-      ...record,
-      inningScores: Array.from({ length: record.innings }, () => {
-        if (record.innings === 0) return 0;
-        return Math.floor(Math.random() * (record.highRun + 1));
-      }),
-    };
-  };
+  const normalizeInningScores = <T extends { inningScores?: number[] }>(record: T): T => ({
+    ...record,
+    inningScores: record.inningScores ?? [],
+  });
 
   const handleAuthenticated = useCallback((session: AuthSessionPayload) => {
     const savedSession = saveAuthSession(session);
@@ -874,7 +865,7 @@ function AppContent() {
 
     try {
       const fetchedRecords = await getGameRecords();
-      setRecords(fetchedRecords.map(fillMissingInningScores));
+      setRecords(fetchedRecords.map(normalizeInningScores));
     } catch (error) {
       if (error instanceof ApiClientError && error.status === 401) {
         handleAuthExpired();
@@ -910,7 +901,7 @@ function AppContent() {
 			if (requestId === recordSearchRequestIdRef.current) {
 				setRecordSearchPage({
 					...result,
-					content: result.content.map(fillMissingInningScores),
+					content: result.content.map(normalizeInningScores),
 				});
 			}
 		} catch (error) {
@@ -993,11 +984,11 @@ function AppContent() {
   }, [authSession, handleAuthExpired, isAuthRestoring]);
 
   const addRecord = async (newRecord: GameRecordDraft) => {
-    const payload = fillMissingInningScores(newRecord);
+    const payload = normalizeInningScores(newRecord);
 
     try {
       const savedRecord = await createGameRecord(payload);
-      setRecords(prevRecords => [fillMissingInningScores(savedRecord), ...prevRecords]);
+      setRecords(prevRecords => [normalizeInningScores(savedRecord), ...prevRecords]);
       setRecordsError(null);
       void loadStatistics();
       return savedRecord;
@@ -1034,12 +1025,12 @@ function AppContent() {
   };
 
   const updateRecord = async (recordId: string, updatedRecord: GameRecordDraft) => {
-    const payload = fillMissingInningScores(updatedRecord);
+    const payload = normalizeInningScores(updatedRecord);
 
     try {
       const savedRecord = await updateGameRecord(recordId, payload);
       setRecords(prevRecords => prevRecords.map(record => (
-        record.id === recordId ? fillMissingInningScores(savedRecord) : record
+        record.id === recordId ? normalizeInningScores(savedRecord) : record
       )));
       setRecordsError(null);
       void loadStatistics();
@@ -1836,11 +1827,12 @@ function AppContent() {
             path="/records"
             element={requireAuth(
               <GameRecordsPage
-				records={recordSearchPage.content}
-				pageInfo={recordSearchPage}
-				isLoading={isRecordSearchLoading}
-				errorMessage={recordSearchError}
-				onSearch={loadRecordSearchPage}
+                records={recordSearchPage.content}
+                pageInfo={recordSearchPage}
+                isLoading={isRecordSearchLoading}
+                errorMessage={recordSearchError}
+                onSearch={loadRecordSearchPage}
+                onAdd={addRecord}
                 onDelete={removeRecord}
                 onUpdate={updateRecord}
               />

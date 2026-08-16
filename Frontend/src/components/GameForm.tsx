@@ -55,18 +55,30 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-[#0d4d3b] border border-[#1a5d4e] rounded-[2.5rem] w-full max-w-md overflow-hidden shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="game-record-add-title"
+        className="flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-[2.5rem] border border-[#1a5d4e] bg-[#0d4d3b] shadow-2xl"
+      >
         <div className="p-6 border-b border-[#1a5d4e] flex justify-between items-center">
-          <h2 className="text-xl font-bold text-emerald-50">경기 기록 추가</h2>
-          <button onClick={onClose} className="text-emerald-500/50 hover:text-emerald-400 transition-colors">
+          <h2 id="game-record-add-title" className="text-xl font-bold text-emerald-50">경기 기록 추가</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="text-emerald-500/50 hover:text-emerald-400 transition-colors"
+            aria-label="경기 기록 추가 닫기"
+          >
             <X size={24} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5 overflow-y-auto p-6">
           <div>
-            <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">상대 닉네임</label>
+            <label htmlFor="game-record-opponent" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">상대 닉네임</label>
             <input
+              id="game-record-opponent"
               type="text"
+              maxLength={100}
               value={opponentName}
               onChange={(e) => setOpponentName(e.target.value)}
               placeholder="상대 이름/닉네임"
@@ -98,11 +110,11 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
           <div>
             <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">인원 수</label>
             <div className="grid grid-cols-3 gap-2">
-              {[2, 3, 4].map((num) => (
+              {([2, 3, 4] as const).map((num) => (
                 <button
                   key={num}
                   type="button"
-                  onClick={() => setPlayerCount(num as any)}
+                  onClick={() => setPlayerCount(num)}
                   className={cn(
                     "py-2 rounded-lg text-xs font-bold transition-all border",
                     playerCount === num 
@@ -143,11 +155,11 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
             <div>
               <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">마지막 3쿠션 개수</label>
               <div className="grid grid-cols-3 gap-2">
-                {[0, 1, 2].map((num) => (
+                {([0, 1, 2] as const).map((num) => (
                   <button
                     key={num}
                     type="button"
-                    onClick={() => setLastThreeCushions(num as any)}
+                    onClick={() => setLastThreeCushions(num)}
                     className={cn(
                       "py-2 rounded-lg text-xs font-bold transition-all border",
                       lastThreeCushions === num 
@@ -164,9 +176,11 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">내 점수</label>
+              <label htmlFor="game-record-my-score" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">내 점수</label>
               <input
+                id="game-record-my-score"
                 type="number"
+                min="0"
                 value={myScore}
                 onChange={(e) => setMyScore(Number(e.target.value))}
                 className="w-full bg-[#1a5d4e] border border-[#2d8a75] rounded-xl px-4 py-3 text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-bold"
@@ -174,9 +188,11 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">상대 점수</label>
+              <label htmlFor="game-record-opponent-score" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">상대 점수</label>
               <input
+                id="game-record-opponent-score"
                 type="number"
+                min="0"
                 value={opponentScore}
                 onChange={(e) => setOpponentScore(Number(e.target.value))}
                 className="w-full bg-[#1a5d4e] border border-[#2d8a75] rounded-xl px-4 py-3 text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-bold"
@@ -188,25 +204,27 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
           {type === '4-Ball' && lastThreeCushions > 0 && (
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">내 마무리 3C</label>
+                <label htmlFor="game-record-my-cushion-score" className="block text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">내 마무리 3C</label>
                 <input
+                  id="game-record-my-cushion-score"
                   type="number"
-                  value={myCushionScore}
-                  onChange={(e) => setMyCushionScore(Number(e.target.value))}
                   min="0"
                   max={lastThreeCushions}
+                  value={myCushionScore}
+                  onChange={(e) => setMyCushionScore(Number(e.target.value))}
                   className="w-full bg-[#1a5d4e] border border-orange-500/40 rounded-xl px-4 py-3 text-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500/50 font-bold"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">상대 마무리 3C</label>
+                <label htmlFor="game-record-opponent-cushion-score" className="block text-xs font-bold text-orange-400 uppercase tracking-wider mb-2">상대 마무리 3C</label>
                 <input
+                  id="game-record-opponent-cushion-score"
                   type="number"
-                  value={opponentCushionScore}
-                  onChange={(e) => setOpponentCushionScore(Number(e.target.value))}
                   min="0"
                   max={lastThreeCushions}
+                  value={opponentCushionScore}
+                  onChange={(e) => setOpponentCushionScore(Number(e.target.value))}
                   className="w-full bg-[#1a5d4e] border border-orange-500/40 rounded-xl px-4 py-3 text-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500/50 font-bold"
                   required
                 />
@@ -216,26 +234,41 @@ export const GameForm: React.FC<GameFormProps> = ({ onAdd, onClose }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">이닝 수</label>
+              <label htmlFor="game-record-innings" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">이닝 수</label>
               <input
+                id="game-record-innings"
                 type="number"
+                min="1"
                 value={innings}
                 onChange={(e) => setInnings(Number(e.target.value))}
                 className="w-full bg-[#1a5d4e] border border-[#2d8a75] rounded-xl px-4 py-3 text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-bold"
-                min="1"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">하이런</label>
+              <label htmlFor="game-record-high-run" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">하이런</label>
               <input
+                id="game-record-high-run"
                 type="number"
+                min="0"
                 value={highRun}
                 onChange={(e) => setHighRun(Number(e.target.value))}
                 className="w-full bg-[#1a5d4e] border border-[#2d8a75] rounded-xl px-4 py-3 text-emerald-50 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 font-bold"
                 required
               />
             </div>
+          </div>
+
+          <div>
+            <label htmlFor="game-record-notes" className="block text-xs font-bold text-emerald-500/50 uppercase tracking-wider mb-2">메모</label>
+            <textarea
+              id="game-record-notes"
+              value={notes}
+              onChange={(event) => setNotes(event.target.value)}
+              maxLength={1000}
+              rows={3}
+              className="w-full resize-none rounded-xl border border-[#2d8a75] bg-[#1a5d4e] px-4 py-3 font-bold text-emerald-50 placeholder:text-emerald-100/10 focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+            />
           </div>
 
           <button

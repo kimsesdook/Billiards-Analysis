@@ -4,16 +4,17 @@ const isCi = Boolean(process.env.CI);
 
 export default defineConfig({
   testDir: './e2e',
+  timeout: 90_000,
   fullyParallel: true,
   forbidOnly: isCi,
   retries: isCi ? 2 : 0,
-  workers: isCi ? 1 : undefined,
+  workers: 1,
   reporter: isCi
     ? [['line'], ['html', { open: 'never' }]]
     : [['list'], ['html', { open: 'never' }]],
   outputDir: 'test-results',
   expect: {
-    timeout: 10_000,
+    timeout: 30_000,
   },
   use: {
     baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000',

@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertCircle, History, Search, ChevronLeft, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2, Pencil } from 'lucide-react';
+import { AlertCircle, History, Search, ChevronLeft, ChevronRight, Users, X, Activity, Zap, Target, BarChart3, PieChart as PieChartIcon, Loader2, RefreshCw, Trash2, Pencil, Plus } from 'lucide-react';
 import { GameRecord, GameRecordDraft, GameRecordPage, GameRecordSearchParams } from '../types';
 import { GameRecordEditModal } from './GameRecordEditModal';
+import { GameForm } from './GameForm';
 import { cn } from '../lib/utils';
 import { format } from 'date-fns';
 import { ko } from 'date-fns/locale';
@@ -51,11 +52,12 @@ interface GameRecordsPageProps {
   isLoading?: boolean;
   errorMessage?: string | null;
 	onSearch: (params: GameRecordSearchParams) => void | Promise<void>;
+  onAdd?: (record: GameRecordDraft) => GameRecord | void | Promise<GameRecord | void>;
   onDelete?: (recordId: string) => void | Promise<void>;
   onUpdate?: (recordId: string, record: GameRecordDraft) => GameRecord | void | Promise<GameRecord | void>;
 }
 
-export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMessage = null, onSearch, onDelete, onUpdate }: GameRecordsPageProps) {
+export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMessage = null, onSearch, onAdd, onDelete, onUpdate }: GameRecordsPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
 	const [debouncedKeyword, setDebouncedKeyword] = useState('');
   const [modeFilter, setModeFilter] = useState<'all' | 'Individual' | 'Team'>('all');
@@ -64,6 +66,7 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
 	const [currentPage, setCurrentPage] = useState(0);
   const [selectedRecord, setSelectedRecord] = useState<GameRecord | null>(null);
   const [editingRecord, setEditingRecord] = useState<GameRecord | null>(null);
+  const [isAddingRecord, setIsAddingRecord] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
 	useEffect(() => {
@@ -86,6 +89,14 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
 	}, [debouncedKeyword, gameTypeFilter, modeFilter, onSearch, playerFilter]);
 
 	const isKeywordDebouncing = debouncedKeyword !== searchQuery.trim();
+
+  const handleAddRecord = async (record: GameRecordDraft) => {
+    if (!onAdd) return;
+
+    await onAdd(record);
+    setCurrentPage(0);
+    await requestSearchPage(0);
+  };
 
 	useEffect(() => {
 		if (isKeywordDebouncing) return;
@@ -132,6 +143,16 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
             <h1 className="text-3xl font-black text-emerald-50 tracking-tight">경기 기록</h1>
             <p className="text-emerald-100/60 mt-2 font-medium">과거의 모든 경기 데이터를 한눈에 확인하세요.</p>
           </div>
+          {onAdd && (
+            <button
+              type="button"
+              onClick={() => setIsAddingRecord(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-400 px-4 py-3 text-sm font-black text-[#0a3d2e] transition-colors hover:bg-emerald-300"
+            >
+              <Plus size={18} />
+              경기 기록 추가
+            </button>
+          )}
         </div>
 
         <div className="flex flex-col gap-4">
@@ -264,10 +285,12 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
               <p className="text-sm font-bold text-emerald-100/60">서버에서 경기 기록을 불러오는 중입니다.</p>
             </div>
           ) : records.map((record) => (
-            <div 
+            <button
+              type="button"
               key={record.id} 
               onClick={() => setSelectedRecord(record)}
-              className="p-6 hover:bg-[#1a5d4e]/20 transition-all group cursor-pointer"
+              aria-label={`경기 기록 보기: ${record.opponentName || `${record.playerCount}인 경기`}`}
+              className="group block w-full p-6 text-left transition-all hover:bg-[#1a5d4e]/20"
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-6">
@@ -327,7 +350,7 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
 
           {!isLoading && records.length === 0 && (
@@ -384,6 +407,9 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="game-record-detail-title"
               className="bg-[#0a3d2e] w-full max-w-4xl h-[90vh] rounded-[3rem] border border-[#1a5d4e] shadow-2xl overflow-hidden flex flex-col relative z-50"
             >
               <div className="p-8 border-b border-[#1a5d4e] flex items-center justify-between bg-[#0d4d3b]/50">
@@ -395,7 +421,7 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
                     {selectedRecord.win ? 'W' : 'L'}
                   </div>
                   <div>
-                    <h2 className="text-xl font-black text-emerald-50">경기 상세 내용</h2>
+                    <h2 id="game-record-detail-title" className="text-xl font-black text-emerald-50">경기 상세 내용</h2>
                     <p className="text-xs font-bold text-emerald-500/50 uppercase tracking-widest mt-0.5">
                       {format(new Date(selectedRecord.date), 'yyyy.MM.dd')} • {selectedRecord.type === '3-Cushion' ? '3구' : '4구'} • AVG {selectedRecord.average.toFixed(3)}
                     </p>
@@ -416,17 +442,21 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
                   )}
                   {onDelete && (
                     <button
+                      type="button"
                       onClick={handleDeleteSelectedRecord}
                       disabled={isDeleting}
                       className="p-3 bg-red-500/10 hover:bg-red-500/20 disabled:opacity-60 disabled:cursor-not-allowed text-red-200 rounded-xl transition-all"
                       title="경기 기록 삭제"
+                      aria-label="경기 기록 삭제"
                     >
                       {isDeleting ? <RefreshCw size={20} className="animate-spin" /> : <Trash2 size={20} />}
                     </button>
                   )}
-                  <button 
+                  <button
+                    type="button"
                     onClick={() => setSelectedRecord(null)}
                     className="p-3 bg-[#1a5d4e] hover:bg-emerald-900 text-emerald-100 rounded-xl transition-all"
+                    aria-label="경기 상세 닫기"
                   >
                     <X size={20} />
                   </button>
@@ -723,6 +753,13 @@ export function GameRecordsPage({ records, pageInfo, isLoading = false, errorMes
           record={editingRecord}
           onClose={() => setEditingRecord(null)}
           onUpdate={handleUpdateRecord}
+        />
+      )}
+
+      {isAddingRecord && onAdd && (
+        <GameForm
+          onAdd={handleAddRecord}
+          onClose={() => setIsAddingRecord(false)}
         />
       )}
     </div>
