@@ -58,6 +58,7 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Members can add a completed match directly from the records page, then update or delete it from the detail dialog.
 - Inning scores display only server-backed values; the frontend does not generate synthetic scores when they are absent.
 - The browser E2E test verifies create, update, reload persistence, and delete against the real Spring Boot and MySQL stack.
+- A two-session browser E2E test verifies friendship, invitation acceptance, ready/start synchronization, live scoring, and record creation through the real WebSocket and Redis stack.
 
 ## Commands
 
@@ -82,6 +83,6 @@ cd Frontend
 npm run test:e2e
 ```
 
-Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. The tests run sequentially because they share one backend and database. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, verifies cookie-based session restoration and the complete game-record lifecycle, and retains failure traces and screenshots for seven days.
+Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. The tests run sequentially because they share one backend and database. CI installs an isolated Chromium build, starts MySQL, Redis, the backend, and the frontend with Docker Compose, verifies authentication, the game-record lifecycle, and a two-user realtime game-room lifecycle, and retains failure traces and screenshots for seven days.
 
 The full project setup, architecture, Docker commands, and backend configuration are documented in the [root README](../README.md).

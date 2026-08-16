@@ -1493,16 +1493,19 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
               initial={{ scale: 0.9, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.9, opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="game-finished-title"
               className="bg-[#0b3c2e] border border-[#237a66] p-8 rounded-[3rem] w-full max-w-lg text-center shadow-2xl relative overflow-hidden text-emerald-50"
             >
-              <div className="absolute -top-12 -left-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl" />
-              <div className="absolute -bottom-12 -right-12 w-48 h-48 bg-yellow-500/10 rounded-full blur-2xl" />
+              <div className="pointer-events-none absolute -top-12 -left-12 w-48 h-48 bg-emerald-500/10 rounded-full blur-2xl" />
+              <div className="pointer-events-none absolute -bottom-12 -right-12 w-48 h-48 bg-yellow-500/10 rounded-full blur-2xl" />
 
               <div className="w-16 h-16 bg-yellow-400/15 text-yellow-400 rounded-full flex items-center justify-center mx-auto mb-4 animate-bounce border border-yellow-400/20">
                 <Award size={36} />
               </div>
 
-              <h2 className="text-3xl font-black text-white tracking-tight leading-tight">
+              <h2 id="game-finished-title" className="text-3xl font-black text-white tracking-tight leading-tight">
                 경기 진행 종료!
               </h2>
               <p className="text-emerald-400 text-sm font-bold mt-2">
@@ -1621,6 +1624,9 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="game-order-title"
               className="bg-gradient-to-b from-[#09352a] to-[#041a15] border border-emerald-500/30 rounded-[3rem] p-8 max-w-xl w-full relative z-10 shadow-[0_0_50px_rgba(16,185,129,0.3)] text-center text-emerald-50"
             >
               <div className="absolute top-0 left-1/2 -translate-x-1/2 w-48 h-12 bg-gradient-to-b from-emerald-500/10 to-transparent blur-xl rounded-full" />
@@ -1630,7 +1636,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
                 <Activity size={28} className="text-[#07241c] animate-pulse" />
               </div>
 
-              <h2 className="text-2xl font-black text-white tracking-tight">수구 칠 순서 정하기 (경기방)</h2>
+              <h2 id="game-order-title" className="text-2xl font-black text-white tracking-tight">수구 칠 순서 정하기 (경기방)</h2>
               <p className="text-emerald-400 hover:text-emerald-300 text-xs font-bold mt-2 leading-relaxed px-2 transition-all">
                 경기를 시작하기 전, 각 선수가 어떤 순서로 공격할지 지정해 주세요.<br />
                 원하는 순서 숫자 버튼(1, 2, 3...)을 클릭하여 손쉽게 순서를 바꾸거나, [무작위 순서 섞기] 버튼으로 자동 정렬하세요.

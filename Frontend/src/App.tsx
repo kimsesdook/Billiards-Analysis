@@ -2187,6 +2187,9 @@ function AppContent() {
               initial={{ opacity: 0, scale: 0.9, y: 30 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 30 }}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="incoming-game-invitation-title"
               className="relative w-full max-w-sm bg-[#0d4d3b] border border-emerald-400/30 rounded-3xl shadow-2xl p-6 overflow-hidden text-center text-white z-10"
             >
               {/* Decorative billiard ball accent */}
@@ -2202,7 +2205,7 @@ function AppContent() {
                 LIVE MATCH PROPOSAL
               </span>
 
-              <h2 className="text-lg font-black text-emerald-50 tracking-tight">
+              <h2 id="incoming-game-invitation-title" className="text-lg font-black text-emerald-50 tracking-tight">
                 대국 경기 초대 도착 🎱
               </h2>
               

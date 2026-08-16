@@ -276,7 +276,7 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Production: fail-fast profile contract and security validation tests for credentials, TLS, CORS, cookies, profiles, and Actuator exposure
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
-- Full stack: Playwright signup, cookie-based reload restoration, logout, and login E2E against Dockerized MySQL, Redis, backend, and frontend
+- Full stack: Playwright authentication, game-record CRUD, and two-user realtime game-room E2E against Dockerized MySQL, Redis, backend, and frontend
 - Performance: k6 authenticated game-record flow with error-rate and endpoint-specific p95 thresholds
 
 The E2E job runs only after the backend, frontend, and Compose checks pass. It executes a short k6 performance smoke gate before Playwright. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.
