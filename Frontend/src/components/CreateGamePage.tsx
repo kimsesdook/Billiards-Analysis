@@ -26,6 +26,12 @@ import { ApiClientError, getApiErrorMessage } from '../api/client';
 import { cn } from '../lib/utils';
 import { buildGameRoomFinishPayload } from '../lib/gameRoomCompletion';
 import {
+  clearActiveGameState,
+  loadActiveGameState,
+  saveActiveGameState,
+  type PersistedActiveGameState,
+} from '../lib/activeGameStorage';
+import {
   activatePlayerCushionPhase,
   advanceScoreboardTurn,
   applyScoreChange,
@@ -187,7 +193,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [showExitLobbyConfirm, setShowExitLobbyConfirm] = useState<boolean>(false);
   const [showCancelGameConfirm, setShowCancelGameConfirm] = useState<boolean>(false);
   const [showResumeConfirm, setShowResumeConfirm] = useState<boolean>(false);
-  const [resumeData, setResumeData] = useState<any>(null);
+  const [resumeData, setResumeData] = useState<PersistedActiveGameState | null>(null);
 
   const [type, setType] = useState<GameType>('3-Cushion');
   const [mode, setMode] = useState<GameMode>('Individual');
@@ -254,8 +260,8 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const [winnerName, setWinnerName] = useState<string>('');
 
   // --- Timers Refs ---
-  const gameTimerRef = useRef<any>(null);
-  const clockTimerRef = useRef<any>(null);
+  const gameTimerRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
+  const clockTimerRef = useRef<ReturnType<typeof window.setInterval> | null>(null);
   const liveStateRoomIdRef = useRef<number | null>(null);
   const liveStateVersionRef = useRef<number | null>(null);
   const lastSynchronizedLiveStateRef = useRef<string | null>(null);
@@ -264,6 +270,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   const liveStateSaveInFlightRef = useRef(false);
   const liveStateSavePromiseRef = useRef<Promise<void> | null>(null);
   const completedGameRoomHandledRef = useRef(false);
+  const hasPendingResumeRef = useRef(false);
   const applyLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
   const acknowledgeLiveGameStateRef = useRef<(liveState: GameRoomLiveState) => void>(() => undefined);
   const isGameRoomHostRef = useRef(isGameRoomHost);
@@ -275,7 +282,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     }
 
     completedGameRoomHandledRef.current = true;
-    localStorage.removeItem('billiards_active_room_state');
+    clearActiveGameState(localStorage);
     setGameRoomStatus('FINISHED');
     setIsPlaying(false);
     setIsLobby(false);
@@ -533,17 +540,11 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
 
   // Check if there is an active game in local storage that can be resumed
   useEffect(() => {
-    const savedActiveGame = localStorage.getItem('billiards_active_room_state');
+    const savedActiveGame = loadActiveGameState(localStorage);
     if (savedActiveGame) {
-      try {
-        const parsed = JSON.parse(savedActiveGame);
-        if (parsed && parsed.players && parsed.players.length > 0) {
-          setResumeData(parsed);
-          setShowResumeConfirm(true);
-        }
-      } catch (err) {
-        localStorage.removeItem('billiards_active_room_state');
-      }
+      hasPendingResumeRef.current = true;
+      setResumeData(savedActiveGame);
+      setShowResumeConfirm(true);
     }
   }, []);
 
@@ -756,38 +757,50 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
     setIsGameRoomHost(Boolean(resumeData.isGameRoomHost));
     setType(resumeData.type);
     setMode(resumeData.mode);
-    setPlayerCount(resumeData.playerCount as any);
+    setPlayerCount(resumeData.playerCount);
+    setLastThreeCushions(resumeData.lastThreeCushions);
     setPlayers(resumeData.players);
     setCurrentInning(resumeData.currentInning);
     setActivePlayerIndex(resumeData.activePlayerIndex);
+    setStartingPlayerIdx(resumeData.startingPlayerIndex);
     setCurrentTurnPoints(resumeData.currentTurnPoints);
     setGameTime(resumeData.gameTime);
+    setEnableShotClock(resumeData.enableShotClock);
+    setShotClockLimit(resumeData.shotClockLimit);
     setShotClockTime(resumeData.shotClockTime);
-    setNotes(resumeData.notes || '');
-    setMatchHistory(resumeData.matchHistory || []);
-    setStateHistory(resumeData.stateHistory || []);
+    setNotes(resumeData.notes);
+    setMatchHistory(resumeData.matchHistory);
+    setStateHistory(resumeData.stateHistory);
     setIsPlaying(true);
     setIsPaused(false);
+    hasPendingResumeRef.current = false;
     setShowResumeConfirm(false);
+    setResumeData(null);
   };
 
   const handleCancelResume = () => {
-    localStorage.removeItem('billiards_active_room_state');
+    hasPendingResumeRef.current = false;
+    clearActiveGameState(localStorage);
     setShowResumeConfirm(false);
+    setResumeData(null);
   };
 
   // Save current active game layout to local Storage whenever states alter (so crash/refresh is safe)
   useEffect(() => {
     if (isPlaying && players.length > 0) {
-      const stateToSave = {
+      saveActiveGameState(localStorage, {
         type,
         mode,
         playerCount,
+        lastThreeCushions,
         players,
         currentInning,
         activePlayerIndex,
+        startingPlayerIndex: startingPlayerIdx,
         currentTurnPoints,
         gameTime,
+        enableShotClock,
+        shotClockLimit,
         shotClockTime,
         notes,
         matchHistory,
@@ -795,26 +808,29 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
         gameRoomId,
         gameRoomStatus,
         isGameRoomHost,
-      };
-      localStorage.setItem('billiards_active_room_state', JSON.stringify(stateToSave));
-    } else if (!isPlaying) {
-      localStorage.removeItem('billiards_active_room_state');
+      });
+    } else if (!isPlaying && !hasPendingResumeRef.current) {
+      clearActiveGameState(localStorage);
     }
   }, [
     activePlayerIndex,
     currentInning,
     currentTurnPoints,
+    enableShotClock,
     gameRoomId,
     gameRoomStatus,
     gameTime,
     isGameRoomHost,
     isPlaying,
+    lastThreeCushions,
     matchHistory,
     mode,
     notes,
     playerCount,
     players,
     shotClockTime,
+    shotClockLimit,
+    startingPlayerIdx,
     stateHistory,
     type,
   ]);
@@ -1355,7 +1371,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
       await onAdd(finishedMatchData);
 
       // Empty cache and navigate
-      localStorage.removeItem('billiards_active_room_state');
+      clearActiveGameState(localStorage);
       setIsPlaying(false);
       setShowFinishedModal(false);
       navigate('/records');
@@ -1372,7 +1388,7 @@ export function CreateGamePage({ onAdd }: CreateGamePageProps) {
   };
 
   const handleConfirmCancelGame = () => {
-    localStorage.removeItem('billiards_active_room_state');
+    clearActiveGameState(localStorage);
     setIsPlaying(false);
     setStateHistory([]);
     setShowCancelGameConfirm(false);
