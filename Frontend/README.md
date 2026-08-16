@@ -49,6 +49,8 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Scoreboard players and component events use explicit TypeScript contracts so UI changes cannot silently alter the scoring engine.
 - `scoringEngine.ts` implements immutable score changes, four-ball finish-cushion rules, turn advancement, winner selection, and typed undo snapshots as framework-independent domain functions.
 - Scoring engine tests cover score invariants, target transitions, team cushion state, completed-player skipping, and undo isolation.
+- Active games use a versioned, runtime-validated browser storage schema; malformed or incompatible data is discarded without breaking startup.
+- Resume data includes game rules, starting order, and shot-clock settings, while persisted undo history is capped to control storage growth.
 
 ## Commands
 
