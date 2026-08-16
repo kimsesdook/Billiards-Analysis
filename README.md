@@ -271,7 +271,7 @@ erDiagram
 
 GitHub Actions runs on every pull request to `main` and every push to `main`.
 
-- Backend: Java 17, Gradle, Spring Boot tests
+- Backend: Java 17, Gradle, Spring Boot tests, and JaCoCo gates of 85% line and 60% branch coverage
 - Architecture: ArchUnit layer, naming, constructor-injection, and business-module cycle rules
 - Security: scanner self-tests, secret and private-key detection, sensitive filename checks, and full-SHA GitHub Action enforcement
 - Production: fail-fast profile contract and security validation tests for credentials, TLS, CORS, cookies, profiles, and Actuator exposure
@@ -334,7 +334,7 @@ npm run dev
 
 ```powershell
 cd Backend
-.\gradlew.bat test
+.\gradlew.bat check
 ```
 
 ```powershell
