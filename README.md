@@ -183,7 +183,7 @@ erDiagram
 
 - Micrometer exposes JVM, HTTP, database-pool, Redis, and custom business metrics in Prometheus format.
 - Public liveness and readiness probes are available at `/actuator/health/liveness` and `/actuator/health/readiness`; readiness includes application state, MySQL, and Redis.
-- `/actuator/metrics` and `/actuator/prometheus` remain restricted to the `ADMIN` role.
+- When exposed in local and Docker profiles, `/actuator/metrics` and `/actuator/prometheus` are restricted to the `ADMIN` role. The current `prod` profile exposes only `health` and `info` until a protected collector path is designed.
 - Custom low-cardinality metrics cover login outcomes, rate-limit rejections by scope, AI report generation/cache/failure outcomes, and active WebSocket connections by channel.
 - Resilience4j exports Gemini circuit-breaker state, call outcomes, and timeout outcomes through the same administrator-only metrics endpoints.
 - Metrics never use member IDs, emails, room IDs, client addresses, or request IDs as tags.
@@ -346,6 +346,9 @@ npm run build
 
 ## Project Documents
 
+- [Architecture guide](./docs/architecture.md): system boundaries, module responsibilities, consistency, security, and scaling limits
+- [Architecture decision records](./docs/adr/README.md): accepted decisions, alternatives, and tradeoffs
+- [Operations runbook](./docs/operations-runbook.md): health checks, incident response, recovery, security, and cost controls
 - [Backend README](./Backend/README.md): profiles, API modules, Flyway, MCP, optional Gemini configuration
 - [Frontend README](./Frontend/README.md): frontend environment variables and commands
 - [Performance README](./performance/README.md): k6 profiles, thresholds, and local execution

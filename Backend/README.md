@@ -31,6 +31,8 @@ Run only the architecture rules:
 .\gradlew.bat test --tests "com.my.billiards.architecture.*"
 ```
 
+The repository-level [architecture guide](../docs/architecture.md), [ADRs](../docs/adr/README.md), and [operations runbook](../docs/operations-runbook.md) connect these rules to the runtime design, tradeoffs, and incident procedures.
+
 ## Profiles
 
 - `local`: MySQL-based local development profile
@@ -59,7 +61,7 @@ Springdoc generates OpenAPI documentation from the controllers at runtime.
 ## Actuator Access
 
 - `GET /actuator/health`, `/actuator/health/liveness`, `/actuator/health/readiness`, and `/actuator/info` are public for health checks.
-- Other Actuator endpoints, including `/actuator/metrics` and `/actuator/prometheus`, require an `ADMIN` JWT role.
+- When exposed by the active profile, other Actuator endpoints including `/actuator/metrics` and `/actuator/prometheus` require an `ADMIN` JWT role. The current `prod` profile exposes only `health` and `info`, so production metric scraping remains disabled until a protected collector path is designed.
 
 ## Request Tracing
 
@@ -181,7 +183,7 @@ All limits and windows can be overridden with the `RATE_LIMIT_*` environment var
 
 ## Operational Metrics
 
-Micrometer publishes JVM, HTTP, connection-pool, Redis, and business metrics through the administrator-only Actuator endpoints. The Prometheus endpoint is `/actuator/prometheus`.
+Micrometer publishes JVM, HTTP, connection-pool, Redis, and business metrics through the administrator-only Actuator endpoints when the active profile exposes them. The local and Docker Prometheus endpoint is `/actuator/prometheus`; the current `prod` profile exposes only `health` and `info`.
 
 - `billiards.authentication.login.attempts`: login `success` and `failure` counters
 - `billiards.rate.limit.rejections`: rejected requests grouped by bounded policy `scope`
