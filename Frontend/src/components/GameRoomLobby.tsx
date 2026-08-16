@@ -309,6 +309,7 @@ function FriendInvitationPanel({
                   type="button"
                   disabled={disabled}
                   onClick={() => void onInvite(friend)}
+                  aria-label={`${friend.name}에게 경기 초대`}
                   className="rounded-lg bg-emerald-500 px-2.5 py-1 text-[10px] font-black text-[#0a3d2e] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500"
                 >
                   {sending ? '전송 중' : invited ? '응답 대기' : invitationLimitReached ? '대기 중' : '초대'}

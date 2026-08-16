@@ -131,20 +131,23 @@ function PlayerScoreCard({
       <div className="mt-4 flex items-end justify-between">
         <div className="flex flex-col">
           <div className="flex items-baseline gap-2">
-            <span className={cn(
-              'font-mono text-6xl font-black leading-none tracking-tight md:text-7xl',
-              player.isFinished
-                ? 'text-amber-400'
-                : player.isCushionPhase
-                  ? (player.cushionScore || 0) >= lastThreeCushions
-                    ? 'animate-pulse text-emerald-300'
-                    : 'text-orange-400'
-                  : isActive
-                    ? 'text-emerald-300'
-                    : 'text-white',
-            )}>
+            <output
+              aria-label={`${player.name} 현재 점수`}
+              className={cn(
+                'font-mono text-6xl font-black leading-none tracking-tight md:text-7xl',
+                player.isFinished
+                  ? 'text-amber-400'
+                  : player.isCushionPhase
+                    ? (player.cushionScore || 0) >= lastThreeCushions
+                      ? 'animate-pulse text-emerald-300'
+                      : 'text-orange-400'
+                    : isActive
+                      ? 'text-emerald-300'
+                      : 'text-white',
+              )}
+            >
               {player.currentScore}
-            </span>
+            </output>
             <span className="font-mono text-sm font-bold text-emerald-100/50">
               / {player.targetScore}
             </span>
