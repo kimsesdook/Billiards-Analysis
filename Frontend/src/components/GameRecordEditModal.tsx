@@ -85,11 +85,14 @@ export function GameRecordEditModal({ record, onClose, onUpdate }: GameRecordEdi
       />
       <form
         onSubmit={handleSubmit}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="game-record-edit-title"
         className="relative z-10 flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[#1a5d4e] bg-[#0a3d2e] shadow-2xl"
       >
         <div className="flex items-center justify-between border-b border-[#1a5d4e] bg-[#0d4d3b]/60 px-6 py-5 sm:px-8">
           <div>
-            <h2 className="text-xl font-black text-emerald-50">경기 기록 수정</h2>
+            <h2 id="game-record-edit-title" className="text-xl font-black text-emerald-50">경기 기록 수정</h2>
           </div>
           <button
             type="button"

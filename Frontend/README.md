@@ -10,6 +10,7 @@ React 기반 당구 경기 기록과 분석 화면입니다. Spring Boot API와 
 - Host-authoritative live scoreboard sync with version-conflict recovery
 - Transactional room completion with final-score flushing and `GAME_FINISHED` participant navigation
 - Vitest API contract tests
+- Playwright authentication and game-record lifecycle tests
 
 ## Environment
 
@@ -52,6 +53,12 @@ Only the API base URL belongs in frontend environment files. Gemini API keys are
 - Active games use a versioned, runtime-validated browser storage schema; malformed or incompatible data is discarded without breaking startup.
 - Resume data includes game rules, starting order, and shot-clock settings, while persisted undo history is capped to control storage growth.
 
+## Game Records
+
+- Members can add a completed match directly from the records page, then update or delete it from the detail dialog.
+- Inning scores display only server-backed values; the frontend does not generate synthetic scores when they are absent.
+- The browser E2E test verifies create, update, reload persistence, and delete against the real Spring Boot and MySQL stack.
+
 ## Commands
 
 ```powershell
@@ -75,6 +82,6 @@ cd Frontend
 npm run test:e2e
 ```
 
-Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, verifies cookie-based session restoration after a page reload, and retains failure traces and screenshots for seven days.
+Local E2E uses the installed Chrome channel, so it does not download another browser. Set `PLAYWRIGHT_CHANNEL` to another installed Playwright channel when needed. The tests run sequentially because they share one backend and database. CI installs an isolated Chromium build, starts MySQL, the backend, and the frontend with Docker Compose, verifies cookie-based session restoration and the complete game-record lifecycle, and retains failure traces and screenshots for seven days.
 
 The full project setup, architecture, Docker commands, and backend configuration are documented in the [root README](../README.md).
