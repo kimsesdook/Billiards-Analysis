@@ -35,8 +35,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x ./gradlew
 
-      - name: Run backend tests
-        run: ./gradlew test
+      - name: Run backend quality checks
+        run: ./gradlew check
 
   frontend-check:
     name: Frontend Check

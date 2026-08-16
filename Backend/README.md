@@ -218,11 +218,21 @@ Use the `test` profile when you want to run the server without MySQL. This uses 
 .\gradlew.bat bootRun --args="--spring.profiles.active=test"
 ```
 
-Run automated tests:
+Run automated tests and generate the JaCoCo coverage report:
 
 ```powershell
 .\gradlew.bat test
 ```
+
+The HTML report is generated at `build/reports/jacoco/test/html/index.html`. The current baseline is 88.03% line coverage and 67.00% branch coverage.
+
+Run the same quality gate used by CI:
+
+```powershell
+.\gradlew.bat check
+```
+
+The build fails if overall line coverage drops below 85% or branch coverage drops below 60%. Coverage is calculated locally without an external service, account, API key, or uploaded source code.
 
 `UserFlowIntegrationTest` verifies one complete API flow in H2: signup, JWT login, profile lookup, game record creation, statistics lookup, and member-to-member game record isolation.
 
