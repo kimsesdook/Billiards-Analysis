@@ -250,6 +250,7 @@ erDiagram
 - Streamable HTTP MCP 서버는 기본 비활성화 상태입니다.
 - 활성화해도 JWT 인증이 필요하고, 주간 리포트, 최근 통계, 상대 전적을 조회하는 읽기 전용 도구만 제공합니다.
 - MCP 모듈 자체는 LLM 호출을 하지 않으므로 API 키나 모델 비용이 필요하지 않습니다.
+- 공식 MCP 클라이언트 통합 테스트가 초기화, 도구 목록, 세 도구 호출, JWT 차단, 회원별 데이터 격리를 실제 HTTP 통신으로 검증합니다.
 
 ### Frontend Performance
 
@@ -277,6 +278,7 @@ GitHub Actions runs on every pull request to `main` and every push to `main`.
 - Frontend: Vitest API contract tests, TypeScript lint, production build
 - Infrastructure: Docker Compose configuration validation
 - Full stack: Playwright authentication, game-record CRUD, and two-user realtime game-room E2E against Dockerized MySQL, Redis, backend, and frontend
+- MCP: official client protocol handshake, JWT authorization, tool schema, invocation, and member data isolation
 - Performance: k6 authenticated game-record flow with error-rate and endpoint-specific p95 thresholds
 
 The E2E job runs only after the backend, frontend, and Compose checks pass. It executes a short k6 performance smoke gate before Playwright. Failed runs upload Playwright traces and screenshots, print Docker logs, and always remove the temporary database volume.

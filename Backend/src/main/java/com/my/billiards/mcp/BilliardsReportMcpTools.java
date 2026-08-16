@@ -6,6 +6,8 @@ import com.my.billiards.game.domain.GameType;
 import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.OpponentStatisticsResponse;
 import com.my.billiards.game.dto.WeeklyGameReportResponse;
+import com.my.billiards.mcp.dto.McpGameStatisticsResponse;
+import com.my.billiards.mcp.dto.McpWeeklyGameReportResponse;
 import com.my.billiards.game.service.GameRecordService;
 import com.my.billiards.security.AuthenticatedMember;
 import java.util.List;
@@ -36,11 +38,16 @@ public class BilliardsReportMcpTools {
 			openWorldHint = false
 		)
 	)
-	public WeeklyGameReportResponse getWeeklyGameReport(
+	public McpWeeklyGameReportResponse getWeeklyGameReport(
 		@McpToolParam(description = "Billiards game type. Use exactly 3-Cushion or 4-Ball.", required = true)
 		String gameType
 	) {
-		return gameRecordService.getWeeklyReport(currentMemberId(), toGameType(gameType), null);
+		WeeklyGameReportResponse response = gameRecordService.getWeeklyReport(
+			currentMemberId(),
+			toGameType(gameType),
+			null
+		);
+		return McpWeeklyGameReportResponse.from(response);
 	}
 
 	@McpTool(
@@ -54,7 +61,7 @@ public class BilliardsReportMcpTools {
 			openWorldHint = false
 		)
 	)
-	public GameStatisticsResponse getRecentGameStatistics(
+	public McpGameStatisticsResponse getRecentGameStatistics(
 		@McpToolParam(description = "Billiards game type. Use exactly 3-Cushion or 4-Ball.", required = true)
 		String gameType,
 		@McpToolParam(description = "Number of recent games to include, from 1 to 50. Defaults to 10.", required = false)
@@ -63,7 +70,12 @@ public class BilliardsReportMcpTools {
 		int requestedGameCount = recentGameCount == null ? DEFAULT_RECENT_GAME_COUNT : recentGameCount;
 		validateRecentGameCount(requestedGameCount);
 
-		return gameRecordService.getStatistics(currentMemberId(), toGameType(gameType), requestedGameCount);
+		GameStatisticsResponse response = gameRecordService.getStatistics(
+			currentMemberId(),
+			toGameType(gameType),
+			requestedGameCount
+		);
+		return McpGameStatisticsResponse.from(response);
 	}
 
 	@McpTool(

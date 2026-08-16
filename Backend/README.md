@@ -245,6 +245,7 @@ The backend includes a Streamable HTTP MCP server for read-only billiards analys
 - The tools resolve the member from the JWT instead of accepting a member ID, so one member cannot request another member's records.
 - Available tools: `get_weekly_game_report`, `get_recent_game_statistics`, and `get_opponent_statistics`.
 - This module does not call an LLM or configure an AI provider, so it does not require an API key or incur model usage costs.
+- `McpProtocolIntegrationTest` uses the official MCP client to verify initialization, tool discovery, all three tool calls, JWT rejection, output-schema compatibility, and member data isolation over real HTTP.
 
 ## Gemini Weekly AI Report
 

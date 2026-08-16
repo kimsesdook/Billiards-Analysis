@@ -9,8 +9,10 @@ import static org.mockito.Mockito.when;
 import com.my.billiards.common.error.BilliardsException;
 import com.my.billiards.common.error.ErrorCode;
 import com.my.billiards.game.domain.GameType;
+import com.my.billiards.game.dto.GameStatisticsResponse;
 import com.my.billiards.game.dto.WeeklyGameReportResponse;
 import com.my.billiards.game.service.GameRecordService;
+import com.my.billiards.mcp.dto.McpWeeklyGameReportResponse;
 import com.my.billiards.member.domain.MemberRole;
 import com.my.billiards.security.AuthenticatedMember;
 import org.junit.jupiter.api.AfterEach;
@@ -33,11 +35,12 @@ class BilliardsReportMcpToolsTest {
 		AuthenticatedMember member = new AuthenticatedMember(7L, "player@example.com", MemberRole.USER);
 		SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(member, null));
 		WeeklyGameReportResponse expected = mock(WeeklyGameReportResponse.class);
+		when(expected.type()).thenReturn(GameType.THREE_CUSHION);
 		when(gameRecordService.getWeeklyReport(7L, GameType.THREE_CUSHION, null)).thenReturn(expected);
 
-		WeeklyGameReportResponse result = mcpTools.getWeeklyGameReport("3-Cushion");
+		McpWeeklyGameReportResponse result = mcpTools.getWeeklyGameReport("3-Cushion");
 
-		assertThat(result).isSameAs(expected);
+		assertThat(result.type()).isEqualTo("3-Cushion");
 		verify(gameRecordService).getWeeklyReport(7L, GameType.THREE_CUSHION, null);
 	}
 
@@ -53,6 +56,9 @@ class BilliardsReportMcpToolsTest {
 	void recentStatisticsUsesTheDefaultRecentGameCount() {
 		AuthenticatedMember member = new AuthenticatedMember(7L, "player@example.com", MemberRole.USER);
 		SecurityContextHolder.getContext().setAuthentication(new UsernamePasswordAuthenticationToken(member, null));
+		GameStatisticsResponse statistics = mock(GameStatisticsResponse.class);
+		when(statistics.type()).thenReturn(GameType.FOUR_BALL);
+		when(gameRecordService.getStatistics(7L, GameType.FOUR_BALL, 10)).thenReturn(statistics);
 
 		mcpTools.getRecentGameStatistics("4-Ball", null);
 
