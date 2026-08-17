@@ -16,7 +16,7 @@ public class OpenApiConfig {
 			.info(new Info()
 				.title("Billiards Analysis API")
 				.description("JWT-protected API for billiards records, statistics, friends, notifications, and optional AI reports.")
-				.version("v1"))
+				.version("1.0.0"))
 			.components(new Components()
 				.addSecuritySchemes("bearerAuth", new SecurityScheme()
 					.type(SecurityScheme.Type.HTTP)
