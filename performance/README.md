@@ -11,7 +11,7 @@ The test never calls Gemini, requires no API key, and uses only k6 OSS. Test acc
 
 ## Profiles
 
-- `smoke`: two virtual users execute two iterations each; used as a short CI regression gate
+- `smoke`: two virtual users execute five iterations each; used as a short CI regression gate with enough samples to reduce p95 noise
 - `load`: ramps to 10 virtual users, holds for 30 seconds, and ramps down
 
 The load profile can be adjusted with `K6_TARGET_VUS`, `K6_RAMP_UP`, `K6_STEADY`, and `K6_RAMP_DOWN`.

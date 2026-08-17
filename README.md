@@ -4,6 +4,8 @@
 
 단순 기록 저장을 넘어, 인증된 사용자별 데이터 경계를 지키고 반복 가능한 DB 마이그레이션과 자동 검증 파이프라인을 갖춘 서비스 구조를 목표로 구현했습니다.
 
+Current release: [`v1.0.0`](./docs/releases/v1.0.0.md)
+
 ## Problem And Value
 
 - 경기 결과와 이닝별 점수는 남아 있지만, 실력 변화와 연습 방향을 한눈에 보기 어렵습니다.
@@ -346,6 +348,8 @@ npm run build
 
 ## Project Documents
 
+- [Changelog](./CHANGELOG.md): release history and notable capabilities
+- [v1.0.0 release notes](./docs/releases/v1.0.0.md): release scope, verification gates, and known limitations
 - [Architecture guide](./docs/architecture.md): system boundaries, module responsibilities, consistency, security, and scaling limits
 - [Architecture decision records](./docs/adr/README.md): accepted decisions, alternatives, and tradeoffs
 - [Operations runbook](./docs/operations-runbook.md): health checks, incident response, recovery, security, and cost controls
