@@ -40,6 +40,14 @@ class ActuatorSecurityTest {
 	}
 
 	@Test
+	void exposesBuildVersionWithoutAuthentication() throws Exception {
+		mockMvc.perform(get("/actuator/info"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.build.name").value("billiards"))
+			.andExpect(jsonPath("$.build.version").value("1.0.0"));
+	}
+
+	@Test
 	void rejectsMetricsWithoutAuthentication() throws Exception {
 		mockMvc.perform(get("/actuator/metrics"))
 			.andExpect(status().isUnauthorized())
