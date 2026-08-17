@@ -14,7 +14,7 @@ const profileConfigurations = {
   smoke: {
     executor: 'per-vu-iterations',
     vus: 2,
-    iterations: 2,
+    iterations: 5,
     maxDuration: '45s',
   },
   load: {
