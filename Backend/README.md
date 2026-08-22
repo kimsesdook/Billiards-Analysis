@@ -285,7 +285,7 @@ $env:GEMINI_MODEL="gemini-2.5-flash"
 .\gradlew.bat bootRun
 ```
 
-The configured output cap is 350 tokens and no scheduled job invokes the model. Keep the Gemini account on its free tier and do not enable Google Cloud billing unless a later deployment plan explicitly requires it.
+The default output cap is 1,024 tokens. Gemini 2.5 thinking is disabled for this bounded statistics-to-report task, which leaves the output budget for the structured Korean report and reduces latency and token usage. Override these defaults only when needed with `GEMINI_MAX_OUTPUT_TOKENS` and `GEMINI_THINKING_BUDGET`. No scheduled job invokes the model. Keep the Gemini account on its free tier and do not enable Google Cloud billing unless a later deployment plan explicitly requires it.
 
 The resilience limits can be tuned with `AI_CALL_TIMEOUT`, `AI_SLOW_CALL_DURATION`, `AI_CIRCUIT_OPEN_DURATION`, `AI_EXECUTOR_THREADS`, and `AI_EXECUTOR_QUEUE_CAPACITY`. The defaults are intended for a small deployment; measure production traffic before increasing concurrency because more simultaneous model calls can increase cost.
 
