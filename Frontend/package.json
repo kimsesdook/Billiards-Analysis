@@ -15,23 +15,23 @@
   },
   "dependencies": {
     "clsx": "^2.1.1",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-router-dom": "^7.18.2",
-    "recharts": "^3.8.1",
-    "tailwind-merge": "^3.5.0"
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.5",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
-    "@playwright/test": "^1.62.1",
-    "@tailwindcss/vite": "^4.3.3",
+    "@playwright/test": "^1.65.0",
+    "@tailwindcss/vite": "^4.3.4",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-react": "^5.2.0",
-    "autoprefixer": "^10.5.4",
+    "autoprefixer": "^10.6.2",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.23.1",
+    "tsx": "^4.23.15",
     "typescript": "~5.8.2",
     "vite": "^6.4.3",
     "vitest": "^4.1.10"
